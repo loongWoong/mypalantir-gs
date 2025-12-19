@@ -1,0 +1,413 @@
+version: "1.0"
+namespace: "com.tollcenter.ontology"
+
+object_types:
+  - name: 车辆
+    description: "车辆对象"
+    properties:
+      - name: 车牌号
+        data_type: string
+        required: true
+        description: "车牌号码"
+        constraints:
+          min_length: 1
+          max_length: 20
+      
+      - name: 车辆类型
+        data_type: string
+        required: false
+        description: "车辆类型"
+      
+      - name: 车主姓名
+        data_type: string
+        required: false
+        description: "车主姓名"
+        constraints:
+          max_length: 100
+
+  - name: 通行介质
+    description: "通行介质（ETC卡、OBU等）"
+    properties:
+      - name: 介质编号
+        data_type: string
+        required: true
+        description: "介质唯一编号"
+        constraints:
+          min_length: 1
+          max_length: 50
+      
+      - name: 介质类型
+        data_type: string
+        required: true
+        description: "介质类型（ETC卡、OBU等）"
+      
+      - name: 发行日期
+        data_type: date
+        required: false
+        description: "发行日期"
+
+  - name: 交易流水
+    description: "交易流水记录"
+    properties:
+      - name: 交易时间
+        data_type: datetime
+        required: true
+        description: "交易发生时间"
+      
+      - name: 交易金额
+        data_type: float
+        required: true
+        description: "交易金额"
+        constraints:
+          min: 0
+      
+      - name: 交易类型
+        data_type: string
+        required: true
+        description: "交易类型"
+
+  - name: 路段业主
+    description: "路段业主单位"
+    properties:
+      - name: 业主名称
+        data_type: string
+        required: true
+        description: "业主单位名称"
+        constraints:
+          min_length: 1
+          max_length: 200
+      
+      - name: 统一社会信用代码
+        data_type: string
+        required: false
+        description: "统一社会信用代码"
+        constraints:
+          max_length: 50
+
+  - name: 收费公路
+    description: "收费公路"
+    properties:
+      - name: 公路名称
+        data_type: string
+        required: true
+        description: "公路名称"
+        constraints:
+          min_length: 1
+          max_length: 200
+      
+      - name: 公路编码
+        data_type: string
+        required: false
+        description: "公路编码"
+        constraints:
+          max_length: 50
+      
+      - name: 起始桩号
+        data_type: string
+        required: false
+        description: "起始桩号"
+      
+      - name: 终止桩号
+        data_type: string
+        required: false
+        description: "终止桩号"
+
+  - name: 收费站
+    description: "收费站"
+    properties:
+      - name: 收费站名称
+        data_type: string
+        required: true
+        description: "收费站名称"
+        constraints:
+          min_length: 1
+          max_length: 100
+      
+      - name: 收费站编码
+        data_type: string
+        required: false
+        description: "收费站编码"
+        constraints:
+          max_length: 50
+      
+      - name: 桩号
+        data_type: string
+        required: false
+        description: "收费站桩号"
+
+  - name: ETC门架
+    description: "ETC门架"
+    properties:
+      - name: 门架名称
+        data_type: string
+        required: true
+        description: "门架名称"
+        constraints:
+          min_length: 1
+          max_length: 100
+      
+      - name: 门架编码
+        data_type: string
+        required: false
+        description: "门架编码"
+        constraints:
+          max_length: 50
+      
+      - name: 桩号
+        data_type: string
+        required: false
+        description: "门架桩号"
+
+  - name: 收费单元
+    description: "收费单元"
+    properties:
+      - name: 单元名称
+        data_type: string
+        required: true
+        description: "收费单元名称"
+        constraints:
+          min_length: 1
+          max_length: 100
+      
+      - name: 单元编码
+        data_type: string
+        required: false
+        description: "收费单元编码"
+        constraints:
+          max_length: 50
+      
+      - name: 里程
+        data_type: float
+        required: false
+        description: "收费单元里程"
+        constraints:
+          min: 0
+
+  - name: 车道
+    description: "收费站车道"
+    properties:
+      - name: 车道编号
+        data_type: string
+        required: true
+        description: "车道编号"
+        constraints:
+          min_length: 1
+          max_length: 20
+      
+      - name: 车道类型
+        data_type: string
+        required: false
+        description: "车道类型（ETC、MTC等）"
+
+  - name: 标识点
+    description: "标识点（ETC门架或车道）"
+    properties:
+      - name: 标识点编码
+        data_type: string
+        required: true
+        description: "标识点唯一编码"
+        constraints:
+          min_length: 1
+          max_length: 50
+      
+      - name: 标识点类型
+        data_type: string
+        required: true
+        description: "标识点类型（ETC门架、车道）"
+      
+      - name: 桩号
+        data_type: string
+        required: false
+        description: "标识点桩号"
+
+  - name: 车辆通行路径
+    description: "车辆通行路径"
+    properties:
+      - name: 通行开始时间
+        data_type: datetime
+        required: true
+        description: "通行开始时间"
+      
+      - name: 通行结束时间
+        data_type: datetime
+        required: false
+        description: "通行结束时间"
+      
+      - name: 通行状态
+        data_type: string
+        required: false
+        description: "通行状态"
+
+  - name: 通行拟合路径
+    description: "通行拟合路径"
+    properties:
+      - name: 拟合时间
+        data_type: datetime
+        required: true
+        description: "拟合时间"
+      
+      - name: 拟合状态
+        data_type: string
+        required: false
+        description: "拟合状态"
+      
+      - name: 总里程
+        data_type: float
+        required: false
+        description: "总里程"
+        constraints:
+          min: 0
+
+  - name: 拆分明细
+    description: "拆分明细"
+    properties:
+      - name: 拆分金额
+        data_type: float
+        required: true
+        description: "拆分金额"
+        constraints:
+          min: 0
+      
+      - name: 拆分比例
+        data_type: float
+        required: false
+        description: "拆分比例"
+        constraints:
+          min: 0
+          max: 1
+      
+      - name: 拆分时间
+        data_type: datetime
+        required: false
+        description: "拆分时间"
+
+link_types:
+  - name: 持有
+    description: "车辆持有通行介质"
+    source_type: 车辆
+    target_type: 通行介质
+    cardinality: one-to-many
+    direction: directed
+    properties:
+      - name: 绑定时间
+        data_type: datetime
+        required: false
+        description: "绑定时间"
+      
+      - name: 绑定状态
+        data_type: string
+        required: false
+        description: "绑定状态"
+
+  - name: 关联交易
+    description: "车辆关联交易流水"
+    source_type: 车辆
+    target_type: 交易流水
+    cardinality: one-to-many
+    direction: directed
+
+  - name: 管理
+    description: "路段业主管理收费公路"
+    source_type: 路段业主
+    target_type: 收费公路
+    cardinality: one-to-many
+    direction: directed
+    properties:
+      - name: 管理开始时间
+        data_type: date
+        required: false
+        description: "管理开始时间"
+
+  - name: 包含收费站
+    description: "收费公路包含收费站"
+    source_type: 收费公路
+    target_type: 收费站
+    cardinality: one-to-many
+    direction: directed
+
+  - name: 包含ETC门架
+    description: "收费公路包含ETC门架"
+    source_type: 收费公路
+    target_type: ETC门架
+    cardinality: one-to-many
+    direction: directed
+
+  - name: 包含收费单元
+    description: "收费公路包含收费单元"
+    source_type: 收费公路
+    target_type: 收费单元
+    cardinality: one-to-many
+    direction: directed
+
+  - name: 代收
+    description: "ETC门架代收收费单元"
+    source_type: ETC门架
+    target_type: 收费单元
+    cardinality: one-to-many
+    direction: directed
+
+  - name: 包含车道
+    description: "收费站包含车道"
+    source_type: 收费站
+    target_type: 车道
+    cardinality: one-to-many
+    direction: directed
+
+  - name: 继承标识点_ETC门架
+    description: "ETC门架继承标识点"
+    source_type: ETC门架
+    target_type: 标识点
+    cardinality: one-to-one
+    direction: directed
+
+  - name: 继承标识点_车道
+    description: "车道继承标识点"
+    source_type: 车道
+    target_type: 标识点
+    cardinality: one-to-one
+    direction: directed
+
+  - name: 生成
+    description: "标识点生成交易流水"
+    source_type: 标识点
+    target_type: 交易流水
+    cardinality: one-to-many
+    direction: directed
+    properties:
+      - name: 生成时间
+        data_type: datetime
+        required: false
+        description: "生成时间"
+
+  - name: 汇聚为
+    description: "交易流水汇聚为车辆通行路径"
+    source_type: 交易流水
+    target_type: 车辆通行路径
+    cardinality: many-to-one
+    direction: directed
+
+  - name: 拟合为
+    description: "车辆通行路径拟合为通行拟合路径"
+    source_type: 车辆通行路径
+    target_type: 通行拟合路径
+    cardinality: one-to-one
+    direction: directed
+    properties:
+      - name: 拟合时间
+        data_type: datetime
+        required: false
+        description: "拟合时间"
+
+  - name: 拆分为
+    description: "通行拟合路径拆分为拆分明细"
+    source_type: 通行拟合路径
+    target_type: 拆分明细
+    cardinality: one-to-many
+    direction: directed
+
+  - name: 关联拆分明细
+    description: "收费单元关联拆分明细"
+    source_type: 收费单元
+    target_type: 拆分明细
+    cardinality: one-to-one
+    direction: directed
