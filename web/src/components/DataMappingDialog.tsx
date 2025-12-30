@@ -77,6 +77,48 @@ export default function DataMappingDialog({
     }
   };
 
+  // 工具函数：将驼峰命名转换为下划线命名
+  const camelToSnake = (str: string): string => {
+    return str.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`).replace(/^_/, '');
+  };
+
+  // 工具函数：将下划线命名转换为驼峰命名
+  const snakeToCamel = (str: string): string => {
+    return str.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+  };
+
+  // 工具函数：标准化名称用于匹配（统一转为小写）
+  const normalizeName = (name: string): string => {
+    return name.toLowerCase();
+  };
+
+  // 工具函数：判断两个名称是否匹配（支持完全匹配、驼峰/下划线互转）
+  const isNameMatch = (name1: string, name2: string): boolean => {
+    const n1 = normalizeName(name1);
+    const n2 = normalizeName(name2);
+    
+    // 完全匹配（忽略大小写）
+    if (n1 === n2) {
+      return true;
+    }
+    
+    // 驼峰转下划线后匹配
+    const snake1 = normalizeName(camelToSnake(name1));
+    const snake2 = normalizeName(camelToSnake(name2));
+    if (snake1 === n2 || n1 === snake2 || snake1 === snake2) {
+      return true;
+    }
+    
+    // 下划线转驼峰后匹配
+    const camel1 = normalizeName(snakeToCamel(name1));
+    const camel2 = normalizeName(snakeToCamel(name2));
+    if (camel1 === n2 || n1 === camel2 || camel1 === camel2) {
+      return true;
+    }
+    
+    return false;
+  };
+
   const loadColumns = async () => {
     if (!selectedTable || !selectedDatabaseId) return;
     try {
@@ -89,11 +131,11 @@ export default function DataMappingDialog({
         is_primary_key: col.is_primary_key || false,
       })));
 
-      // 自动匹配：尝试根据名称匹配列和属性
+      // 自动匹配：尝试根据名称匹配列和属性（支持完全匹配、驼峰/下划线互转）
       const autoMappings: Record<string, string> = {};
       columnsData.forEach((col: any) => {
         const matchingProp = objectTypeDef.properties.find(
-          (prop) => prop.name.toLowerCase() === col.name.toLowerCase()
+          (prop) => isNameMatch(prop.name, col.name)
         );
         if (matchingProp) {
           autoMappings[col.name] = matchingProp.name;
@@ -148,7 +190,7 @@ export default function DataMappingDialog({
       }
 
       const tableId = tableInfo.id;
-      const mappingId = await mappingApi.create(
+      await mappingApi.create(
         objectType,
         tableId,
         mappings,
@@ -185,14 +227,14 @@ export default function DataMappingDialog({
         {/* Steps */}
         <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
           <div className="flex items-center gap-4">
-            <div className={`flex items-center gap-2 ${step === 'database' ? 'text-blue-600' : step !== 'database' ? 'text-green-600' : 'text-gray-400'}`}>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step === 'database' ? 'bg-blue-600 text-white' : step !== 'database' ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-600'}`}>
-                {step !== 'database' ? <CheckIcon className="w-5 h-5" /> : '1'}
+            <div className={`flex items-center gap-2 ${step === 'database' ? 'text-blue-600' : (step === 'table' || step === 'mapping') ? 'text-green-600' : 'text-gray-400'}`}>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step === 'database' ? 'bg-blue-600 text-white' : (step === 'table' || step === 'mapping') ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-600'}`}>
+                {(step === 'table' || step === 'mapping') ? <CheckIcon className="w-5 h-5" /> : '1'}
               </div>
               <span className="font-medium">选择数据源</span>
             </div>
             <div className="flex-1 h-0.5 bg-gray-200">
-              <div className={`h-full transition-all ${step !== 'database' ? 'bg-green-600' : 'bg-gray-200'}`} style={{ width: step !== 'database' ? '100%' : '0%' }} />
+              <div className={`h-full transition-all ${(step === 'table' || step === 'mapping') ? 'bg-green-600' : 'bg-gray-200'}`} style={{ width: (step === 'table' || step === 'mapping') ? '100%' : '0%' }} />
             </div>
             <div className={`flex items-center gap-2 ${step === 'table' ? 'text-blue-600' : step === 'mapping' ? 'text-green-600' : 'text-gray-400'}`}>
               <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step === 'table' ? 'bg-blue-600 text-white' : step === 'mapping' ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-600'}`}>
@@ -367,7 +409,7 @@ export default function DataMappingDialog({
                   </select>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-64 overflow-y-auto">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[600px] overflow-y-auto">
                   {columns.map((column) => (
                     <div
                       key={column.name}

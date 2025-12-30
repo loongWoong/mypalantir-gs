@@ -57,6 +57,48 @@ export default function DataMapping() {
     }
   };
 
+  // 工具函数：将驼峰命名转换为下划线命名
+  const camelToSnake = (str: string): string => {
+    return str.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`).replace(/^_/, '');
+  };
+
+  // 工具函数：将下划线命名转换为驼峰命名
+  const snakeToCamel = (str: string): string => {
+    return str.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+  };
+
+  // 工具函数：标准化名称用于匹配（统一转为小写）
+  const normalizeName = (name: string): string => {
+    return name.toLowerCase();
+  };
+
+  // 工具函数：判断两个名称是否匹配（支持完全匹配、驼峰/下划线互转）
+  const isNameMatch = (name1: string, name2: string): boolean => {
+    const n1 = normalizeName(name1);
+    const n2 = normalizeName(name2);
+    
+    // 完全匹配（忽略大小写）
+    if (n1 === n2) {
+      return true;
+    }
+    
+    // 驼峰转下划线后匹配
+    const snake1 = normalizeName(camelToSnake(name1));
+    const snake2 = normalizeName(camelToSnake(name2));
+    if (snake1 === n2 || n1 === snake2 || snake1 === snake2) {
+      return true;
+    }
+    
+    // 下划线转驼峰后匹配
+    const camel1 = normalizeName(snakeToCamel(name1));
+    const camel2 = normalizeName(snakeToCamel(name2));
+    if (camel1 === n2 || n1 === camel2 || camel1 === camel2) {
+      return true;
+    }
+    
+    return false;
+  };
+
   const handleTableSelect = async (tableName: string) => {
     setSelectedTable(tableName);
     try {
@@ -68,12 +110,12 @@ export default function DataMapping() {
         is_primary_key: col.is_primary_key || false,
       })));
       
-      // 自动匹配：尝试根据名称匹配列和属性
+      // 自动匹配：尝试根据名称匹配列和属性（支持完全匹配、驼峰/下划线互转）
       if (objectTypeDef) {
         const autoMappings: Record<string, string> = {};
         columnsData.forEach((col: any) => {
           const matchingProp = objectTypeDef.properties.find(
-            (prop) => prop.name.toLowerCase() === col.name.toLowerCase()
+            (prop) => isNameMatch(prop.name, col.name)
           );
           if (matchingProp) {
             autoMappings[col.name] = matchingProp.name;
@@ -206,7 +248,7 @@ export default function DataMapping() {
                 </select>
               </div>
 
-              <div className="space-y-3 max-h-96 overflow-y-auto">
+              <div className="space-y-3 max-h-[500px] overflow-y-auto">
                 {columns.map((column) => (
                   <div
                     key={column.name}

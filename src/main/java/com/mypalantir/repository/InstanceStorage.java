@@ -52,6 +52,35 @@ public class InstanceStorage {
         }
     }
 
+    public String createInstanceWithId(String objectType, String id, Map<String, Object> data) throws IOException {
+        lock.writeLock().lock();
+        try {
+            String now = Instant.now().toString();
+
+            Map<String, Object> instance = new HashMap<>();
+            instance.put("id", id);
+            instance.put("created_at", now);
+            instance.put("updated_at", now);
+            instance.putAll(data);
+
+            // 确保目录存在
+            String dir = pathManager.getInstanceDir(objectType);
+            Files.createDirectories(Paths.get(dir));
+
+            // 写入文件
+            String filePath = pathManager.getInstancePath(objectType, id);
+            File file = new File(filePath);
+            if (file.exists()) {
+                throw new IOException("instance with id '" + id + "' already exists");
+            }
+            objectMapper.writerWithDefaultPrettyPrinter().writeValue(file, instance);
+
+            return id;
+        } finally {
+            lock.writeLock().unlock();
+        }
+    }
+
     public Map<String, Object> getInstance(String objectType, String id) throws IOException {
         lock.readLock().lock();
         try {

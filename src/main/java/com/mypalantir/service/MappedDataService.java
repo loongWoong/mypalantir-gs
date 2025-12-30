@@ -164,8 +164,8 @@ public class MappedDataService {
                     Map<String, Object> existing = instanceStorage.getInstance(objectType, instanceId);
                     instanceStorage.updateInstance(objectType, instanceId, instanceData);
                 } catch (IOException e) {
-                    // 不存在则创建新实例
-                    instanceStorage.createInstance(objectType, instanceData);
+                    // 不存在则创建新实例，使用主键列的值作为ID
+                    instanceStorage.createInstanceWithId(objectType, instanceId, instanceData);
                 }
             } else {
                 // 创建新实例

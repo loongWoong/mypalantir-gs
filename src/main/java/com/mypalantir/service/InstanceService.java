@@ -32,7 +32,42 @@ public class InstanceService {
     }
 
     public Map<String, Object> getInstance(String objectType, String id) throws IOException {
-        return storage.getInstance(objectType, id);
+        // 首先尝试使用原始名称
+        try {
+            return storage.getInstance(objectType, id);
+        } catch (IOException e) {
+            // 如果失败，尝试查找schema中定义的正确对象类型名称（忽略大小写）
+            try {
+                // 查找所有对象类型，找到匹配的（忽略大小写）
+                List<com.mypalantir.meta.ObjectType> allTypes = loader.listObjectTypes();
+                com.mypalantir.meta.ObjectType matchedType = null;
+                for (com.mypalantir.meta.ObjectType ot : allTypes) {
+                    if (ot.getName().equalsIgnoreCase(objectType)) {
+                        matchedType = ot;
+                        break;
+                    }
+                }
+                
+                if (matchedType != null && !matchedType.getName().equals(objectType)) {
+                    // 使用schema中定义的准确名称重试
+                    try {
+                        return storage.getInstance(matchedType.getName(), id);
+                    } catch (IOException ex) {
+                        // 如果还是失败，抛出原始异常
+                        throw e;
+                    }
+                } else {
+                    // 如果找不到匹配的对象类型，或者名称已经匹配，抛出原始异常
+                    throw e;
+                }
+            } catch (IOException ex) {
+                // 如果是IOException，直接抛出
+                throw ex;
+            } catch (Exception ex) {
+                // 如果查找过程中出错，抛出原始异常
+                throw e;
+            }
+        }
     }
 
     public void updateInstance(String objectType, String id, Map<String, Object> data) throws Loader.NotFoundException, DataValidator.ValidationException, IOException {
