@@ -2513,6 +2513,10 @@ link_types:
     target_type: Path
     cardinality: one-to-one
     direction: directed
+    property_mappings:
+      pass_id: pass_id
+      vlp: plate_num
+      vlpc: plate_color
 
   - name: exit_to_path
     display_name: 出口交易关联路径
@@ -2521,6 +2525,10 @@ link_types:
     target_type: Path
     cardinality: one-to-one
     direction: directed
+    property_mappings:
+      pass_id: pass_id
+      ex_vlp: plate_num
+      ex_vlpc: plate_color
 
   - name: gantry_to_path
     display_name: 卡口交易关联路径
@@ -2529,6 +2537,10 @@ link_types:
     target_type: Path
     cardinality: many-to-one
     direction: directed
+    property_mappings:
+      pass_id: pass_id
+      vlp: plate_num
+      vlpc: plate_color
 
   - name: path_has_details
     display_name: 路径持有路径详情
@@ -2537,6 +2549,8 @@ link_types:
     target_type: PathDetail
     cardinality: one-to-many
     direction: directed
+    property_mappings:
+      id: path_id
 
   - name: path_has_split_details
     display_name: 路径持有拆分详情
@@ -2545,6 +2559,8 @@ link_types:
     target_type: SplitDetail
     cardinality: one-to-many
     direction: directed
+    property_mappings:
+      pass_id: pass_id
 
   - name: database_has_table
     display_name: 数据源包含表
