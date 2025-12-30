@@ -35,6 +35,7 @@ export interface LinkType {
   cardinality: string;
   direction: string;
   properties: Property[];
+  property_mappings?: Record<string, string>;
 }
 
 export interface Instance {
@@ -187,6 +188,11 @@ export const linkApi = {
     const response = await apiClient.get<ApiResponse<Instance[]>>(
       `/instances/${objectType}/${instanceId}/connected/${linkType}?direction=${direction}`
     );
+    return response.data.data;
+  },
+
+  sync: async (linkType: string): Promise<{ links_created: number }> => {
+    const response = await apiClient.post<ApiResponse<{ links_created: number }>>(`/links/${linkType}/sync`);
     return response.data.data;
   },
 };

@@ -2,12 +2,14 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import type { Link, LinkType } from '../api/client';
 import { linkApi, schemaApi } from '../api/client';
+import { ArrowPathIcon } from '@heroicons/react/24/outline';
 
 export default function LinkList() {
   const { linkType } = useParams<{ linkType: string }>();
   const [links, setLinks] = useState<Link[]>([]);
   const [linkTypeDef, setLinkTypeDef] = useState<LinkType | null>(null);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
   const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);
   const limit = 20;
@@ -36,6 +38,21 @@ export default function LinkList() {
     }
   };
 
+  const handleSync = async () => {
+    if (!linkType) return;
+    try {
+      setSyncing(true);
+      const result = await linkApi.sync(linkType);
+      alert(`同步完成！\n创建关系: ${result.links_created}`);
+      loadData(); // 刷新列表
+    } catch (error: any) {
+      console.error('Failed to sync links:', error);
+      alert('同步失败: ' + (error.response?.data?.message || error.message));
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   if (loading) {
     return <div className="text-center py-12">Loading...</div>;
   }
@@ -47,18 +64,43 @@ export default function LinkList() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">{linkTypeDef.name}</h1>
-        {linkTypeDef.description && (
-          <p className="text-gray-600 mt-1">{linkTypeDef.description}</p>
-        )}
-        <div className="mt-2 text-sm text-gray-500">
-          <span className="font-medium">{linkTypeDef.source_type}</span>
-          {' → '}
-          <span className="font-medium">{linkTypeDef.target_type}</span>
-          {' • '}
-          <span>{linkTypeDef.cardinality}</span>
-          {' • '}
-          <span>{linkTypeDef.direction}</span>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">{linkTypeDef.name}</h1>
+            {linkTypeDef.description && (
+              <p className="text-gray-600 mt-1">{linkTypeDef.description}</p>
+            )}
+            <div className="mt-2 text-sm text-gray-500">
+              <span className="font-medium">{linkTypeDef.source_type}</span>
+              {' → '}
+              <span className="font-medium">{linkTypeDef.target_type}</span>
+              {' • '}
+              <span>{linkTypeDef.cardinality}</span>
+              {' • '}
+              <span>{linkTypeDef.direction}</span>
+            </div>
+            {linkTypeDef.property_mappings && Object.keys(linkTypeDef.property_mappings).length > 0 && (
+              <div className="mt-2 text-xs text-gray-400">
+                属性匹配:
+                {Object.entries(linkTypeDef.property_mappings).map(([sourceProp, targetProp], idx) => (
+                  <span key={idx}>
+                    {idx > 0 && ' AND '}
+                    {linkTypeDef.source_type}.{sourceProp} = {linkTypeDef.target_type}.{targetProp}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+          {linkTypeDef.property_mappings && Object.keys(linkTypeDef.property_mappings).length > 0 && (
+            <button
+              onClick={handleSync}
+              disabled={syncing}
+              className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <ArrowPathIcon className={`w-5 h-5 mr-2 ${syncing ? 'animate-spin' : ''}`} />
+              {syncing ? '同步中...' : '同步关系'}
+            </button>
+          )}
         </div>
       </div>
 

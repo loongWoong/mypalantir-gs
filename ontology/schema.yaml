@@ -2553,6 +2553,8 @@ link_types:
     target_type: table
     cardinality: one-to-many
     direction: directed
+    property_mappings:
+      id: database_id
 
   - name: table_has_column
     display_name: 表包含列
@@ -2561,6 +2563,8 @@ link_types:
     target_type: column
     cardinality: one-to-many
     direction: directed
+    property_mappings:
+      id: table_id
 
   - name: mapping_links_table
     display_name: 映射关联表

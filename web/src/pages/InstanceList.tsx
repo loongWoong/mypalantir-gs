@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, Link, useSearchParams } from 'react-router-dom';
 import type { Instance, ObjectType } from '../api/client';
 import { instanceApi, schemaApi, databaseApi, mappingApi } from '../api/client';
-import { PlusIcon, PencilIcon, TrashIcon, ArrowPathIcon, CloudArrowDownIcon, XMarkIcon, LinkIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, PencilIcon, TrashIcon, ArrowPathIcon, CloudArrowDownIcon, XMarkIcon, LinkIcon, ArrowDownTrayIcon, FunnelIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline';
 import InstanceForm from '../components/InstanceForm';
 import DataMappingDialog from '../components/DataMappingDialog';
 
@@ -27,6 +27,8 @@ export default function InstanceList() {
   const [mappings, setMappings] = useState<any[]>([]);
   const [selectedMappingId, setSelectedMappingId] = useState<string>('');
   const [extracting, setExtracting] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+  const [filters, setFilters] = useState<Array<{ property: string; value: string }>>([]);
   const limit = 20;
 
   // 判断是否为系统对象类型（不需要关联按钮）
@@ -38,7 +40,21 @@ export default function InstanceList() {
     if (objectType) {
       loadData();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [objectType, offset, mappingId]);
+
+  // 当筛选条件改变时，重置offset并重新加载数据
+  useEffect(() => {
+    if (objectType) {
+      setOffset(0);
+      // 延迟加载，避免在filters变化时立即触发
+      const timer = setTimeout(() => {
+        loadData();
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters]);
 
   const loadData = async () => {
     if (!objectType) return;
@@ -47,14 +63,22 @@ export default function InstanceList() {
       const objectTypeData = await schemaApi.getObjectType(objectType);
       setObjectTypeDef(objectTypeData);
       
+      // 构建筛选条件
+      const filterParams: Record<string, any> = {};
+      filters.forEach(filter => {
+        if (filter.property && filter.value) {
+          filterParams[filter.property] = filter.value;
+        }
+      });
+      
       let instancesData;
       if (mappingId) {
-        // 使用mapping查询数据
+        // 使用mapping查询数据（不支持筛选）
         instancesData = await instanceApi.listWithMapping(objectType, mappingId, offset, limit);
         setFromMapping(true);
       } else {
-        // 常规查询
-        instancesData = await instanceApi.list(objectType, offset, limit);
+        // 常规查询，支持筛选
+        instancesData = await instanceApi.list(objectType, offset, limit, Object.keys(filterParams).length > 0 ? filterParams : undefined);
         setFromMapping(false);
       }
       
@@ -93,6 +117,24 @@ export default function InstanceList() {
     setShowForm(false);
     setEditingInstance(null);
     loadData();
+  };
+
+  const handleAddFilter = () => {
+    setFilters([...filters, { property: '', value: '' }]);
+  };
+
+  const handleRemoveFilter = (index: number) => {
+    setFilters(filters.filter((_, i) => i !== index));
+  };
+
+  const handleFilterChange = (index: number, field: 'property' | 'value', value: string) => {
+    const newFilters = [...filters];
+    newFilters[index] = { ...newFilters[index], [field]: value };
+    setFilters(newFilters);
+  };
+
+  const handleClearFilters = () => {
+    setFilters([]);
   };
 
   const handleSyncClick = async () => {
@@ -266,6 +308,24 @@ export default function InstanceList() {
               查看本地实例
             </button>
           )}
+          {!fromMapping && (
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              className={`flex items-center px-4 py-2 rounded-lg transition-colors ${
+                showFilters || filters.length > 0
+                  ? 'bg-blue-600 text-white hover:bg-blue-700'
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+            >
+              <FunnelIcon className="w-5 h-5 mr-2" />
+              筛选
+              {filters.length > 0 && (
+                <span className="ml-2 px-2 py-0.5 bg-white text-blue-600 rounded-full text-xs font-medium">
+                  {filters.filter(f => f.property && f.value).length}
+                </span>
+              )}
+            </button>
+          )}
           <button
             onClick={handleCreate}
             className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
@@ -275,6 +335,80 @@ export default function InstanceList() {
           </button>
         </div>
       </div>
+
+      {/* 筛选面板 */}
+      {showFilters && !fromMapping && objectTypeDef && (
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-4">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+              <MagnifyingGlassIcon className="w-5 h-5 mr-2" />
+              多条件检索
+            </h3>
+            <div className="flex gap-2">
+              {filters.length > 0 && (
+                <button
+                  onClick={handleClearFilters}
+                  className="px-3 py-1 text-sm text-gray-600 hover:text-gray-800"
+                >
+                  清空
+                </button>
+              )}
+              <button
+                onClick={() => setShowFilters(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <XMarkIcon className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+          
+          <div className="space-y-3">
+            {filters.map((filter, index) => (
+              <div key={index} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                <select
+                  value={filter.property}
+                  onChange={(e) => handleFilterChange(index, 'property', e.target.value)}
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="">-- 选择字段 --</option>
+                  {objectTypeDef.properties.map((prop) => (
+                    <option key={prop.name} value={prop.name}>
+                      {prop.name} ({prop.data_type})
+                    </option>
+                  ))}
+                </select>
+                <input
+                  type="text"
+                  value={filter.value}
+                  onChange={(e) => handleFilterChange(index, 'value', e.target.value)}
+                  placeholder="输入筛选值..."
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+                <button
+                  onClick={() => handleRemoveFilter(index)}
+                  className="px-3 py-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors"
+                  title="删除筛选条件"
+                >
+                  <XMarkIcon className="w-5 h-5" />
+                </button>
+              </div>
+            ))}
+            
+            <button
+              onClick={handleAddFilter}
+              className="w-full px-4 py-2 border-2 border-dashed border-gray-300 text-gray-600 rounded-lg hover:border-blue-500 hover:text-blue-600 transition-colors"
+            >
+              + 添加筛选条件
+            </button>
+          </div>
+          
+          {filters.length === 0 && (
+            <div className="text-center py-4 text-gray-500 text-sm">
+              点击"添加筛选条件"开始筛选
+            </div>
+          )}
+        </div>
+      )}
 
       {showForm && (
         <InstanceForm

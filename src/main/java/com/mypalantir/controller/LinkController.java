@@ -3,7 +3,9 @@ package com.mypalantir.controller;
 import com.mypalantir.meta.Loader;
 import com.mypalantir.service.DataValidator;
 import com.mypalantir.service.LinkService;
+import com.mypalantir.service.LinkSyncService;
 import com.mypalantir.repository.InstanceStorage;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -17,6 +19,9 @@ import java.util.Map;
 @RequestMapping("/api/v1/links")
 public class LinkController {
     private final LinkService linkService;
+
+    @Autowired
+    private LinkSyncService linkSyncService;
 
     public LinkController(LinkService linkService) {
         this.linkService = linkService;
@@ -114,6 +119,24 @@ public class LinkController {
         } catch (IOException e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(ApiResponse.error(500, "Failed to list links: " + e.getMessage()));
+        }
+    }
+
+    @PostMapping("/{linkType}/sync")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> syncLinks(
+            @PathVariable String linkType) {
+        try {
+            LinkSyncService.SyncResult result = linkSyncService.syncLinksByType(linkType);
+            return ResponseEntity.ok(ApiResponse.success(result.toMap()));
+        } catch (Loader.NotFoundException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error(400, e.getMessage()));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error(400, e.getMessage()));
+        } catch (IOException e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(ApiResponse.error(500, "Failed to sync links: " + e.getMessage()));
         }
     }
 
