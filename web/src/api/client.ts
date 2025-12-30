@@ -125,6 +125,22 @@ export const instanceApi = {
   delete: async (objectType: string, id: string): Promise<void> => {
     await apiClient.delete(`/instances/${objectType}/${id}`);
   },
+
+  listWithMapping: async (objectType: string, mappingId: string, offset = 0, limit = 20): Promise<{ items: Instance[]; total: number }> => {
+    const params = new URLSearchParams({
+      offset: offset.toString(),
+      limit: limit.toString(),
+      mappingId: mappingId,
+    });
+    const response = await apiClient.get<ApiResponse<{ items: Instance[]; total: number; offset: number; limit: number }>>(
+      `/instances/${objectType}?${params}`
+    );
+    return response.data.data;
+  },
+
+  syncFromMapping: async (objectType: string, mappingId: string): Promise<void> => {
+    await apiClient.post(`/instances/${objectType}/sync-from-mapping/${mappingId}`);
+  },
 };
 
 // Link API
@@ -172,6 +188,84 @@ export const linkApi = {
       `/instances/${objectType}/${instanceId}/connected/${linkType}?direction=${direction}`
     );
     return response.data.data;
+  },
+};
+
+// Database API
+export const databaseApi = {
+  getDefaultDatabaseId: async (): Promise<{ id: string }> => {
+    const response = await apiClient.get<ApiResponse<{ id: string }>>('/database/default-id');
+    return response.data.data;
+  },
+
+  getTables: async (databaseId?: string): Promise<any[]> => {
+    const url = databaseId 
+      ? `/database/tables?databaseId=${databaseId}`
+      : '/database/tables';
+    const response = await apiClient.get<ApiResponse<any[]>>(url);
+    return response.data.data;
+  },
+
+  getColumns: async (databaseId: string, tableName: string): Promise<any[]> => {
+    const url = databaseId
+      ? `/database/tables/${tableName}/columns?databaseId=${databaseId}`
+      : `/database/tables/${tableName}/columns`;
+    const response = await apiClient.get<ApiResponse<any[]>>(url);
+    return response.data.data;
+  },
+
+  getTableInfo: async (databaseId: string, tableName: string): Promise<any> => {
+    const url = databaseId
+      ? `/database/tables/${tableName}?databaseId=${databaseId}`
+      : `/database/tables/${tableName}`;
+    const response = await apiClient.get<ApiResponse<any>>(url);
+    return response.data.data;
+  },
+
+  syncTables: async (databaseId: string): Promise<{ tables_created: number; columns_created: number; columns_updated: number }> => {
+    const response = await apiClient.post<ApiResponse<{ tables_created: number; columns_created: number; columns_updated: number }>>(
+      `/database/sync-tables?databaseId=${databaseId}`
+    );
+    return response.data.data;
+  },
+};
+
+// Mapping API
+export const mappingApi = {
+  create: async (objectType: string, tableId: string, columnPropertyMappings: Record<string, string>, primaryKeyColumn?: string): Promise<string> => {
+    const response = await apiClient.post<ApiResponse<{ id: string }>>('/mappings', {
+      object_type: objectType,
+      table_id: tableId,
+      column_property_mappings: columnPropertyMappings,
+      primary_key_column: primaryKeyColumn,
+    });
+    return response.data.data.id;
+  },
+
+  get: async (mappingId: string): Promise<any> => {
+    const response = await apiClient.get<ApiResponse<any>>(`/mappings/${mappingId}`);
+    return response.data.data;
+  },
+
+  getByObjectType: async (objectType: string): Promise<any[]> => {
+    const response = await apiClient.get<ApiResponse<any[]>>(`/mappings/by-object-type/${objectType}`);
+    return response.data.data;
+  },
+
+  getByTable: async (tableId: string): Promise<any[]> => {
+    const response = await apiClient.get<ApiResponse<any[]>>(`/mappings/by-table/${tableId}`);
+    return response.data.data;
+  },
+
+  update: async (mappingId: string, columnPropertyMappings: Record<string, string>, primaryKeyColumn?: string): Promise<void> => {
+    await apiClient.put(`/mappings/${mappingId}`, {
+      column_property_mappings: columnPropertyMappings,
+      primary_key_column: primaryKeyColumn,
+    });
+  },
+
+  delete: async (mappingId: string): Promise<void> => {
+    await apiClient.delete(`/mappings/${mappingId}`);
   },
 };
 

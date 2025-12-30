@@ -1,13 +1,16 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import type { ObjectType, LinkType } from '../api/client';
 import { schemaApi } from '../api/client';
 import { 
   CubeIcon, 
   LinkIcon,
-  InformationCircleIcon 
+  InformationCircleIcon,
+  ArrowPathIcon
 } from '@heroicons/react/24/outline';
 
 export default function SchemaBrowser() {
+  const navigate = useNavigate();
   const [objectTypes, setObjectTypes] = useState<ObjectType[]>([]);
   const [linkTypes, setLinkTypes] = useState<LinkType[]>([]);
   const [selectedObjectType, setSelectedObjectType] = useState<ObjectType | null>(null);
@@ -76,10 +79,22 @@ export default function SchemaBrowser() {
         {selectedObjectType ? (
           <div>
             <div className="mb-4">
-              <h3 className="text-xl font-bold text-gray-900">{selectedObjectType.name}</h3>
-              {selectedObjectType.description && (
-                <p className="text-gray-600 mt-1">{selectedObjectType.description}</p>
-              )}
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-xl font-bold text-gray-900">{selectedObjectType.name}</h3>
+                  {selectedObjectType.description && (
+                    <p className="text-gray-600 mt-1">{selectedObjectType.description}</p>
+                  )}
+                </div>
+                <button
+                  onClick={() => navigate(`/data-mapping/${selectedObjectType.name}`)}
+                  className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                  title="数据映射"
+                >
+                  <ArrowPathIcon className="w-5 h-5 mr-2" />
+                  数据映射
+                </button>
+              </div>
             </div>
 
             <div className="mb-4">

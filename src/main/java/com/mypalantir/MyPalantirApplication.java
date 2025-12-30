@@ -1,6 +1,7 @@
 package com.mypalantir;
 
 import com.mypalantir.config.Config;
+import com.mypalantir.config.EnvConfig;
 import com.mypalantir.meta.Loader;
 import com.mypalantir.meta.Validator;
 import com.mypalantir.service.DataValidator;
@@ -16,11 +17,13 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
 
 import java.io.IOException;
 
 @SpringBootApplication
 @EnableConfigurationProperties(Config.class)
+@Import(EnvConfig.class)
 public class MyPalantirApplication {
     private static final Logger logger = LoggerFactory.getLogger(MyPalantirApplication.class);
 
@@ -39,7 +42,11 @@ public class MyPalantirApplication {
                 loader.getSchema() != null && loader.getSchema().getLinkTypes() != null ? loader.getSchema().getLinkTypes().size() : 0);
         } catch (IOException | Validator.ValidationException e) {
             logger.error("Failed to load schema from: {}", filePath, e);
-            throw new RuntimeException("Failed to load schema", e);
+            logger.error("Schema validation error details: {}", e.getMessage());
+            if (e.getCause() != null) {
+                logger.error("Caused by: ", e.getCause());
+            }
+            throw new RuntimeException("Failed to load schema: " + e.getMessage(), e);
         }
         return loader;
     }
