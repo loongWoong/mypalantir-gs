@@ -20,9 +20,14 @@ public class MappingService {
         // 验证对象类型存在
         loader.getObjectType(objectType);
 
+        // 获取表信息以获取表名
+        Map<String, Object> table = instanceStorage.getInstance("table", tableId);
+        String tableName = (String) table.get("name");
+
         Map<String, Object> mappingData = new HashMap<>();
         mappingData.put("object_type", objectType);
         mappingData.put("table_id", tableId);
+        mappingData.put("table_name", tableName); // 添加table_name属性
         mappingData.put("column_property_mappings", columnPropertyMappings);
         if (primaryKeyColumn != null) {
             mappingData.put("primary_key_column", primaryKeyColumn);

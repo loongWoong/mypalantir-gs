@@ -164,11 +164,75 @@ export default function GraphView() {
 
     const nodeMap = new Map<string, GraphNode>();
     const linkList: GraphLink[] = [];
+    const nodeIdsToLoad = new Set<string>(); // 需要加载的节点ID集合
 
-    // 加载所有对象类型的实例（限制数量以避免性能问题）
+    // 第一步：加载所有关系，收集所有相关的节点ID
+    for (const linkType of linkTypes) {
+      try {
+        // 对于table_has_column和database_has_table，加载更多链接以确保完整性
+        const limit = (linkType.name === 'table_has_column' || linkType.name === 'database_has_table') ? 1000 : 200;
+        let offset = 0;
+        let hasMore = true;
+        
+        while (hasMore) {
+          const links = await linkApi.list(linkType.name, offset, limit);
+          
+          for (const link of links.items) {
+            const sourceId = link.source_id as string;
+            const targetId = link.target_id as string;
+            
+            // 收集所有链接中的节点ID
+            nodeIdsToLoad.add(sourceId);
+            nodeIdsToLoad.add(targetId);
+            
+            linkList.push({
+              source: sourceId,
+              target: targetId,
+              id: link.id,
+              type: linkType.name,
+              data: link,
+            });
+          }
+          
+          // 检查是否还有更多数据
+          hasMore = links.items.length === limit && (offset + limit < links.total);
+          offset += limit;
+          
+          // 避免无限循环
+          if (offset > 5000) break;
+        }
+      } catch (err) {
+        console.error(`Failed to load links for ${linkType.name}:`, err);
+      }
+    }
+
+    // 第二步：按对象类型分组收集节点ID
+    const nodeIdsByType = new Map<string, Set<string>>();
+    
+    // 从链接中收集节点ID，并按类型分组
+    for (const link of linkList) {
+      // 根据链接类型推断source和target的类型
+      const linkTypeDef = linkTypes.find(lt => lt.name === link.type);
+      if (linkTypeDef) {
+        if (!nodeIdsByType.has(linkTypeDef.source_type)) {
+          nodeIdsByType.set(linkTypeDef.source_type, new Set());
+        }
+        if (!nodeIdsByType.has(linkTypeDef.target_type)) {
+          nodeIdsByType.set(linkTypeDef.target_type, new Set());
+        }
+        nodeIdsByType.get(linkTypeDef.source_type)!.add(link.source);
+        nodeIdsByType.get(linkTypeDef.target_type)!.add(link.target);
+      }
+    }
+
+    // 第三步：先批量加载所有对象类型的实例（优先加载有链接关系的类型）
     for (const objType of objectTypes) {
       try {
-        const instances = await instanceApi.list(objType.name, 0, 50); // 限制每个类型最多50个
+        // 如果该类型有链接关系，加载更多实例
+        const hasLinks = nodeIdsByType.has(objType.name);
+        const limit = hasLinks ? 1000 : 100; // 有链接的类型加载更多
+        
+        const instances = await instanceApi.list(objType.name, 0, limit);
         for (const instance of instances.items) {
           nodeMap.set(instance.id, {
             id: instance.id,
@@ -183,32 +247,33 @@ export default function GraphView() {
       }
     }
 
-    // 加载所有关系
-    for (const linkType of linkTypes) {
-      try {
-        const links = await linkApi.list(linkType.name, 0, 200); // 限制关系数量
-        for (const link of links.items) {
-          const sourceId = link.source_id as string;
-          const targetId = link.target_id as string;
-          
-          // 只添加已加载节点的关系
-          if (nodeMap.has(sourceId) && nodeMap.has(targetId)) {
-            linkList.push({
-              source: sourceId,
-              target: targetId,
-              id: link.id,
-              type: linkType.name,
-              data: link,
+    // 第四步：对于链接中引用的但未加载的节点，按类型批量加载
+    for (const [typeName, nodeIds] of nodeIdsByType.entries()) {
+      for (const nodeId of nodeIds) {
+        if (!nodeMap.has(nodeId)) {
+          try {
+            const instance = await instanceApi.get(typeName, nodeId);
+            nodeMap.set(nodeId, {
+              id: nodeId,
+              name: getInstanceName(instance, typeName),
+              type: typeName,
+              data: instance,
+              group: getTypeGroup(typeName, objectTypes),
             });
+          } catch (err) {
+            console.error(`Failed to load instance ${nodeId} of type ${typeName}:`, err);
           }
         }
-      } catch (err) {
-        console.error(`Failed to load links for ${linkType.name}:`, err);
       }
     }
 
+    // 第五步：过滤掉没有对应节点的链接
+    const validLinks = linkList.filter(link => 
+      nodeMap.has(link.source) && nodeMap.has(link.target)
+    );
+
     setNodes(Array.from(nodeMap.values()));
-    setLinks(linkList);
+    setLinks(validLinks);
   };
 
   const getInstanceName = (instance: Instance, type: string): string => {
