@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { ObjectType, LinkType } from '../api/client';
 import { schemaApi } from '../api/client';
+import { useWorkspace } from '../WorkspaceContext';
 import { 
   CubeIcon, 
   LinkIcon,
@@ -11,29 +12,39 @@ import {
 
 export default function SchemaBrowser() {
   const navigate = useNavigate();
+  const { selectedWorkspace } = useWorkspace();
   const [objectTypes, setObjectTypes] = useState<ObjectType[]>([]);
   const [linkTypes, setLinkTypes] = useState<LinkType[]>([]);
   const [selectedObjectType, setSelectedObjectType] = useState<ObjectType | null>(null);
   const [selectedLinkType, setSelectedLinkType] = useState<LinkType | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // 根据工作空间过滤 Object Types 和 Link Types
+  const workspaceFilteredObjectTypes = selectedWorkspace && selectedWorkspace.object_types && selectedWorkspace.object_types.length > 0
+    ? objectTypes.filter((ot) => selectedWorkspace.object_types!.includes(ot.name))
+    : objectTypes;
+
+  const workspaceFilteredLinkTypes = selectedWorkspace && selectedWorkspace.link_types && selectedWorkspace.link_types.length > 0
+    ? linkTypes.filter((lt) => selectedWorkspace.link_types!.includes(lt.name))
+    : linkTypes;
+
   // 计算过滤后的Link Types（当选择Object Type时）
   const filteredLinkTypes = selectedObjectType
-    ? linkTypes.filter(
+    ? workspaceFilteredLinkTypes.filter(
         (lt) =>
           lt.source_type === selectedObjectType.name ||
           lt.target_type === selectedObjectType.name
       )
-    : linkTypes;
+    : workspaceFilteredLinkTypes;
 
   // 计算过滤后的Object Types（当选择Link Type时）
   const filteredObjectTypes = selectedLinkType
-    ? objectTypes.filter(
+    ? workspaceFilteredObjectTypes.filter(
         (ot) =>
           ot.name === selectedLinkType.source_type ||
           ot.name === selectedLinkType.target_type
       )
-    : objectTypes;
+    : workspaceFilteredObjectTypes;
 
   useEffect(() => {
     const loadData = async () => {
@@ -67,7 +78,7 @@ export default function SchemaBrowser() {
         <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center justify-between">
           <div className="flex items-center">
             <CubeIcon className="w-5 h-5 mr-2" />
-            Object Types ({filteredObjectTypes.length}{selectedLinkType ? ` / ${objectTypes.length}` : ''})
+            Object Types ({filteredObjectTypes.length}{selectedLinkType ? ` / ${workspaceFilteredObjectTypes.length}` : ''})
           </div>
           {selectedLinkType && (
             <button
@@ -412,7 +423,7 @@ export default function SchemaBrowser() {
         <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center justify-between">
           <div className="flex items-center">
             <LinkIcon className="w-5 h-5 mr-2" />
-            Link Types ({filteredLinkTypes.length}{selectedObjectType ? ` / ${linkTypes.length}` : ''})
+            Link Types ({filteredLinkTypes.length}{selectedObjectType ? ` / ${workspaceFilteredLinkTypes.length}` : ''})
           </div>
           {selectedObjectType && (
             <button

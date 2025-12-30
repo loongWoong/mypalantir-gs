@@ -34,12 +34,16 @@ public class MyPalantirApplication {
     @Bean
     public Loader schemaLoader(Config config) {
         String filePath = config.getSchemaFilePath();
-        Loader loader = new Loader(filePath);
+        String systemSchemaPath = config.getSystemSchemaFilePath();
+        Loader loader = new Loader(filePath, systemSchemaPath);
         try {
             loader.load();
             logger.info("Schema loaded successfully: {} object types, {} link types", 
                 loader.getSchema() != null && loader.getSchema().getObjectTypes() != null ? loader.getSchema().getObjectTypes().size() : 0,
                 loader.getSchema() != null && loader.getSchema().getLinkTypes() != null ? loader.getSchema().getLinkTypes().size() : 0);
+            if (systemSchemaPath != null && !systemSchemaPath.isEmpty()) {
+                logger.info("System schema merged from: {}", systemSchemaPath);
+            }
         } catch (IOException | Validator.ValidationException e) {
             logger.error("Failed to load schema from: {}", filePath, e);
             logger.error("Schema validation error details: {}", e.getMessage());

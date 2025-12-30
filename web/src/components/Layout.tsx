@@ -7,11 +7,16 @@ import {
   Bars3Icon,
   XMarkIcon,
   CircleStackIcon,
-  ChartBarIcon
+  ChartBarIcon,
+  PlusIcon,
+  PencilIcon,
+  ChevronDownIcon
 } from '@heroicons/react/24/outline';
 import type { ObjectType, LinkType } from '../api/client';
 import { schemaApi } from '../api/client';
 import { useEffect } from 'react';
+import { useWorkspace } from '../WorkspaceContext';
+import WorkspaceDialog from './WorkspaceDialog';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -23,6 +28,11 @@ export default function Layout({ children }: LayoutProps) {
   const [objectTypes, setObjectTypes] = useState<ObjectType[]>([]);
   const [linkTypes, setLinkTypes] = useState<LinkType[]>([]);
   const [loading, setLoading] = useState(true);
+  const [workspaceDialogOpen, setWorkspaceDialogOpen] = useState(false);
+  const [editingWorkspaceId, setEditingWorkspaceId] = useState<string | undefined>(undefined);
+  const [workspaceDropdownOpen, setWorkspaceDropdownOpen] = useState(false);
+  
+  const { workspaces, selectedWorkspaceId, selectedWorkspace, setSelectedWorkspaceId, refreshWorkspaces } = useWorkspace();
 
   useEffect(() => {
     const loadData = async () => {
@@ -46,6 +56,39 @@ export default function Layout({ children }: LayoutProps) {
     return location.pathname.startsWith(path);
   };
 
+  // 根据工作空间过滤 Object Types 和 Link Types
+  // 如果选择了工作空间，只显示工作空间内添加的对象和关系；否则显示全部
+  const filteredObjectTypes = selectedWorkspace
+    ? objectTypes.filter((ot) => 
+        selectedWorkspace.object_types && selectedWorkspace.object_types.length > 0
+          ? selectedWorkspace.object_types.includes(ot.name)
+          : false
+      )
+    : objectTypes;
+
+  const filteredLinkTypes = selectedWorkspace
+    ? linkTypes.filter((lt) => 
+        selectedWorkspace.link_types && selectedWorkspace.link_types.length > 0
+          ? selectedWorkspace.link_types.includes(lt.name)
+          : false
+      )
+    : linkTypes;
+
+  const handleCreateWorkspace = () => {
+    setEditingWorkspaceId(undefined);
+    setWorkspaceDialogOpen(true);
+  };
+
+  const handleEditWorkspace = (id: string) => {
+    setEditingWorkspaceId(id);
+    setWorkspaceDialogOpen(true);
+    setWorkspaceDropdownOpen(false);
+  };
+
+  const handleWorkspaceDialogSuccess = () => {
+    refreshWorkspaces();
+  };
+
   return (
     <div className="flex h-screen bg-gray-50">
       {/* Sidebar */}
@@ -55,7 +98,7 @@ export default function Layout({ children }: LayoutProps) {
         } bg-white border-r border-gray-200 transition-all duration-300 overflow-hidden flex flex-col`}
       >
         <div className="p-4 border-b border-gray-200">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between mb-3">
             <h1 className="text-xl font-bold text-gray-900">MyPalantir</h1>
             <button
               onClick={() => setSidebarOpen(false)}
@@ -64,7 +107,64 @@ export default function Layout({ children }: LayoutProps) {
               <XMarkIcon className="w-5 h-5" />
             </button>
           </div>
-          <p className="text-sm text-gray-500 mt-1">Ontology Browser</p>
+          
+          {/* 工作空间选择器 */}
+          <div className="relative">
+            <div className="flex items-center gap-2">
+              <select
+                value={selectedWorkspaceId || ''}
+                onChange={(e) => setSelectedWorkspaceId(e.target.value || null)}
+                className="flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="">全部对象</option>
+                {workspaces.map((ws) => (
+                  <option key={ws.id} value={ws.id}>
+                    {ws.display_name || ws.name || ws.id.substring(0, 8)}
+                  </option>
+                ))}
+              </select>
+              <div className="relative">
+                <button
+                  onClick={() => setWorkspaceDropdownOpen(!workspaceDropdownOpen)}
+                  className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded"
+                  title="管理工作空间"
+                >
+                  <ChevronDownIcon className="w-4 h-4" />
+                </button>
+                {workspaceDropdownOpen && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-10"
+                      onClick={() => setWorkspaceDropdownOpen(false)}
+                    />
+                    <div className="absolute right-0 mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-20">
+                      <button
+                        onClick={handleCreateWorkspace}
+                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                      >
+                        <PlusIcon className="w-4 h-4" />
+                        创建工作空间
+                      </button>
+                      {selectedWorkspaceId && (
+                        <button
+                          onClick={() => handleEditWorkspace(selectedWorkspaceId)}
+                          className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                        >
+                          <PencilIcon className="w-4 h-4" />
+                          编辑当前工作空间
+                        </button>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+            {selectedWorkspace && (
+              <p className="text-xs text-gray-500 mt-1">
+                {selectedWorkspace.object_types?.length || 0} 个对象类型, {selectedWorkspace.link_types?.length || 0} 个关系类型
+              </p>
+            )}
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto">
@@ -109,43 +209,55 @@ export default function Layout({ children }: LayoutProps) {
               <>
                 <div className="mt-4 mb-2">
                   <h2 className="px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                    Object Types
+                    Object Types {selectedWorkspace && `(${filteredObjectTypes.length})`}
                   </h2>
                 </div>
-                {objectTypes.map((ot) => (
-                  <Link
-                    key={ot.name}
-                    to={`/instances/${ot.name}`}
-                    className={`flex items-center px-3 py-2 rounded-lg mb-1 ${
-                      isActive(`/instances/${ot.name}`)
-                        ? 'bg-blue-50 text-blue-700'
-                        : 'text-gray-700 hover:bg-gray-100'
-                    }`}
-                  >
-                    <CubeIcon className="w-4 h-4 mr-3" />
-                    <span className="text-sm">{ot.display_name || ot.name}</span>
-                  </Link>
-                ))}
+                {filteredObjectTypes.length === 0 && selectedWorkspace ? (
+                  <div className="px-3 py-2 text-sm text-gray-500">
+                    该工作空间未添加对象类型
+                  </div>
+                ) : (
+                  filteredObjectTypes.map((ot) => (
+                    <Link
+                      key={ot.name}
+                      to={`/instances/${ot.name}`}
+                      className={`flex items-center px-3 py-2 rounded-lg mb-1 ${
+                        isActive(`/instances/${ot.name}`)
+                          ? 'bg-blue-50 text-blue-700'
+                          : 'text-gray-700 hover:bg-gray-100'
+                      }`}
+                    >
+                      <CubeIcon className="w-4 h-4 mr-3" />
+                      <span className="text-sm">{ot.display_name || ot.name}</span>
+                    </Link>
+                  ))
+                )}
 
                 <div className="mt-4 mb-2">
                   <h2 className="px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                    Link Types
+                    Link Types {selectedWorkspace && `(${filteredLinkTypes.length})`}
                   </h2>
                 </div>
-                {linkTypes.map((lt) => (
-                  <Link
-                    key={lt.name}
-                    to={`/links/${lt.name}`}
-                    className={`flex items-center px-3 py-2 rounded-lg mb-1 ${
-                      isActive(`/links/${lt.name}`)
-                        ? 'bg-blue-50 text-blue-700'
-                        : 'text-gray-700 hover:bg-gray-100'
-                    }`}
-                  >
-                    <LinkIcon className="w-4 h-4 mr-3" />
-                    <span className="text-sm">{lt.display_name || lt.name}</span>
-                  </Link>
-                ))}
+                {filteredLinkTypes.length === 0 && selectedWorkspace ? (
+                  <div className="px-3 py-2 text-sm text-gray-500">
+                    该工作空间未添加关系类型
+                  </div>
+                ) : (
+                  filteredLinkTypes.map((lt) => (
+                    <Link
+                      key={lt.name}
+                      to={`/links/${lt.name}`}
+                      className={`flex items-center px-3 py-2 rounded-lg mb-1 ${
+                        isActive(`/links/${lt.name}`)
+                          ? 'bg-blue-50 text-blue-700'
+                          : 'text-gray-700 hover:bg-gray-100'
+                      }`}
+                    >
+                      <LinkIcon className="w-4 h-4 mr-3" />
+                      <span className="text-sm">{lt.display_name || lt.name}</span>
+                    </Link>
+                  ))
+                )}
               </>
             )}
           </nav>
@@ -174,6 +286,18 @@ export default function Layout({ children }: LayoutProps) {
         {/* Content area */}
         <main className={`flex-1 ${location.pathname.startsWith('/schema-graph') || location.pathname.startsWith('/graph') ? 'overflow-hidden p-0' : 'overflow-y-auto p-6'}`}>{children}</main>
       </div>
+
+      {/* 工作空间对话框 */}
+      {workspaceDialogOpen && (
+        <WorkspaceDialog
+          workspaceId={editingWorkspaceId}
+          onClose={() => {
+            setWorkspaceDialogOpen(false);
+            setEditingWorkspaceId(undefined);
+          }}
+          onSuccess={handleWorkspaceDialogSuccess}
+        />
+      )}
     </div>
   );
 }

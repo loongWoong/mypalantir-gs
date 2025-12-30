@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, Link, useSearchParams } from 'react-router-dom';
 import type { Instance, ObjectType } from '../api/client';
 import { instanceApi, schemaApi, databaseApi, mappingApi } from '../api/client';
+import { useWorkspace } from '../WorkspaceContext';
 import { PlusIcon, PencilIcon, TrashIcon, ArrowPathIcon, CloudArrowDownIcon, XMarkIcon, LinkIcon, ArrowDownTrayIcon, FunnelIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline';
 import InstanceForm from '../components/InstanceForm';
 import DataMappingDialog from '../components/DataMappingDialog';
@@ -10,6 +11,7 @@ export default function InstanceList() {
   const { objectType } = useParams<{ objectType: string }>();
   const [searchParams] = useSearchParams();
   const mappingId = searchParams.get('mappingId');
+  const { selectedWorkspace } = useWorkspace();
   const [instances, setInstances] = useState<Instance[]>([]);
   const [objectTypeDef, setObjectTypeDef] = useState<ObjectType | null>(null);
   const [loading, setLoading] = useState(true);
@@ -34,6 +36,14 @@ export default function InstanceList() {
   // 判断是否为系统对象类型（不需要关联按钮）
   const isSystemObjectType = (type: string | undefined) => {
     return type === 'database' || type === 'table' || type === 'column' || type === 'mapping';
+  };
+
+  // 判断是否为 system 工作空间
+  const isSystemWorkspace = () => {
+    if (!selectedWorkspace) return false;
+    const wsName = selectedWorkspace.name?.toLowerCase();
+    const wsDisplayName = selectedWorkspace.display_name?.toLowerCase();
+    return wsName === 'system' || wsDisplayName === 'system' || selectedWorkspace.id === 'system';
   };
 
   useEffect(() => {
@@ -277,7 +287,7 @@ export default function InstanceList() {
               同步表信息
             </button>
           )}
-          {!isSystemObjectType(objectType) && (
+          {!isSystemObjectType(objectType) && !isSystemWorkspace() && (
             <>
               <button
                 onClick={() => setShowMappingDialog(true)}
