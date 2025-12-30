@@ -1,5 +1,6 @@
 package com.mypalantir.query;
 
+import com.mypalantir.meta.DataSourceMapping;
 import com.mypalantir.meta.Loader;
 import com.mypalantir.query.schema.OntologySchemaFactory;
 import org.apache.calcite.DataContext;
@@ -143,8 +144,13 @@ public class QueryExecutor {
         
         org.apache.calcite.rel.rel2sql.RelToSqlConverter.Result result = converter.visitRoot(relNode);
         
-        // 获取映射后的 SQL
-        String sql = converter.getMappedSql(result);
+        // 获取映射后的 SQL（传入原始查询以支持 JOIN）
+        String sql = converter.getMappedSql(result, originalQuery);
+        
+        // 调试：打印生成的 SQL
+        System.out.println("=== Generated SQL ===");
+        System.out.println(sql);
+        System.out.println("===================");
         
         // 获取 ObjectType 和 DataSourceMapping（用于结果映射）
         com.mypalantir.meta.ObjectType objectType;
@@ -158,7 +164,7 @@ public class QueryExecutor {
         
         // 执行 SQL（这是 Calcite 的标准执行方式）
         // 注意：需要将结果中的数据库列名映射回属性名
-        return executeSql(sql, objectType, dataSourceMapping);
+        return executeSql(sql, originalQuery, objectType, dataSourceMapping);
     }
     
     /**
@@ -305,6 +311,15 @@ public class QueryExecutor {
      */
     private QueryResult executeSql(String sql, com.mypalantir.meta.ObjectType objectType, 
                                     com.mypalantir.meta.DataSourceMapping dataSourceMapping) throws SQLException {
+        return executeSql(sql, null, objectType, dataSourceMapping);
+    }
+    
+    /**
+     * 执行 SQL 查询，并将数据库列名映射回属性名（支持 JOIN 查询）
+     */
+    private QueryResult executeSql(String sql, OntologyQuery query, 
+                                    com.mypalantir.meta.ObjectType objectType, 
+                                    com.mypalantir.meta.DataSourceMapping dataSourceMapping) throws SQLException {
         // 使用 Calcite 执行 SQL
         try (Statement stmt = calciteConnection.createStatement();
              ResultSet rs = stmt.executeQuery(sql)) {
@@ -315,25 +330,9 @@ public class QueryExecutor {
             int columnCount = rs.getMetaData().getColumnCount();
             List<String> propertyNames = new ArrayList<>();  // 使用属性名而不是列名
             
-            // 构建列名到属性名的映射
-            java.util.Map<String, String> columnToPropertyMap = new java.util.HashMap<>();
-            if (dataSourceMapping != null && dataSourceMapping.isConfigured() && objectType != null) {
-                // 映射 ID 列
-                String idColumn = dataSourceMapping.getIdColumn().toUpperCase();
-                columnToPropertyMap.put(idColumn, "id");
-                columnToPropertyMap.put("ID", "id");
-                
-                // 映射属性列
-                if (objectType.getProperties() != null) {
-                    for (com.mypalantir.meta.Property prop : objectType.getProperties()) {
-                        String columnName = dataSourceMapping.getColumnName(prop.getName());
-                        if (columnName != null) {
-                            String upperColumnName = columnName.toUpperCase();
-                            columnToPropertyMap.put(upperColumnName, prop.getName());
-                        }
-                    }
-                }
-            }
+            // 构建列名到属性名的映射（支持多表）
+            java.util.Map<String, String> columnToPropertyMap = buildColumnToPropertyMap(
+                query, objectType, dataSourceMapping);
             
             // 获取列名并映射为属性名
             for (int i = 1; i <= columnCount; i++) {
@@ -341,6 +340,7 @@ public class QueryExecutor {
                 // 如果结果中有别名（如 "车牌号"），直接使用别名
                 String alias = rs.getMetaData().getColumnLabel(i);
                 if (alias != null && !alias.equals(dbColumnName)) {
+                    // 使用别名作为属性名
                     propertyNames.add(alias);
                 } else {
                     // 否则，尝试从映射中获取属性名
@@ -348,25 +348,143 @@ public class QueryExecutor {
                     if (propertyName != null) {
                         propertyNames.add(propertyName);
                     } else {
-                        // 如果找不到映射，使用原始列名
-                        propertyNames.add(dbColumnName);
+                        // 如果列名包含表名（如 "通行介质"."介质编号"），尝试提取属性名
+                        // Calcite 生成的 SQL 可能使用 "表名"."列名" 格式
+                        if (dbColumnName.contains(".")) {
+                            String[] parts = dbColumnName.split("\\.", 2);
+                            if (parts.length == 2) {
+                                // 去掉引号
+                                String possiblePropertyName = parts[1].replaceAll("\"", "");
+                                // 检查是否是属性名（在映射中）
+                                if (columnToPropertyMap.containsValue(possiblePropertyName)) {
+                                    propertyNames.add(possiblePropertyName);
+                                } else {
+                                    propertyNames.add(possiblePropertyName);
+                                }
+                            } else {
+                                propertyNames.add(dbColumnName);
+                            }
+                        } else {
+                            // 如果找不到映射，使用原始列名
+                            propertyNames.add(dbColumnName);
+                        }
                     }
                 }
             }
             
+            // 调试：打印列信息
+            System.out.println("=== Query Result Columns ===");
+            for (int i = 1; i <= columnCount; i++) {
+                String dbColumnName = rs.getMetaData().getColumnName(i);
+                String alias = rs.getMetaData().getColumnLabel(i);
+                String propertyName = propertyNames.get(i - 1);
+                System.out.println("  Column " + i + ": dbColumn=" + dbColumnName + ", alias=" + alias + ", property=" + propertyName);
+            }
+            
             // 读取数据
+            int rowNum = 0;
             while (rs.next()) {
+                rowNum++;
                 Map<String, Object> row = new java.util.HashMap<>();
+                System.out.println("=== Row " + rowNum + " ===");
                 for (int i = 1; i <= columnCount; i++) {
                     String propertyName = propertyNames.get(i - 1);
                     Object value = rs.getObject(i);
+                    System.out.println("  " + propertyName + " = " + value);
                     row.put(propertyName, value);
                 }
                 rows.add(row);
+                if (rowNum >= 3) break; // 只打印前3行
             }
+            System.out.println("Total rows: " + rows.size());
+            System.out.println("============================");
             
             return new QueryResult(rows, propertyNames);
         }
+    }
+
+    /**
+     * 构建列名到属性名的映射（支持多表 JOIN）
+     */
+    private java.util.Map<String, String> buildColumnToPropertyMap(
+            OntologyQuery query,
+            com.mypalantir.meta.ObjectType objectType,
+            com.mypalantir.meta.DataSourceMapping dataSourceMapping) {
+        
+        java.util.Map<String, String> columnToPropertyMap = new java.util.HashMap<>();
+        
+        // 主表映射
+        if (dataSourceMapping != null && dataSourceMapping.isConfigured() && objectType != null) {
+            // 映射 ID 列
+            String idColumn = dataSourceMapping.getIdColumn().toUpperCase();
+            columnToPropertyMap.put(idColumn, "id");
+            columnToPropertyMap.put("ID", "id");
+            
+            // 映射属性列
+            if (objectType.getProperties() != null) {
+                for (com.mypalantir.meta.Property prop : objectType.getProperties()) {
+                    String columnName = dataSourceMapping.getColumnName(prop.getName());
+                    if (columnName != null) {
+                        String upperColumnName = columnName.toUpperCase();
+                        columnToPropertyMap.put(upperColumnName, prop.getName());
+                    }
+                }
+            }
+        }
+        
+        // 关联表映射
+        if (query != null && query.getLinks() != null && !query.getLinks().isEmpty()) {
+            for (OntologyQuery.LinkQuery linkQuery : query.getLinks()) {
+                try {
+                    com.mypalantir.meta.LinkType linkType = loader.getLinkType(linkQuery.getName());
+                    if (linkType.getDataSource() != null && linkType.getDataSource().isConfigured()) {
+                        DataSourceMapping linkMapping = linkType.getDataSource();
+                        
+                        // 映射 link type 属性的列名
+                        if (linkType.getProperties() != null) {
+                            for (com.mypalantir.meta.Property linkProp : linkType.getProperties()) {
+                                String columnName = linkMapping.getColumnName(linkProp.getName());
+                                if (columnName != null) {
+                                    String upperColumnName = columnName.toUpperCase();
+                                    columnToPropertyMap.put(upperColumnName, linkProp.getName());
+                                }
+                            }
+                        }
+                        
+                        // 映射目标表的列名
+                        com.mypalantir.meta.ObjectType targetObjectType = loader.getObjectType(linkType.getTargetType());
+                        if (targetObjectType.getDataSource() != null && targetObjectType.getDataSource().isConfigured()) {
+                            DataSourceMapping targetMapping = targetObjectType.getDataSource();
+                            
+                            // 映射目标表的 ID 列（如果需要）
+                            String targetIdColumn = targetMapping.getIdColumn().toUpperCase();
+                            // 注意：目标表的 id 可能与其他表冲突，这里先不映射
+                            
+                            // 映射目标表的属性列
+                            if (targetObjectType.getProperties() != null) {
+                                for (com.mypalantir.meta.Property targetProp : targetObjectType.getProperties()) {
+                                    String columnName = targetMapping.getColumnName(targetProp.getName());
+                                    if (columnName != null) {
+                                        String upperColumnName = columnName.toUpperCase();
+                                        // 如果列名冲突，使用带前缀的名称
+                                        if (columnToPropertyMap.containsKey(upperColumnName)) {
+                                            // 列名冲突，跳过或使用带前缀的名称
+                                            continue;
+                                        }
+                                        columnToPropertyMap.put(upperColumnName, targetProp.getName());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } catch (Loader.NotFoundException ex) {
+                    // 忽略无效的 link type
+                    continue;
+                }
+            }
+        }
+        
+        return columnToPropertyMap;
     }
 
     /**

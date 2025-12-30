@@ -29,6 +29,20 @@ public class QueryService {
         // 解析查询
         OntologyQuery query = parser.parseMap(queryMap);
         
+        // 调试：打印解析后的查询
+        System.out.println("=== Parsed OntologyQuery ===");
+        System.out.println("From: " + query.getFrom());
+        System.out.println("Select: " + query.getSelect());
+        if (query.getLinks() != null && !query.getLinks().isEmpty()) {
+            System.out.println("Links:");
+            for (OntologyQuery.LinkQuery linkQuery : query.getLinks()) {
+                System.out.println("  - Name: " + linkQuery.getName());
+                System.out.println("    Select: " + linkQuery.getSelect());
+            }
+        }
+        System.out.println("Limit: " + query.getLimit());
+        System.out.println("============================");
+        
         // 验证查询
         validateQuery(query);
         

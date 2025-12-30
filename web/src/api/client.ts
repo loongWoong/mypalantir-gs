@@ -36,6 +36,7 @@ export interface LinkType {
   cardinality: string;
   direction: string;
   properties: Property[];
+  data_source?: DataSourceMapping;  // 数据源映射配置（可选）
 }
 
 export interface DataSourceConfig {
@@ -54,7 +55,10 @@ export interface DataSourceMapping {
   connection_id: string;
   table: string;
   id_column: string;
+  source_id_column?: string;  // 用于 LinkType：源对象ID列
+  target_id_column?: string;  // 用于 LinkType：目标对象ID列
   field_mapping: Record<string, string>;
+  configured?: boolean;  // 后端可能返回的配置状态字段
 }
 
 export interface Instance {

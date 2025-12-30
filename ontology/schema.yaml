@@ -332,6 +332,16 @@ link_types:
     target_type: 通行介质
     cardinality: one-to-many
     direction: directed
+    # 数据源映射配置：从 H2 数据库的中间表读取数据
+    data_source:
+      connection_id: local_h2
+      table: vehicle_media
+      id_column: link_id
+      source_id_column: vehicle_id  # 源对象（车辆）的ID列
+      target_id_column: media_id    # 目标对象（通行介质）的ID列
+      field_mapping:
+        绑定时间: bind_time
+        绑定状态: bind_status
     properties:
       - name: 绑定时间
         data_type: datetime

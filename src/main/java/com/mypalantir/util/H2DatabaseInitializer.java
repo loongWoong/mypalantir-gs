@@ -59,6 +59,11 @@ public class H2DatabaseInitializer {
                         System.out.println("通行介质数量: " + rs.getInt("cnt"));
                     }
                 }
+                try (var rs = stmt.executeQuery("SELECT COUNT(*) AS cnt FROM vehicle_media")) {
+                    if (rs.next()) {
+                        System.out.println("车辆-通行介质关联数量: " + rs.getInt("cnt"));
+                    }
+                }
 
                 System.out.println("\n✓ 数据库初始化完成！");
             }

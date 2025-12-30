@@ -38,8 +38,17 @@ public class QueryController {
             return ResponseEntity.badRequest()
                 .body(ApiResponse.error(400, e.getMessage()));
         } catch (Exception e) {
+            // 打印异常堆栈以便调试
+            e.printStackTrace();
+            String errorMessage = e.getMessage();
+            if (errorMessage == null || errorMessage.isEmpty()) {
+                errorMessage = e.getClass().getSimpleName();
+                if (e.getCause() != null) {
+                    errorMessage += ": " + e.getCause().getMessage();
+                }
+            }
             return ResponseEntity.status(500)
-                .body(ApiResponse.error(500, "Query execution failed: " + e.getMessage()));
+                .body(ApiResponse.error(500, "Query execution failed: " + errorMessage));
         }
     }
 }

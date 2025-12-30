@@ -158,16 +158,28 @@ public class JdbcOntologyTable extends OntologyTable implements ScannableTable {
             // 构建 SQL 查询
             String sql = buildSelectSql();
             
+            // 调试：打印 scan SQL
+            System.out.println("=== JdbcOntologyTable.scan() for table: " + objectType.getName() + " ===");
+            System.out.println("SQL: " + sql);
+            
             // 执行查询
             List<Object[]> rows = new ArrayList<>();
             try (Statement stmt = connection.createStatement();
                  ResultSet rs = stmt.executeQuery(sql)) {
                 
+                int rowCount = 0;
                 while (rs.next()) {
                     Object[] row = buildRow(rs);
                     rows.add(row);
+                    rowCount++;
+                    // 打印前3行的数据用于调试
+                    if (rowCount <= 3) {
+                        System.out.println("  Row " + rowCount + ": ID=" + (row.length > 0 ? row[0] : "N/A"));
+                    }
                 }
+                System.out.println("  Total rows scanned: " + rowCount);
             }
+            System.out.println("=========================================");
             
             return Linq4j.asEnumerable(rows);
         } catch (Exception e) {
@@ -181,7 +193,9 @@ public class JdbcOntologyTable extends OntologyTable implements ScannableTable {
     private String buildSelectSql() {
         StringBuilder sql = new StringBuilder("SELECT ");
         
-        // 添加 ID 列（使用大写，因为 H2 默认创建大写表名）
+        // H2 数据库默认将未加引号的标识符转换为大写
+        // 但如果我们使用引号，则保持原始大小写
+        // 为了兼容，我们使用大写列名（H2 的默认行为）
         String idColumn = mapping.getIdColumn().toUpperCase();
         sql.append(quoteIdentifier(idColumn)).append(" AS id");
         
@@ -190,15 +204,20 @@ public class JdbcOntologyTable extends OntologyTable implements ScannableTable {
             for (Property prop : objectType.getProperties()) {
                 String columnName = mapping.getColumnName(prop.getName());
                 if (columnName != null) {
-                    // H2 默认创建大写列名
-                    String upperColumnName = columnName.toUpperCase();
-                    sql.append(", ").append(quoteIdentifier(upperColumnName))
+                    // 使用大写列名（H2 的默认行为）
+                    sql.append(", ").append(quoteIdentifier(columnName.toUpperCase()))
+                       .append(" AS ").append(quoteIdentifier(prop.getName()));
+                } else {
+                    // 如果没有映射，直接使用属性名作为列名（用于外键列，如 vehicle_id, media_id）
+                    sql.append(", ").append(quoteIdentifier(prop.getName().toUpperCase()))
                        .append(" AS ").append(quoteIdentifier(prop.getName()));
                 }
             }
         }
         
-        // H2 默认创建大写表名
+        // H2 数据库默认将未加引号的标识符转换为大写
+        // 但如果我们使用引号，则保持原始大小写
+        // 为了兼容，我们使用大写表名（H2 的默认行为）
         String tableName = mapping.getTable().toUpperCase();
         sql.append(" FROM ").append(quoteIdentifier(tableName));
         

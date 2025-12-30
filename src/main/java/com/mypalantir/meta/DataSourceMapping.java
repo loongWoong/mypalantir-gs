@@ -29,8 +29,23 @@ public class DataSourceMapping {
     private String idColumn;
 
     /**
-     * 属性映射：ObjectType 属性名 -> 数据库列名
+     * 源对象ID列名（用于 LinkType，表示 source_type 的 ID）
+     * 例如：对于"持有" link type，source_id_column 为 "vehicle_id"
+     */
+    @JsonProperty("source_id_column")
+    private String sourceIdColumn;
+
+    /**
+     * 目标对象ID列名（用于 LinkType，表示 target_type 的 ID）
+     * 例如：对于"持有" link type，target_id_column 为 "media_id"
+     */
+    @JsonProperty("target_id_column")
+    private String targetIdColumn;
+
+    /**
+     * 属性映射：ObjectType/LinkType 属性名 -> 数据库列名
      * 例如：{"车牌号": "plate_number", "车辆类型": "vehicle_type"}
+     * 对于 LinkType，还可以映射 link type 的属性，如 {"绑定时间": "bind_time", "绑定状态": "bind_status"}
      */
     @JsonProperty("field_mapping")
     private Map<String, String> fieldMapping;
@@ -60,6 +75,24 @@ public class DataSourceMapping {
 
     public void setIdColumn(String idColumn) {
         this.idColumn = idColumn;
+    }
+
+    @JsonGetter("source_id_column")
+    public String getSourceIdColumn() {
+        return sourceIdColumn;
+    }
+
+    public void setSourceIdColumn(String sourceIdColumn) {
+        this.sourceIdColumn = sourceIdColumn;
+    }
+
+    @JsonGetter("target_id_column")
+    public String getTargetIdColumn() {
+        return targetIdColumn;
+    }
+
+    public void setTargetIdColumn(String targetIdColumn) {
+        this.targetIdColumn = targetIdColumn;
     }
 
     @JsonGetter("field_mapping")
