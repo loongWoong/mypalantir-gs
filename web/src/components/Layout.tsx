@@ -123,7 +123,7 @@ export default function Layout({ children }: LayoutProps) {
                     }`}
                   >
                     <CubeIcon className="w-4 h-4 mr-3" />
-                    <span className="text-sm">{ot.name}</span>
+                    <span className="text-sm">{ot.display_name || ot.name}</span>
                   </Link>
                 ))}
 
@@ -143,7 +143,7 @@ export default function Layout({ children }: LayoutProps) {
                     }`}
                   >
                     <LinkIcon className="w-4 h-4 mr-3" />
-                    <span className="text-sm">{lt.name}</span>
+                    <span className="text-sm">{lt.display_name || lt.name}</span>
                   </Link>
                 ))}
               </>

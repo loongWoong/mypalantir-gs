@@ -8,6 +8,9 @@ public class ObjectType {
     @JsonProperty("name")
     private String name;
 
+    @JsonProperty("display_name")
+    private String displayName;
+
     @JsonProperty("description")
     private String description;
 
@@ -24,6 +27,15 @@ public class ObjectType {
 
     public void setName(String name) {
         this.name = name;
+    }
+
+    @JsonIgnore
+    public String getDisplayName() {
+        return displayName;
+    }
+
+    public void setDisplayName(String displayName) {
+        this.displayName = displayName;
     }
 
     @JsonIgnore

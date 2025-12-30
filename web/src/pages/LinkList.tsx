@@ -66,7 +66,7 @@ export default function LinkList() {
       <div className="mb-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">{linkTypeDef.name}</h1>
+            <h1 className="text-2xl font-bold text-gray-900">{linkTypeDef.display_name || linkTypeDef.name}</h1>
             {linkTypeDef.description && (
               <p className="text-gray-600 mt-1">{linkTypeDef.description}</p>
             )}
