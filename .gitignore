@@ -7,7 +7,7 @@ target/
 .env
 .env.local
 .env.*.local
-
+local
 # Data directory (instance data)
 data/
 

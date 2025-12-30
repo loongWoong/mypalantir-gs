@@ -73,7 +73,7 @@ export default function LinkList() {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Target ID
                 </th>
-                {linkTypeDef.properties.map((prop) => (
+                {(linkTypeDef.properties || []).map((prop) => (
                   <th
                     key={prop.name}
                     className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
@@ -90,7 +90,7 @@ export default function LinkList() {
               {links.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={linkTypeDef.properties.length + 3}
+                    colSpan={(linkTypeDef.properties || []).length + 3}
                     className="px-6 py-8 text-center text-gray-500"
                   >
                     No links found.
@@ -109,7 +109,7 @@ export default function LinkList() {
                         {link.target_id.substring(0, 8)}...
                       </span>
                     </td>
-                    {linkTypeDef.properties.map((prop) => (
+                    {(linkTypeDef.properties || []).map((prop) => (
                       <td key={prop.name} className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                         {link[prop.name] !== null && link[prop.name] !== undefined
                           ? String(link[prop.name])
