@@ -49,7 +49,7 @@ public class Neo4jInstanceStorage implements IInstanceStorage {
             for (Map.Entry<String, Object> entry : instance.entrySet()) {
                 String key = entry.getKey();
                 propKeys.add(key + ": $" + key);
-                params.put(key, entry.getValue());
+                params.put(key, convertToNeo4jValue(entry.getValue()));
             }
             cypher.append(String.join(", ", propKeys));
             cypher.append("}) RETURN n.id AS id");
@@ -73,9 +73,15 @@ public class Neo4jInstanceStorage implements IInstanceStorage {
         // 检查是否已存在
         try {
             getInstance(objectType, id);
+            // 如果存在，抛出异常
             throw new IOException("instance with id '" + id + "' already exists");
         } catch (IOException e) {
-            // 不存在，继续创建
+            // 如果异常消息是 "instance not found"，说明不存在，继续创建
+            if (!"instance not found".equals(e.getMessage())) {
+                // 其他异常重新抛出
+                throw e;
+            }
+            // instance not found，继续创建
         }
 
         String now = Instant.now().toString();
@@ -97,7 +103,7 @@ public class Neo4jInstanceStorage implements IInstanceStorage {
             for (Map.Entry<String, Object> entry : instance.entrySet()) {
                 String key = entry.getKey();
                 propKeys.add(key + ": $" + key);
-                params.put(key, entry.getValue());
+                params.put(key, convertToNeo4jValue(entry.getValue()));
             }
             cypher.append(String.join(", ", propKeys));
             cypher.append("}) RETURN n.id AS id");
@@ -130,12 +136,19 @@ public class Neo4jInstanceStorage implements IInstanceStorage {
             var node = result.single().get("n").asNode();
             Map<String, Object> instance = new HashMap<>();
             node.asMap().forEach((key, value) -> {
-                instance.put(key, convertValue((Value) value));
+                instance.put(key, convertValue(value));
             });
             
             return instance;
         } catch (org.neo4j.driver.exceptions.NoSuchRecordException e) {
             throw new IOException("instance not found", e);
+        } catch (IOException e) {
+            // 如果是 "instance not found"，直接抛出，不记录错误日志
+            if ("instance not found".equals(e.getMessage())) {
+                throw e;
+            }
+            logger.error("Failed to get instance from Neo4j: {}", e.getMessage(), e);
+            throw e;
         } catch (Exception e) {
             logger.error("Failed to get instance from Neo4j: {}", e.getMessage(), e);
             throw new IOException("Failed to get instance: " + e.getMessage(), e);
@@ -160,7 +173,7 @@ public class Neo4jInstanceStorage implements IInstanceStorage {
                 String key = entry.getKey();
                 if (!"id".equals(key)) {
                     setClauses.add("n." + key + " = $" + key);
-                    params.put(key, entry.getValue());
+                    params.put(key, convertToNeo4jValue(entry.getValue()));
                 }
             }
             setClauses.add("n.updated_at = $updated_at");
@@ -189,14 +202,27 @@ public class Neo4jInstanceStorage implements IInstanceStorage {
 
         try (Session session = neo4jDriver.session()) {
             String label = normalizeLabel(objectType);
-            String cypher = "MATCH (n:" + label + " {id: $id}) DETACH DELETE n RETURN n.id AS id";
             
-            var result = session.run(cypher, Values.parameters("id", id));
-            if (!result.hasNext()) {
+            // 先检查节点是否存在
+            String checkCypher = "MATCH (n:" + label + " {id: $id}) RETURN n.id AS id";
+            var checkResult = session.run(checkCypher, Values.parameters("id", id));
+            if (!checkResult.hasNext()) {
+                throw new IOException("instance not found");
+            }
+            
+            // 删除节点及其所有关系
+            String deleteCypher = "MATCH (n:" + label + " {id: $id}) DETACH DELETE n";
+            var deleteResult = session.run(deleteCypher, Values.parameters("id", id));
+            
+            // 检查删除是否成功
+            long nodesDeleted = deleteResult.consume().counters().nodesDeleted();
+            if (nodesDeleted == 0) {
                 throw new IOException("instance not found");
             }
             
             logger.debug("Deleted instance {} of type {} from Neo4j", id, objectType);
+        } catch (IOException e) {
+            throw e;
         } catch (Exception e) {
             logger.error("Failed to delete instance from Neo4j: {}", e.getMessage(), e);
             throw new IOException("Failed to delete instance: " + e.getMessage(), e);
@@ -226,7 +252,7 @@ public class Neo4jInstanceStorage implements IInstanceStorage {
                 var node = record.get("n").asNode();
                 Map<String, Object> instance = new HashMap<>();
                 node.asMap().forEach((key, value) -> {
-                    instance.put(key, convertValue((Value) value));
+                    instance.put(key, convertValue(value));
                 });
                 instances.add(instance);
             }
@@ -271,7 +297,7 @@ public class Neo4jInstanceStorage implements IInstanceStorage {
                 var node = record.get("n").asNode();
                 Map<String, Object> instance = new HashMap<>();
                 node.asMap().forEach((key, value) -> {
-                    instance.put(key, convertValue((Value) value));
+                    instance.put(key, convertValue(value));
                 });
                 instances.add(instance);
             }
@@ -335,31 +361,132 @@ public class Neo4jInstanceStorage implements IInstanceStorage {
     }
 
     /**
-     * 转换 Neo4j Value 对象为 Java 对象
+     * 将 Java 对象转换为 Neo4j 支持的类型
+     * Neo4j 只支持基本类型（String、Number、Boolean）或这些类型的数组
+     * 对于 Map 和 List 等复杂对象，将其序列化为 JSON 字符串
      */
-    private Object convertValue(Value value) {
-        if (value.isNull()) {
+    private Object convertToNeo4jValue(Object value) {
+        if (value == null) {
             return null;
         }
-        switch (value.type().name()) {
+        
+        // 基本类型直接返回
+        if (value instanceof String || 
+            value instanceof Number || 
+            value instanceof Boolean ||
+            value instanceof Character) {
+            return value;
+        }
+        
+        // 处理数组
+        if (value.getClass().isArray()) {
+            Object[] array = (Object[]) value;
+            List<Object> list = new ArrayList<>();
+            for (Object item : array) {
+                list.add(convertToNeo4jValue(item));
+            }
+            return list.toArray();
+        }
+        
+        // 处理 List
+        if (value instanceof List) {
+            List<?> list = (List<?>) value;
+            List<Object> result = new ArrayList<>();
+            for (Object item : list) {
+                result.add(convertToNeo4jValue(item));
+            }
+            return result;
+        }
+        
+        // 处理 Map - 序列化为 JSON 字符串
+        if (value instanceof Map) {
+            try {
+                com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                return mapper.writeValueAsString(value);
+            } catch (Exception e) {
+                logger.warn("Failed to serialize Map to JSON, using toString(): {}", e.getMessage());
+                return value.toString();
+            }
+        }
+        
+        // 其他复杂对象序列化为 JSON 字符串
+        try {
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            return mapper.writeValueAsString(value);
+        } catch (Exception e) {
+            logger.warn("Failed to serialize object to JSON, using toString(): {}", e.getMessage());
+            return value.toString();
+        }
+    }
+
+    /**
+     * 转换 Neo4j Value 对象或 Java 对象为 Java 对象
+     * 如果值是 JSON 字符串（之前序列化的 Map/List），尝试反序列化
+     */
+    private Object convertValue(Object value) {
+        // 如果已经是 Java 对象，需要递归转换
+        if (!(value instanceof Value)) {
+            if (value == null) {
+                return null;
+            }
+            
+            // 如果是字符串，尝试解析为 JSON（可能是之前序列化的 Map/List）
+            if (value instanceof String) {
+                String str = (String) value;
+                // 检查是否是 JSON 格式（以 { 或 [ 开头）
+                if ((str.startsWith("{") && str.endsWith("}")) || 
+                    (str.startsWith("[") && str.endsWith("]"))) {
+                    try {
+                        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                        Object parsed = mapper.readValue(str, Object.class);
+                        // 递归转换解析后的对象
+                        return convertValue(parsed);
+                    } catch (Exception e) {
+                        // 解析失败，返回原始字符串
+                        return value;
+                    }
+                }
+                return value;
+            }
+            
+            if (value instanceof List) {
+                List<?> list = (List<?>) value;
+                return list.stream().map(this::convertValue).collect(Collectors.toList());
+            }
+            if (value instanceof Map) {
+                Map<?, ?> map = (Map<?, ?>) value;
+                Map<String, Object> result = new HashMap<>();
+                map.forEach((k, v) -> result.put(k.toString(), convertValue(v)));
+                return result;
+            }
+            // 基本类型直接返回
+            return value;
+        }
+        
+        // 如果是 Neo4j Value 对象，进行转换
+        Value neo4jValue = (Value) value;
+        if (neo4jValue.isNull()) {
+            return null;
+        }
+        switch (neo4jValue.type().name()) {
             case "NULL":
                 return null;
             case "BOOLEAN":
-                return value.asBoolean();
+                return neo4jValue.asBoolean();
             case "INTEGER":
-                return value.asLong();
+                return neo4jValue.asLong();
             case "FLOAT":
-                return value.asDouble();
+                return neo4jValue.asDouble();
             case "STRING":
-                return value.asString();
+                return neo4jValue.asString();
             case "LIST":
-                return value.asList(this::convertValue);
+                return neo4jValue.asList(this::convertValue);
             case "MAP":
                 Map<String, Object> map = new HashMap<>();
-                value.asMap().forEach((k, v) -> map.put(k, convertValue((Value) v)));
+                neo4jValue.asMap().forEach((k, v) -> map.put(k, convertValue(v)));
                 return map;
             default:
-                return value.asObject();
+                return neo4jValue.asObject();
         }
     }
 }

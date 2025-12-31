@@ -22,8 +22,17 @@ public class Neo4jConfig {
         String user = config.getNeo4jUser();
         String password = config.getNeo4jPassword();
 
-        if (uri == null || uri.isEmpty() || password == null || password.isEmpty()) {
-            logger.warn("Neo4j configuration is incomplete. Neo4j driver will not be initialized.");
+        // 检查配置完整性
+        if (uri == null || uri.isEmpty()) {
+            logger.warn("Neo4j URI is not configured. Please set NEO4J_URI environment variable or neo4j.uri in application.properties");
+            return null;
+        }
+        if (user == null || user.isEmpty()) {
+            logger.warn("Neo4j user is not configured. Please set NEO4J_USER environment variable or neo4j.user in application.properties");
+            return null;
+        }
+        if (password == null || password.isEmpty()) {
+            logger.warn("Neo4j password is not configured. Please set NEO4J_PASSWORD environment variable or neo4j.password in application.properties");
             return null;
         }
 
@@ -31,10 +40,20 @@ public class Neo4jConfig {
             Driver driver = GraphDatabase.driver(uri, AuthTokens.basic(user, password));
             // 测试连接
             driver.verifyConnectivity();
-            logger.info("Neo4j driver initialized successfully. URI: {}", uri);
+            logger.info("Neo4j driver initialized successfully. URI: {}, User: {}", uri, user);
+            
+            // 执行一个简单的查询来验证连接
+            try (org.neo4j.driver.Session session = driver.session()) {
+                var result = session.run("RETURN 1 AS test");
+                result.consume();
+                logger.info("Neo4j connection test query executed successfully");
+            }
+            
             return driver;
         } catch (Exception e) {
-            logger.error("Failed to initialize Neo4j driver: {}", e.getMessage(), e);
+            logger.error("Failed to initialize Neo4j driver. URI: {}, User: {}, Error: {}", uri, user, e.getMessage(), e);
+            logger.error("Please ensure Neo4j is running and accessible at {}", uri);
+            logger.error("Check if Neo4j is listening on the correct port and if authentication credentials are correct");
             return null;
         }
     }

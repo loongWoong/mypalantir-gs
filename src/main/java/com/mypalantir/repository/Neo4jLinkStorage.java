@@ -155,14 +155,27 @@ public class Neo4jLinkStorage implements ILinkStorage {
 
         try (Session session = neo4jDriver.session()) {
             String relType = normalizeRelType(linkType);
-            String cypher = "MATCH ()-[r:" + relType + " {id: $id}]-() DELETE r RETURN r.id AS id";
             
-            var result = session.run(cypher, Values.parameters("id", id));
-            if (!result.hasNext()) {
+            // 先检查关系是否存在
+            String checkCypher = "MATCH ()-[r:" + relType + " {id: $id}]-() RETURN r.id AS id";
+            var checkResult = session.run(checkCypher, Values.parameters("id", id));
+            if (!checkResult.hasNext()) {
+                throw new IOException("link not found");
+            }
+            
+            // 删除关系
+            String deleteCypher = "MATCH ()-[r:" + relType + " {id: $id}]-() DELETE r";
+            var deleteResult = session.run(deleteCypher, Values.parameters("id", id));
+            
+            // 检查删除是否成功
+            long relationshipsDeleted = deleteResult.consume().counters().relationshipsDeleted();
+            if (relationshipsDeleted == 0) {
                 throw new IOException("link not found");
             }
             
             logger.debug("Deleted link {} of type {} from Neo4j", id, linkType);
+        } catch (IOException e) {
+            throw e;
         } catch (Exception e) {
             logger.error("Failed to delete link from Neo4j: {}", e.getMessage(), e);
             throw new IOException("Failed to delete link: " + e.getMessage(), e);
@@ -188,7 +201,7 @@ public class Neo4jLinkStorage implements ILinkStorage {
                 var relationship = record.get("r").asRelationship();
                 Map<String, Object> link = new HashMap<>();
                 relationship.asMap().forEach((key, value) -> {
-                    link.put(key, convertValue((Value) value));
+                    link.put(key, convertValue(value));
                 });
                 link.put("source_id", sourceID);
                 link.put("target_id", record.get("target_id").asString());
@@ -221,7 +234,7 @@ public class Neo4jLinkStorage implements ILinkStorage {
                 var relationship = record.get("r").asRelationship();
                 Map<String, Object> link = new HashMap<>();
                 relationship.asMap().forEach((key, value) -> {
-                    link.put(key, convertValue((Value) value));
+                    link.put(key, convertValue(value));
                 });
                 link.put("source_id", record.get("source_id").asString());
                 link.put("target_id", targetID);
@@ -258,7 +271,7 @@ public class Neo4jLinkStorage implements ILinkStorage {
                 var relationship = record.get("r").asRelationship();
                 Map<String, Object> link = new HashMap<>();
                 relationship.asMap().forEach((key, value) -> {
-                    link.put(key, convertValue((Value) value));
+                    link.put(key, convertValue(value));
                 });
                 link.put("source_id", record.get("source_id").asString());
                 link.put("target_id", record.get("target_id").asString());
@@ -309,31 +322,52 @@ public class Neo4jLinkStorage implements ILinkStorage {
     }
 
     /**
-     * 转换 Neo4j Value 对象为 Java 对象
+     * 转换 Neo4j Value 对象或 Java 对象为 Java 对象
      */
-    private Object convertValue(Value value) {
-        if (value.isNull()) {
+    private Object convertValue(Object value) {
+        // 如果已经是 Java 对象，需要递归转换
+        if (!(value instanceof Value)) {
+            if (value == null) {
+                return null;
+            }
+            if (value instanceof List) {
+                List<?> list = (List<?>) value;
+                return list.stream().map(this::convertValue).collect(Collectors.toList());
+            }
+            if (value instanceof Map) {
+                Map<?, ?> map = (Map<?, ?>) value;
+                Map<String, Object> result = new HashMap<>();
+                map.forEach((k, v) -> result.put(k.toString(), convertValue(v)));
+                return result;
+            }
+            // 基本类型直接返回
+            return value;
+        }
+        
+        // 如果是 Neo4j Value 对象，进行转换
+        Value neo4jValue = (Value) value;
+        if (neo4jValue.isNull()) {
             return null;
         }
-        switch (value.type().name()) {
+        switch (neo4jValue.type().name()) {
             case "NULL":
                 return null;
             case "BOOLEAN":
-                return value.asBoolean();
+                return neo4jValue.asBoolean();
             case "INTEGER":
-                return value.asLong();
+                return neo4jValue.asLong();
             case "FLOAT":
-                return value.asDouble();
+                return neo4jValue.asDouble();
             case "STRING":
-                return value.asString();
+                return neo4jValue.asString();
             case "LIST":
-                return value.asList(this::convertValue);
+                return neo4jValue.asList(this::convertValue);
             case "MAP":
                 Map<String, Object> map = new HashMap<>();
-                value.asMap().forEach((k, v) -> map.put(k, convertValue((Value) v)));
+                neo4jValue.asMap().forEach((k, v) -> map.put(k, convertValue(v)));
                 return map;
             default:
-                return value.asObject();
+                return neo4jValue.asObject();
         }
     }
 }

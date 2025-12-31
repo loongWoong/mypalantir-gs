@@ -11,6 +11,7 @@ import java.nio.file.Paths;
 
 @Configuration
 public class EnvConfig {
+    public static final String BEAN_NAME = "envConfig";
     private static final Logger logger = LoggerFactory.getLogger(EnvConfig.class);
     private static Dotenv dotenv;
 

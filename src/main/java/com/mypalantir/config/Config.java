@@ -3,9 +3,13 @@ package com.mypalantir.config;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.DependsOn;
+
+import jakarta.annotation.PostConstruct;
 
 @Configuration
 @ConfigurationProperties
+@DependsOn("envConfig")
 public class Config {
     private int serverPort = 8080;
     private String serverMode = "debug";
@@ -54,6 +58,25 @@ public class Config {
 
     @Value("${neo4j.password:}")
     private String neo4jPassword;
+
+    @PostConstruct
+    public void init() {
+        // 从 .env 文件或环境变量中读取 Neo4j 配置，覆盖默认值
+        String envUri = EnvConfig.get("NEO4J_URI");
+        if (envUri != null && !envUri.isEmpty()) {
+            this.neo4jUri = envUri;
+        }
+        
+        String envUser = EnvConfig.get("NEO4J_USER");
+        if (envUser != null && !envUser.isEmpty()) {
+            this.neo4jUser = envUser;
+        }
+        
+        String envPassword = EnvConfig.get("NEO4J_PASSWORD");
+        if (envPassword != null && !envPassword.isEmpty()) {
+            this.neo4jPassword = envPassword;
+        }
+    }
 
     public int getServerPort() {
         return serverPort;

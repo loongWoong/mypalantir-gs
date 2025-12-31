@@ -125,6 +125,8 @@ public class DatabaseMetadataService {
                 for (int i = 1; i <= columnCount; i++) {
                     String columnName = metaData.getColumnName(i);
                     Object value = rs.getObject(i);
+                    // 转换 SQL 类型为基本类型，以便保存到 Neo4j
+                    value = convertSqlValue(value);
                     row.put(columnName, value);
                 }
                 results.add(row);
@@ -173,5 +175,50 @@ public class DatabaseMetadataService {
         
         Map<String, Object> database = instanceStorage.getInstance("database", databaseId);
         return (String) database.get("database_name");
+    }
+
+    /**
+     * 将 SQL 类型转换为基本类型，以便保存到 Neo4j
+     */
+    private Object convertSqlValue(Object value) {
+        if (value == null) {
+            return null;
+        }
+        
+        // 处理日期时间类型
+        if (value instanceof java.sql.Date) {
+            return ((java.sql.Date) value).toLocalDate().toString();
+        }
+        if (value instanceof java.sql.Time) {
+            return ((java.sql.Time) value).toLocalTime().toString();
+        }
+        if (value instanceof java.sql.Timestamp) {
+            return ((java.sql.Timestamp) value).toInstant().toString();
+        }
+        if (value instanceof java.util.Date) {
+            return ((java.util.Date) value).toInstant().toString();
+        }
+        
+        // 处理数值类型
+        if (value instanceof java.math.BigDecimal) {
+            // 尝试转换为 Long 或 Double
+            java.math.BigDecimal bd = (java.math.BigDecimal) value;
+            try {
+                return bd.longValueExact();
+            } catch (ArithmeticException e) {
+                return bd.doubleValue();
+            }
+        }
+        if (value instanceof java.math.BigInteger) {
+            return ((java.math.BigInteger) value).longValue();
+        }
+        
+        // 处理字节数组
+        if (value instanceof byte[]) {
+            return new String((byte[]) value, java.nio.charset.StandardCharsets.UTF_8);
+        }
+        
+        // 其他类型直接返回
+        return value;
     }
 }

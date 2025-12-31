@@ -43,8 +43,31 @@ public class StorageFactory {
         
         if ("neo4j".equalsIgnoreCase(storageType)) {
             if (neo4jDriver == null) {
-                logger.warn("Neo4j driver is not available, falling back to file storage");
-                return fileStorage;
+                String uri = config.getNeo4jUri();
+                String user = config.getNeo4jUser();
+                String password = config.getNeo4jPassword();
+                
+                StringBuilder errorMsg = new StringBuilder("Neo4j storage is configured but Neo4j driver is not available.\n");
+                errorMsg.append("Please configure Neo4j in one of the following ways:\n");
+                errorMsg.append("1. Set environment variables:\n");
+                errorMsg.append("   - NEO4J_URI=bolt://localhost:7687\n");
+                errorMsg.append("   - NEO4J_USER=neo4j\n");
+                errorMsg.append("   - NEO4J_PASSWORD=your_password\n");
+                errorMsg.append("2. Or add to .env file in project root:\n");
+                errorMsg.append("   NEO4J_URI=bolt://localhost:7687\n");
+                errorMsg.append("   NEO4J_USER=neo4j\n");
+                errorMsg.append("   NEO4J_PASSWORD=your_password\n");
+                errorMsg.append("3. Or set in application.properties:\n");
+                errorMsg.append("   neo4j.uri=bolt://localhost:7687\n");
+                errorMsg.append("   neo4j.user=neo4j\n");
+                errorMsg.append("   neo4j.password=your_password\n");
+                errorMsg.append("\nCurrent configuration:\n");
+                errorMsg.append("   neo4j.uri: ").append(uri != null && !uri.isEmpty() ? uri : "(not set)").append("\n");
+                errorMsg.append("   neo4j.user: ").append(user != null && !user.isEmpty() ? user : "(not set)").append("\n");
+                errorMsg.append("   neo4j.password: ").append(password != null && !password.isEmpty() ? "***" : "(not set)").append("\n");
+                
+                logger.error(errorMsg.toString());
+                throw new IllegalStateException(errorMsg.toString());
             }
             logger.info("Using Neo4j instance storage");
             return neo4jStorage;
@@ -63,8 +86,31 @@ public class StorageFactory {
         
         if ("neo4j".equalsIgnoreCase(storageType)) {
             if (neo4jDriver == null) {
-                logger.warn("Neo4j driver is not available, falling back to file storage");
-                return fileStorage;
+                String uri = config.getNeo4jUri();
+                String user = config.getNeo4jUser();
+                String password = config.getNeo4jPassword();
+                
+                StringBuilder errorMsg = new StringBuilder("Neo4j storage is configured but Neo4j driver is not available.\n");
+                errorMsg.append("Please configure Neo4j in one of the following ways:\n");
+                errorMsg.append("1. Set environment variables:\n");
+                errorMsg.append("   - NEO4J_URI=bolt://localhost:7687\n");
+                errorMsg.append("   - NEO4J_USER=neo4j\n");
+                errorMsg.append("   - NEO4J_PASSWORD=your_password\n");
+                errorMsg.append("2. Or add to .env file in project root:\n");
+                errorMsg.append("   NEO4J_URI=bolt://localhost:7687\n");
+                errorMsg.append("   NEO4J_USER=neo4j\n");
+                errorMsg.append("   NEO4J_PASSWORD=your_password\n");
+                errorMsg.append("3. Or set in application.properties:\n");
+                errorMsg.append("   neo4j.uri=bolt://localhost:7687\n");
+                errorMsg.append("   neo4j.user=neo4j\n");
+                errorMsg.append("   neo4j.password=your_password\n");
+                errorMsg.append("\nCurrent configuration:\n");
+                errorMsg.append("   neo4j.uri: ").append(uri != null && !uri.isEmpty() ? uri : "(not set)").append("\n");
+                errorMsg.append("   neo4j.user: ").append(user != null && !user.isEmpty() ? user : "(not set)").append("\n");
+                errorMsg.append("   neo4j.password: ").append(password != null && !password.isEmpty() ? "***" : "(not set)").append("\n");
+                
+                logger.error(errorMsg.toString());
+                throw new IllegalStateException(errorMsg.toString());
             }
             logger.info("Using Neo4j link storage");
             return neo4jStorage;
