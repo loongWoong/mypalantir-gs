@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { XMarkIcon, PlusIcon, PencilIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon } from '@heroicons/react/24/outline';
 import type { ObjectType, LinkType } from '../api/client';
 import { schemaApi, instanceApi } from '../api/client';
 import { useWorkspace } from '../WorkspaceContext';

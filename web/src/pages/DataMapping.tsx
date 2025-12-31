@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import type { ObjectType, Property } from '../api/client';
-import { schemaApi, databaseApi, mappingApi, instanceApi } from '../api/client';
+import type { ObjectType } from '../api/client';
+import { schemaApi, databaseApi, mappingApi } from '../api/client';
 import { XMarkIcon, CheckIcon } from '@heroicons/react/24/outline';
 
 interface Column {
