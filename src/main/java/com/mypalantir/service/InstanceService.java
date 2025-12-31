@@ -107,7 +107,7 @@ public class InstanceService {
     /**
      * 从数据源查询 instances
      */
-    private InstanceStorage.ListResult listInstancesFromDataSource(String objectType, int offset, int limit, Map<String, Object> filters) throws Loader.NotFoundException {
+    private com.mypalantir.repository.InstanceStorage.ListResult listInstancesFromDataSource(String objectType, int offset, int limit, Map<String, Object> filters) throws Loader.NotFoundException {
         try {
             // 构建查询 Map
             ObjectType objectTypeDef = loader.getObjectType(objectType);
@@ -156,7 +156,7 @@ public class InstanceService {
                 total = instances.size() + offset; // 临时方案
             }
             
-            return new InstanceStorage.ListResult(instances, total);
+            return new com.mypalantir.repository.InstanceStorage.ListResult(instances, total);
         } catch (Exception e) {
             throw new RuntimeException("Failed to query instances from data source: " + e.getMessage(), e);
         }
@@ -165,7 +165,7 @@ public class InstanceService {
     /**
      * 从文件系统获取 instances
      */
-    private InstanceStorage.ListResult listInstancesFromFileSystem(String objectType, int offset, int limit, Map<String, Object> filters) throws IOException {
+    private com.mypalantir.repository.InstanceStorage.ListResult listInstancesFromFileSystem(String objectType, int offset, int limit, Map<String, Object> filters) throws IOException {
         if (filters != null && !filters.isEmpty()) {
             List<Map<String, Object>> instances = storage.searchInstances(objectType, filters);
             int total = instances.size();
