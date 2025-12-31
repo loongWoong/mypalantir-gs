@@ -1,6 +1,8 @@
 package com.mypalantir.repository;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import org.springframework.stereotype.Component;
 
 import java.io.File;
@@ -24,6 +26,10 @@ public class InstanceStorage {
     public InstanceStorage(PathManager pathManager) {
         this.pathManager = pathManager;
         this.objectMapper = new ObjectMapper();
+        // 注册 Java 8 时间类型支持模块
+        this.objectMapper.registerModule(new JavaTimeModule());
+        // 禁用将日期写为时间戳，使用 ISO-8601 字符串格式
+        this.objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
     }
 
     public String createInstance(String objectType, Map<String, Object> data) throws IOException {
