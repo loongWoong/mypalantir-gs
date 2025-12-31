@@ -1,5 +1,6 @@
 package com.mypalantir.meta;
 
+import com.fasterxml.jackson.annotation.JsonGetter;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.List;
@@ -32,6 +33,9 @@ public class LinkType {
 
     @JsonProperty("property_mappings")
     private Map<String, String> propertyMappings;
+
+    @JsonProperty("data_source")
+    private DataSourceMapping dataSource;
 
     @JsonIgnore
     public String getName() {
@@ -96,7 +100,7 @@ public class LinkType {
         this.direction = direction;
     }
 
-    @JsonIgnore
+    @JsonGetter("properties")
     public List<Property> getProperties() {
         return properties;
     }
@@ -112,5 +116,19 @@ public class LinkType {
 
     public void setPropertyMappings(Map<String, String> propertyMappings) {
         this.propertyMappings = propertyMappings;
+    }
+
+    @JsonGetter("data_source")
+    public DataSourceMapping getDataSource() {
+        return dataSource;
+    }
+
+    public void setDataSource(DataSourceMapping dataSource) {
+        this.dataSource = dataSource;
+    }
+
+    @JsonIgnore
+    public boolean hasDataSource() {
+        return dataSource != null && dataSource.isConfigured();
     }
 }

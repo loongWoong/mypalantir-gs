@@ -6,8 +6,11 @@
 
 ### 核心功能
 - **元数据模型定义**：使用 YAML 格式定义对象类型、属性和关系类型
+- **数据源映射**：支持将 ObjectType 和 LinkType 映射到外部数据库（PostgreSQL、MySQL、H2 等）
+- **查询引擎**：基于 Apache Calcite 的查询引擎，支持通过 Ontology 概念查询外部数据库
+- **关联查询**：支持通过 LinkType 进行 JOIN 查询，实现跨表关联
 - **双 Schema 架构**：系统 Schema（内置模型）和用户 Schema（业务模型）分离管理
-- **文件系统存储**：所有数据存储在文件系统中，便于版本控制
+- **文件系统存储**：支持文件系统存储（用于未配置数据源的 ObjectType）
 - **RESTful API**：提供完整的 API 用于模型查询和实例数据管理
 - **数据验证**：完整的模型验证和数据验证机制
 
@@ -84,10 +87,12 @@ mypalantir-gs/
 ### 后端
 - **Java 17**
 - **Spring Boot 3.2.0**
+- **Apache Calcite 1.37.0** (查询引擎)
 - **Jackson** (JSON/YAML 处理)
 - **SnakeYAML** (YAML 解析)
 - **MySQL Connector** (数据库连接)
 - **dotenv-java** (环境变量加载)
+- **H2 Database** (本地测试数据库)
 - **Maven** (构建工具)
 
 ### 前端
@@ -297,6 +302,9 @@ Web UI 开发服务器在 `http://localhost:5173`，会自动代理 API 请求�
 - `GET /api/v1/mappings/by-object-type/{objectType}` - 根据对象类型查询映射
 - `GET /api/v1/mappings/by-table/{tableId}` - 根据表查询映射
 
+### Query API
+- `POST /api/v1/query` - 执行 Ontology 查询（支持 `from`、`select`、`where`、`links`、`orderBy`、`limit` 等）
+
 ## 开发
 
 ### 构建
@@ -320,6 +328,59 @@ mvn test
 - **`scripts/create_test_data.py`** - 创建测试数据（Python 版本）
 - **`scripts/test_api.sh`** - API 功能测试
 - **`scripts/quick_test.sh`** - 快速功能验证
+
+## 查询架构
+
+项目实现了基于 Apache Calcite 的查询引擎，支持通过 Ontology 概念查询外部数据库。
+
+### 核心流程
+
+```
+OntologyQuery (DSL) 
+  ↓
+QueryParser (解析 JSON/YAML)
+  ↓
+RelNodeBuilder (构建 Calcite RelNode)
+  ↓
+OntologySchemaFactory (创建 Calcite Schema)
+  ↓
+JdbcOntologyTable (映射到 JDBC 数据源)
+  ↓
+OntologyRelToSqlConverter (转换为 SQL，映射 Ontology 名称 → 数据库名称)
+  ↓
+QueryExecutor (执行查询，返回结果)
+```
+
+### 关键组件
+
+- **OntologyQuery**: GraphQL 风格的查询 DSL，支持 `from`、`select`、`where`、`links`、`orderBy`、`limit` 等
+- **RelNodeBuilder**: 将 OntologyQuery 直接构建为 Calcite RelNode（TableScan、Filter、Project、Join、Sort、Limit）
+- **OntologySchemaFactory**: 将 Ontology Schema 转换为 Calcite Schema，为每个配置了 `data_source` 的 ObjectType 和 LinkType 创建 Table
+- **JdbcOntologyTable**: Calcite Table 实现，负责从 JDBC 数据源读取数据，处理属性名到列名的映射
+- **OntologyRelToSqlConverter**: 自定义 SQL 转换器，在生成 SQL 时将 Ontology 概念名称映射为数据库物理名称
+- **QueryExecutor**: 查询执行器，协调整个查询流程
+
+### 数据源映射
+
+- **ObjectType**: 通过 `data_source` 配置映射到数据库表和列
+- **LinkType**: 通过中间表（如 `vehicle_media`）实现一对多关系，使用 `source_id_column` 和 `target_id_column` 建立关联
+- **Direction 验证**: 有向关系（directed）只能从源类型查询到目标类型
+
+### 查询示例
+
+```json
+{
+  "from": "车辆",
+  "select": ["车牌号", "车辆类型"],
+  "where": {"车牌号": "苏A12345"},
+  "links": [{
+    "name": "持有",
+    "select": ["介质编号", "介质类型"]
+  }],
+  "orderBy": [{"field": "车牌号", "direction": "ASC"}],
+  "limit": 10
+}
+```
 
 ## 项目架构
 
@@ -358,13 +419,7 @@ mypalantir-gs/
 │   │   ├── SchemaService.java   # Schema 服务
 │   │   ├── InstanceService.java # 实例服务
 │   │   ├── LinkService.java    # 关系服务
-│   │   ├── LinkSyncService.java # 关系同步服务
-│   │   ├── DataValidator.java  # 数据验证服务
-│   │   ├── DatabaseService.java # 数据库服务
-│   │   ├── DatabaseMetadataService.java # 数据库元数据服务
-│   │   ├── TableSyncService.java # 表结构同步服务
-│   │   ├── MappingService.java # 映射服务
-│   │   └── MappedDataService.java # 映射数据服务
+│   │   └── DataValidator.java  # 数据验证服务
 │   └── MyPalantirApplication.java # Spring Boot 主类
 ├── ontology/            # 元数据定义
 │   ├── schema-system.yaml  # 系统 Schema（workspace, database, table, column, mapping）
@@ -395,8 +450,9 @@ mypalantir-gs/
 
 1. **Meta（元数据）层**：负责加载和验证 YAML Schema 定义，支持系统 Schema 和用户 Schema 合并
 2. **Repository（存储）层**：文件系统存储实现，使用 JSON 格式
-3. **Service（服务）层**：业务逻辑，包括数据验证、数据库集成、数据映射、数据同步
-4. **Controller（控制器）层**：RESTful API 端点
+3. **Query（查询）层**：基于 Apache Calcite 的查询引擎，支持 Ontology 概念查询外部数据库
+4. **Service（服务）层**：业务逻辑，包括数据验证、数据库集成、数据映射、数据同步和查询服务
+5. **Controller（控制器）层**：RESTful API 端点
 
 ## 数据模型
 

@@ -7,6 +7,7 @@ import com.mypalantir.meta.Validator;
 import com.mypalantir.service.DataValidator;
 import com.mypalantir.service.InstanceService;
 import com.mypalantir.service.LinkService;
+import com.mypalantir.service.QueryService;
 import com.mypalantir.service.SchemaService;
 import com.mypalantir.repository.IInstanceStorage;
 import com.mypalantir.repository.ILinkStorage;
@@ -86,8 +87,13 @@ public class MyPalantirApplication {
     }
 
     @Bean
-    public InstanceService instanceService(IInstanceStorage instanceStorage, Loader loader, DataValidator validator) {
-        return new InstanceService(instanceStorage, loader, validator);
+    public QueryService queryService(Loader loader) {
+        return new QueryService(loader);
+    }
+
+    @Bean
+    public InstanceService instanceService(IInstanceStorage instanceStorage, Loader loader, DataValidator validator, QueryService queryService) {
+        return new InstanceService(instanceStorage, loader, validator, queryService);
     }
 
     @Bean

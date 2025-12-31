@@ -17,6 +17,7 @@ export interface ObjectType {
   description: string;
   base_type: string | null;
   properties: Property[];
+  data_source?: DataSourceMapping;  // 数据源映射配置（可选）
 }
 
 export interface Property {
@@ -38,6 +39,29 @@ export interface LinkType {
   direction: string;
   properties: Property[];
   property_mappings?: Record<string, string>;
+  data_source?: DataSourceMapping;  // 数据源映射配置（可选）
+}
+
+export interface DataSourceConfig {
+  id: string;
+  type: string;
+  host: string;
+  port: number;
+  database: string;
+  username: string;
+  password?: string;
+  jdbc_url: string;
+  properties?: Record<string, any>;
+}
+
+export interface DataSourceMapping {
+  connection_id: string;
+  table: string;
+  id_column: string;
+  source_id_column?: string;  // 用于 LinkType：源对象ID列
+  target_id_column?: string;  // 用于 LinkType：目标对象ID列
+  field_mapping: Record<string, string>;
+  configured?: boolean;  // 后端可能返回的配置状态字段
 }
 
 export interface Instance {
@@ -93,6 +117,23 @@ export const schemaApi = {
 
   getIncomingLinks: async (objectTypeName: string): Promise<LinkType[]> => {
     const response = await apiClient.get<ApiResponse<LinkType[]>>(`/schema/object-types/${objectTypeName}/incoming-links`);
+    return response.data.data;
+  },
+
+  getDataSources: async (): Promise<DataSourceConfig[]> => {
+    const response = await apiClient.get<ApiResponse<DataSourceConfig[]>>('/schema/data-sources');
+    return response.data.data;
+  },
+
+  getDataSource: async (id: string): Promise<DataSourceConfig> => {
+    const response = await apiClient.get<ApiResponse<DataSourceConfig>>(`/schema/data-sources/${id}`);
+    return response.data.data;
+  },
+
+  testConnection: async (id: string): Promise<{ success: boolean; message: string; metadata?: Record<string, string> }> => {
+    const response = await apiClient.post<ApiResponse<{ success: boolean; message: string; metadata?: Record<string, string> }>>(
+      `/schema/data-sources/${id}/test`
+    );
     return response.data.data;
   },
 };
@@ -292,6 +333,42 @@ export const mappingApi = {
 
   delete: async (mappingId: string): Promise<void> => {
     await apiClient.delete(`/mappings/${mappingId}`);
+  },
+};
+
+// Query API
+export interface QueryRequest {
+  from: string;
+  select?: string[];
+  where?: Record<string, any>;
+  links?: LinkQuery[];
+  orderBy?: OrderBy[];
+  limit?: number;
+  offset?: number;
+}
+
+export interface LinkQuery {
+  name: string;
+  select?: string[];
+  where?: Record<string, any>;
+  links?: LinkQuery[];
+}
+
+export interface OrderBy {
+  field: string;
+  direction: 'ASC' | 'DESC';
+}
+
+export interface QueryResult {
+  columns: string[];
+  rows: Record<string, any>[];
+  rowCount: number;
+}
+
+export const queryApi = {
+  execute: async (query: QueryRequest): Promise<QueryResult> => {
+    const response = await apiClient.post<ApiResponse<QueryResult>>('/query', query);
+    return response.data.data;
   },
 };
 

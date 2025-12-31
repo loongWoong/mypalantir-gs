@@ -4,9 +4,10 @@ import SchemaBrowser from './pages/SchemaBrowser';
 import InstanceList from './pages/InstanceList';
 import InstanceDetail from './pages/InstanceDetail';
 import LinkList from './pages/LinkList';
-import GraphView from './pages/GraphView';
 import SchemaGraphView from './pages/SchemaGraphView';
 import DataMapping from './pages/DataMapping';
+import DataSourceManagement from './pages/DataSourceManagement';
+import QueryBuilder from './pages/QueryBuilder';
 
 function App() {
   return (
@@ -19,9 +20,9 @@ function App() {
           <Route path="/instances/:objectType/:id" element={<InstanceDetail />} />
           <Route path="/links/:linkType" element={<LinkList />} />
           <Route path="/data-mapping/:objectType" element={<DataMapping />} />
-          <Route path="/graph" element={<GraphView />} />
-          <Route path="/graph/:objectType/:instanceId" element={<GraphView />} />
           <Route path="/schema-graph" element={<SchemaGraphView />} />
+          <Route path="/data-sources" element={<DataSourceManagement />} />
+          <Route path="/query" element={<QueryBuilder />} />
         </Routes>
       </Layout>
     </BrowserRouter>
