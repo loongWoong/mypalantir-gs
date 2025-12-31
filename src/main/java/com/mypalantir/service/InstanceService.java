@@ -1,7 +1,7 @@
 package com.mypalantir.service;
 
 import com.mypalantir.meta.Loader;
-import com.mypalantir.repository.InstanceStorage;
+import com.mypalantir.repository.IInstanceStorage;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -10,11 +10,11 @@ import java.util.Map;
 
 @Service
 public class InstanceService {
-    private final InstanceStorage storage;
+    private final IInstanceStorage storage;
     private final Loader loader;
     private final DataValidator validator;
 
-    public InstanceService(InstanceStorage storage, Loader loader, DataValidator validator) {
+    public InstanceService(IInstanceStorage storage, Loader loader, DataValidator validator) {
         this.storage = storage;
         this.loader = loader;
         this.validator = validator;
@@ -85,7 +85,7 @@ public class InstanceService {
         storage.deleteInstance(objectType, id);
     }
 
-    public InstanceStorage.ListResult listInstances(String objectType, int offset, int limit, Map<String, Object> filters) throws Loader.NotFoundException, IOException {
+    public com.mypalantir.repository.InstanceStorage.ListResult listInstances(String objectType, int offset, int limit, Map<String, Object> filters) throws Loader.NotFoundException, IOException {
         loader.getObjectType(objectType);
 
         if (filters != null && !filters.isEmpty()) {
@@ -93,9 +93,9 @@ public class InstanceService {
             int total = instances.size();
             int end = Math.min(offset + limit, instances.size());
             if (offset >= instances.size()) {
-                return new InstanceStorage.ListResult(List.of(), total);
+                return new com.mypalantir.repository.InstanceStorage.ListResult(List.of(), total);
             }
-            return new InstanceStorage.ListResult(instances.subList(offset, end), total);
+            return new com.mypalantir.repository.InstanceStorage.ListResult(instances.subList(offset, end), total);
         }
 
         return storage.listInstances(objectType, offset, limit);

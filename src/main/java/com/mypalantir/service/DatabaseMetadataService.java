@@ -1,7 +1,7 @@
 package com.mypalantir.service;
 
 import com.mypalantir.config.DatabaseConfig;
-import com.mypalantir.repository.InstanceStorage;
+import com.mypalantir.repository.IInstanceStorage;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -18,7 +18,7 @@ public class DatabaseMetadataService {
     private DatabaseConfig.DatabaseConnectionManager connectionManager;
 
     @Autowired
-    private InstanceStorage instanceStorage;
+    private IInstanceStorage instanceStorage;
 
     public List<Map<String, Object>> getTables(String databaseId) throws SQLException, IOException {
         List<Map<String, Object>> tables = new ArrayList<>();

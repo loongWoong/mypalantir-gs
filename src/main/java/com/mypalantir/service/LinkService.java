@@ -2,8 +2,8 @@ package com.mypalantir.service;
 
 import com.mypalantir.meta.LinkType;
 import com.mypalantir.meta.Loader;
-import com.mypalantir.repository.InstanceStorage;
-import com.mypalantir.repository.LinkStorage;
+import com.mypalantir.repository.IInstanceStorage;
+import com.mypalantir.repository.ILinkStorage;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -13,12 +13,12 @@ import java.util.Map;
 
 @Service
 public class LinkService {
-    private final LinkStorage storage;
-    private final InstanceStorage instanceStorage;
+    private final ILinkStorage storage;
+    private final IInstanceStorage instanceStorage;
     private final Loader loader;
     private final DataValidator validator;
 
-    public LinkService(LinkStorage storage, InstanceStorage instanceStorage, Loader loader, DataValidator validator) {
+    public LinkService(ILinkStorage storage, IInstanceStorage instanceStorage, Loader loader, DataValidator validator) {
         this.storage = storage;
         this.instanceStorage = instanceStorage;
         this.loader = loader;
@@ -115,7 +115,7 @@ public class LinkService {
         return instances;
     }
 
-    public InstanceStorage.ListResult listLinks(String linkType, int offset, int limit) throws Loader.NotFoundException, IOException {
+    public com.mypalantir.repository.InstanceStorage.ListResult listLinks(String linkType, int offset, int limit) throws Loader.NotFoundException, IOException {
         loader.getLinkType(linkType);
         return storage.listLinks(linkType, offset, limit);
     }

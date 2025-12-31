@@ -43,6 +43,18 @@ public class Config {
     @Value("${db.type:mysql}")
     private String dbType;
 
+    @Value("${storage.type:file}")
+    private String storageType;
+
+    @Value("${neo4j.uri:bolt://localhost:7687}")
+    private String neo4jUri;
+
+    @Value("${neo4j.user:neo4j}")
+    private String neo4jUser;
+
+    @Value("${neo4j.password:}")
+    private String neo4jPassword;
+
     public int getServerPort() {
         return serverPort;
     }
@@ -97,6 +109,22 @@ public class Config {
 
     public String getDbType() {
         return dbType;
+    }
+
+    public String getStorageType() {
+        return storageType;
+    }
+
+    public String getNeo4jUri() {
+        return neo4jUri;
+    }
+
+    public String getNeo4jUser() {
+        return neo4jUser;
+    }
+
+    public String getNeo4jPassword() {
+        return neo4jPassword;
     }
 }
 

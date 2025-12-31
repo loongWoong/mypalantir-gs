@@ -8,6 +8,8 @@ import com.mypalantir.service.DataValidator;
 import com.mypalantir.service.InstanceService;
 import com.mypalantir.service.LinkService;
 import com.mypalantir.service.SchemaService;
+import com.mypalantir.repository.IInstanceStorage;
+import com.mypalantir.repository.ILinkStorage;
 import com.mypalantir.repository.InstanceStorage;
 import com.mypalantir.repository.LinkStorage;
 import com.mypalantir.repository.PathManager;
@@ -64,12 +66,12 @@ public class MyPalantirApplication {
     }
 
     @Bean
-    public InstanceStorage instanceStorage(PathManager pathManager) {
+    public InstanceStorage fileInstanceStorage(PathManager pathManager) {
         return new InstanceStorage(pathManager);
     }
 
     @Bean
-    public LinkStorage linkStorage(PathManager pathManager) {
+    public LinkStorage fileLinkStorage(PathManager pathManager) {
         return new LinkStorage(pathManager);
     }
 
@@ -84,12 +86,12 @@ public class MyPalantirApplication {
     }
 
     @Bean
-    public InstanceService instanceService(InstanceStorage instanceStorage, Loader loader, DataValidator validator) {
+    public InstanceService instanceService(IInstanceStorage instanceStorage, Loader loader, DataValidator validator) {
         return new InstanceService(instanceStorage, loader, validator);
     }
 
     @Bean
-    public LinkService linkService(LinkStorage linkStorage, InstanceStorage instanceStorage, Loader loader, DataValidator validator) {
+    public LinkService linkService(ILinkStorage linkStorage, IInstanceStorage instanceStorage, Loader loader, DataValidator validator) {
         return new LinkService(linkStorage, instanceStorage, loader, validator);
     }
 }

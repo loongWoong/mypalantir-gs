@@ -1,7 +1,7 @@
 package com.mypalantir.service;
 
 import com.mypalantir.meta.Loader;
-import com.mypalantir.repository.InstanceStorage;
+import com.mypalantir.repository.IInstanceStorage;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -20,7 +20,7 @@ public class TableSyncService {
     private DatabaseService databaseService;
 
     @Autowired
-    private InstanceStorage instanceStorage;
+    private IInstanceStorage instanceStorage;
 
     @Autowired
     private LinkService linkService;

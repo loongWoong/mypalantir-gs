@@ -2,7 +2,7 @@ package com.mypalantir.service;
 
 import com.mypalantir.meta.LinkType;
 import com.mypalantir.meta.Loader;
-import com.mypalantir.repository.InstanceStorage;
+import com.mypalantir.repository.IInstanceStorage;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -18,7 +18,7 @@ public class LinkSyncService {
     private LinkService linkService;
 
     @Autowired
-    private InstanceStorage instanceStorage;
+    private IInstanceStorage instanceStorage;
 
     @Autowired
     private Loader loader;
@@ -43,10 +43,10 @@ public class LinkSyncService {
         }
         
         // 获取所有源实例
-        InstanceStorage.ListResult sourceInstances = instanceStorage.listInstances(sourceType, 0, 10000);
+        com.mypalantir.repository.InstanceStorage.ListResult sourceInstances = instanceStorage.listInstances(sourceType, 0, 10000);
         
         // 获取所有目标实例
-        InstanceStorage.ListResult targetInstances = instanceStorage.listInstances(targetType, 0, 10000);
+        com.mypalantir.repository.InstanceStorage.ListResult targetInstances = instanceStorage.listInstances(targetType, 0, 10000);
         
         // 遍历源实例，查找匹配的目标实例并创建关系
         for (Map<String, Object> source : sourceInstances.getItems()) {

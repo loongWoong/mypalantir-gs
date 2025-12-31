@@ -2,7 +2,7 @@ package com.mypalantir.service;
 
 import com.mypalantir.meta.Loader;
 import com.mypalantir.meta.ObjectType;
-import com.mypalantir.repository.InstanceStorage;
+import com.mypalantir.repository.IInstanceStorage;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -19,12 +19,12 @@ public class MappedDataService {
     private DatabaseMetadataService databaseMetadataService;
 
     @Autowired
-    private InstanceStorage instanceStorage;
+    private IInstanceStorage instanceStorage;
 
     @Autowired
     private Loader loader;
 
-    public InstanceStorage.ListResult queryMappedInstances(String objectType, String mappingId, int offset, int limit) throws IOException, SQLException, Loader.NotFoundException {
+    public com.mypalantir.repository.InstanceStorage.ListResult queryMappedInstances(String objectType, String mappingId, int offset, int limit) throws IOException, SQLException, Loader.NotFoundException {
         // 获取映射关系
         Map<String, Object> mapping = mappingService.getMapping(mappingId);
         String tableId = (String) mapping.get("table_id");
@@ -82,7 +82,7 @@ public class MappedDataService {
         List<Map<String, Object>> countResult = databaseMetadataService.executeQuery(countSql, databaseId);
         long total = countResult.isEmpty() ? 0 : ((Number) countResult.get(0).get("total")).longValue();
         
-        return new InstanceStorage.ListResult(instances, total);
+        return new com.mypalantir.repository.InstanceStorage.ListResult(instances, total);
     }
 
     private String buildSelectQuery(String tableName, Map<String, String> columnPropertyMappings, int offset, int limit) {
