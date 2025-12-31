@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import ForceGraph2D from 'react-force-graph-2d';
 import type { ObjectType, LinkType } from '../api/client';
 import { schemaApi } from '../api/client';
+import { useWorkspace } from '../WorkspaceContext';
 import { 
   ArrowPathIcon,
   CubeIcon
@@ -49,6 +50,7 @@ const getNodeColor = (name: string): string => {
 };
 
 export default function SchemaGraphView() {
+  const { selectedWorkspace } = useWorkspace();
   const [nodes, setNodes] = useState<SchemaNode[]>([]);
   const [links, setLinks] = useState<SchemaLink[]>([]);
   const [loading, setLoading] = useState(true);
@@ -58,17 +60,36 @@ export default function SchemaGraphView() {
 
   useEffect(() => {
     loadSchemaGraph();
-  }, []);
+  }, [selectedWorkspace]);
 
   const loadSchemaGraph = async () => {
     try {
       setLoading(true);
       
       // 加载所有对象类型和关系类型
-      const [objectTypes, linkTypes] = await Promise.all([
+      const [allObjectTypes, allLinkTypes] = await Promise.all([
         schemaApi.getObjectTypes(),
         schemaApi.getLinkTypes(),
       ]);
+
+      // 根据工作空间过滤对象类型和关系类型
+      const objectTypes = selectedWorkspace && selectedWorkspace.object_types && selectedWorkspace.object_types.length > 0
+        ? allObjectTypes.filter((ot) => selectedWorkspace.object_types!.includes(ot.name))
+        : allObjectTypes;
+      
+      let linkTypes: typeof allLinkTypes;
+      if (selectedWorkspace && selectedWorkspace.link_types && selectedWorkspace.link_types.length > 0) {
+        linkTypes = allLinkTypes.filter((lt) => {
+          // 只包含源类型和目标类型都在工作空间内的关系
+          const sourceInWorkspace = !selectedWorkspace.object_types || selectedWorkspace.object_types.length === 0 || 
+            selectedWorkspace.object_types.includes(lt.source_type);
+          const targetInWorkspace = !selectedWorkspace.object_types || selectedWorkspace.object_types.length === 0 || 
+            selectedWorkspace.object_types.includes(lt.target_type);
+          return selectedWorkspace.link_types!.includes(lt.name) && sourceInWorkspace && targetInWorkspace;
+        });
+      } else {
+        linkTypes = allLinkTypes;
+      }
 
       // 创建节点（对象类型）
       const schemaNodes: SchemaNode[] = objectTypes.map((ot, index) => ({

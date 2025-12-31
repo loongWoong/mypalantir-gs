@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.*;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -153,6 +154,78 @@ public class InstanceController {
         } catch (IOException | SQLException e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(ApiResponse.error(500, "Failed to sync data: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * 批量获取实例
+     * @param objectType 对象类型
+     * @param requestBody 包含ids数组的请求体
+     * @return 实例Map，key为ID，value为实例数据（如果不存在则为null）
+     */
+    @PostMapping("/{objectType}/batch")
+    public ResponseEntity<ApiResponse<Map<String, Map<String, Object>>>> getInstancesBatch(
+            @PathVariable String objectType,
+            @RequestBody Map<String, Object> requestBody) {
+        try {
+            @SuppressWarnings("unchecked")
+            List<String> ids = (List<String>) requestBody.get("ids");
+            if (ids == null || ids.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(ApiResponse.error(400, "ids parameter is required and cannot be empty"));
+            }
+
+            Map<String, Map<String, Object>> instances = instanceService.getInstancesBatch(objectType, ids);
+            return ResponseEntity.ok(ApiResponse.success(instances));
+        } catch (Loader.NotFoundException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error(400, e.getMessage()));
+        } catch (IOException e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(ApiResponse.error(500, "Failed to get instances: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * 批量获取多个对象类型的实例
+     * @param requestBody 包含queries数组的请求体，每个query包含objectType和ids
+     * @return Map，key为"objectType:id"，value为实例数据（如果不存在则为null）
+     */
+    @PostMapping("/batch")
+    public ResponseEntity<ApiResponse<Map<String, Map<String, Object>>>> getInstancesBatchMultiType(
+            @RequestBody Map<String, Object> requestBody) {
+        try {
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> queries = (List<Map<String, Object>>) requestBody.get("queries");
+            if (queries == null || queries.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(ApiResponse.error(400, "queries parameter is required and cannot be empty"));
+            }
+
+            Map<String, List<String>> typeIdMap = new HashMap<>();
+            for (Map<String, Object> query : queries) {
+                String objectType = (String) query.get("objectType");
+                @SuppressWarnings("unchecked")
+                List<String> ids = (List<String>) query.get("ids");
+                if (objectType == null || ids == null || ids.isEmpty()) {
+                    continue;
+                }
+                typeIdMap.put(objectType, ids);
+            }
+
+            if (typeIdMap.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(ApiResponse.error(400, "No valid queries found"));
+            }
+
+            Map<String, Map<String, Object>> instances = instanceService.getInstancesBatchMultiType(typeIdMap);
+            return ResponseEntity.ok(ApiResponse.success(instances));
+        } catch (Loader.NotFoundException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error(400, e.getMessage()));
+        } catch (IOException e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(ApiResponse.error(500, "Failed to get instances: " + e.getMessage()));
         }
     }
 }

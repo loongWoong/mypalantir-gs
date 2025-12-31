@@ -100,5 +100,29 @@ public class InstanceService {
 
         return storage.listInstances(objectType, offset, limit);
     }
+
+    /**
+     * 批量获取实例
+     * @param objectType 对象类型
+     * @param ids 实例ID列表
+     * @return 实例Map，key为ID，value为实例数据（如果不存在则为null）
+     */
+    public Map<String, Map<String, Object>> getInstancesBatch(String objectType, List<String> ids) throws Loader.NotFoundException, IOException {
+        loader.getObjectType(objectType);
+        return storage.getInstancesBatch(objectType, ids);
+    }
+
+    /**
+     * 批量获取多个对象类型的实例
+     * @param typeIdMap key为对象类型，value为该类型的ID列表
+     * @return Map，key为"objectType:id"，value为实例数据（如果不存在则为null）
+     */
+    public Map<String, Map<String, Object>> getInstancesBatchMultiType(Map<String, List<String>> typeIdMap) throws Loader.NotFoundException, IOException {
+        // 验证所有对象类型存在
+        for (String objectType : typeIdMap.keySet()) {
+            loader.getObjectType(objectType);
+        }
+        return storage.getInstancesBatchMultiType(typeIdMap);
+    }
 }
 

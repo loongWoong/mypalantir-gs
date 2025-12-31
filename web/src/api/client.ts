@@ -144,6 +144,24 @@ export const instanceApi = {
   syncFromMapping: async (objectType: string, mappingId: string): Promise<void> => {
     await apiClient.post(`/instances/${objectType}/sync-from-mapping/${mappingId}`);
   },
+
+  // 批量获取单个对象类型的实例
+  getBatch: async (objectType: string, ids: string[]): Promise<Record<string, Instance | null>> => {
+    const response = await apiClient.post<ApiResponse<Record<string, Instance | null>>>(
+      `/instances/${objectType}/batch`,
+      { ids }
+    );
+    return response.data.data;
+  },
+
+  // 批量获取多个对象类型的实例
+  getBatchMultiType: async (queries: Array<{ objectType: string; ids: string[] }>): Promise<Record<string, Instance | null>> => {
+    const response = await apiClient.post<ApiResponse<Record<string, Instance | null>>>(
+      `/instances/batch`,
+      { queries }
+    );
+    return response.data.data;
+  },
 };
 
 // Link API

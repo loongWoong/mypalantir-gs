@@ -3,9 +3,11 @@ import { useParams } from 'react-router-dom';
 import ForceGraph2D from 'react-force-graph-2d';
 import type { Instance, Link as LinkInstance } from '../api/client';
 import { instanceApi, linkApi, schemaApi } from '../api/client';
+import { useWorkspace } from '../WorkspaceContext';
 import { 
   ArrowPathIcon,
-  CircleStackIcon
+  CircleStackIcon,
+  Cog6ToothIcon
 } from '@heroicons/react/24/outline';
 
 interface GraphNode {
@@ -26,15 +28,42 @@ interface GraphLink {
 
 export default function GraphView() {
   const { objectType, instanceId } = useParams<{ objectType?: string; instanceId?: string }>();
+  const { selectedWorkspace } = useWorkspace();
   const [nodes, setNodes] = useState<GraphNode[]>([]);
   const [links, setLinks] = useState<GraphLink[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
   const [graphData, setGraphData] = useState({ nodes, links });
+  
+  // 节点和关系上限配置（从 localStorage 读取或使用默认值）
+  const [maxNodes, setMaxNodes] = useState<number>(() => {
+    const saved = localStorage.getItem('graphView_maxNodes');
+    return saved ? parseInt(saved, 10) : (selectedWorkspace ? 5000 : 1000);
+  });
+  const [maxLinksPerType, setMaxLinksPerType] = useState<number>(() => {
+    const saved = localStorage.getItem('graphView_maxLinksPerType');
+    return saved ? parseInt(saved, 10) : (selectedWorkspace ? 10000 : 500);
+  });
+  const [showSettings, setShowSettings] = useState(false);
 
   useEffect(() => {
     loadGraphData();
-  }, [objectType, instanceId]);
+  }, [objectType, instanceId, selectedWorkspace, maxNodes, maxLinksPerType]);
+  
+  // 当工作空间变化时，更新默认上限值
+  useEffect(() => {
+    const isWorkspaceMode = selectedWorkspace && 
+      ((selectedWorkspace.object_types && selectedWorkspace.object_types.length > 0) ||
+       (selectedWorkspace.link_types && selectedWorkspace.link_types.length > 0));
+    
+    // 如果用户没有自定义设置，则根据工作空间模式设置默认值
+    if (!localStorage.getItem('graphView_maxNodes')) {
+      setMaxNodes(isWorkspaceMode ? 5000 : 1000);
+    }
+    if (!localStorage.getItem('graphView_maxLinksPerType')) {
+      setMaxLinksPerType(isWorkspaceMode ? 10000 : 500);
+    }
+  }, [selectedWorkspace]);
 
   const loadGraphData = async () => {
     try {
@@ -55,11 +84,30 @@ export default function GraphView() {
   };
 
   const loadInstanceGraph = async (objType: string, instId: string) => {
-    const [instance, objectTypes, linkTypes] = await Promise.all([
+    const [instance, allObjectTypes, allLinkTypes] = await Promise.all([
       instanceApi.get(objType, instId),
       schemaApi.getObjectTypes(),
       schemaApi.getLinkTypes(),
     ]);
+
+    // 根据工作空间过滤对象类型和关系类型
+    const objectTypes = selectedWorkspace && selectedWorkspace.object_types && selectedWorkspace.object_types.length > 0
+      ? allObjectTypes.filter((ot) => selectedWorkspace.object_types!.includes(ot.name))
+      : allObjectTypes;
+    
+    let linkTypes: typeof allLinkTypes;
+    if (selectedWorkspace && selectedWorkspace.link_types && selectedWorkspace.link_types.length > 0) {
+      linkTypes = allLinkTypes.filter((lt) => {
+        // 只包含源类型和目标类型都在工作空间内的关系
+        const sourceInWorkspace = !selectedWorkspace.object_types || selectedWorkspace.object_types.length === 0 || 
+          selectedWorkspace.object_types.includes(lt.source_type);
+        const targetInWorkspace = !selectedWorkspace.object_types || selectedWorkspace.object_types.length === 0 || 
+          selectedWorkspace.object_types.includes(lt.target_type);
+        return selectedWorkspace.link_types!.includes(lt.name) && sourceInWorkspace && targetInWorkspace;
+      });
+    } else {
+      linkTypes = allLinkTypes;
+    }
 
     const nodeMap = new Map<string, GraphNode>();
     const linkList: GraphLink[] = [];
@@ -157,20 +205,46 @@ export default function GraphView() {
   };
 
   const loadFullGraph = async () => {
-    const [objectTypes, linkTypes] = await Promise.all([
+    // 使用用户配置的上限值
+    const MAX_NODES = maxNodes;
+    const MAX_LINKS_PER_TYPE = maxLinksPerType;
+    
+    const [allObjectTypes, allLinkTypes] = await Promise.all([
       schemaApi.getObjectTypes(),
       schemaApi.getLinkTypes(),
     ]);
 
+    // 根据工作空间过滤对象类型和关系类型
+    const objectTypes = selectedWorkspace && selectedWorkspace.object_types && selectedWorkspace.object_types.length > 0
+      ? allObjectTypes.filter((ot) => selectedWorkspace.object_types!.includes(ot.name))
+      : allObjectTypes;
+    
+    let linkTypes: typeof allLinkTypes;
+    if (selectedWorkspace && selectedWorkspace.link_types && selectedWorkspace.link_types.length > 0) {
+      linkTypes = allLinkTypes.filter((lt) => {
+        // 只包含源类型和目标类型都在工作空间内的关系
+        const sourceInWorkspace = !selectedWorkspace.object_types || selectedWorkspace.object_types.length === 0 || 
+          selectedWorkspace.object_types.includes(lt.source_type);
+        const targetInWorkspace = !selectedWorkspace.object_types || selectedWorkspace.object_types.length === 0 || 
+          selectedWorkspace.object_types.includes(lt.target_type);
+        return selectedWorkspace.link_types!.includes(lt.name) && sourceInWorkspace && targetInWorkspace;
+      });
+    } else {
+      linkTypes = allLinkTypes;
+    }
+
     const nodeMap = new Map<string, GraphNode>();
     const linkList: GraphLink[] = [];
     const nodeIdsToLoad = new Set<string>(); // 需要加载的节点ID集合
+    const nodeDegree = new Map<string, number>(); // 节点度数（连接数）
 
-    // 第一步：加载所有关系，收集所有相关的节点ID
+    // 第一步：加载关系，收集节点ID
     for (const linkType of linkTypes) {
       try {
-        // 对于table_has_column和database_has_table，加载更多链接以确保完整性
-        const limit = (linkType.name === 'table_has_column' || linkType.name === 'database_has_table') ? 1000 : 200;
+        // 根据关系类型设置基础限制
+        const baseLimit = (linkType.name === 'table_has_column' || linkType.name === 'database_has_table') ? 1000 : 200;
+        const limit = Math.min(MAX_LINKS_PER_TYPE, baseLimit);
+
         let offset = 0;
         let hasMore = true;
         
@@ -181,9 +255,11 @@ export default function GraphView() {
             const sourceId = link.source_id as string;
             const targetId = link.target_id as string;
             
-            // 收集所有链接中的节点ID
+            // 收集节点ID并计算度数
             nodeIdsToLoad.add(sourceId);
             nodeIdsToLoad.add(targetId);
+            nodeDegree.set(sourceId, (nodeDegree.get(sourceId) || 0) + 1);
+            nodeDegree.set(targetId, (nodeDegree.get(targetId) || 0) + 1);
             
             linkList.push({
               source: sourceId,
@@ -198,15 +274,43 @@ export default function GraphView() {
           hasMore = links.items.length === limit && (offset + limit < links.total);
           offset += limit;
           
-          // 避免无限循环
-          if (offset > 5000) break;
+          // 避免无限循环（设置一个合理的上限）
+          if (offset > 100000) break;
         }
       } catch (err) {
         console.error(`Failed to load links for ${linkType.name}:`, err);
       }
     }
 
-    // 第二步：按对象类型分组收集节点ID
+    // 第二步：如果节点数超过限制，进行采样（优先保留度数高的节点）
+    // 注意：工作空间模式下，如果节点数超过限制，仍然需要采样，但会给出警告
+    let nodeIdsArray = Array.from(nodeIdsToLoad);
+    if (nodeIdsArray.length > MAX_NODES) {
+      // 按度数排序，优先保留度数高的节点
+      nodeIdsArray.sort((a, b) => {
+        const degreeA = nodeDegree.get(a) || 0;
+        const degreeB = nodeDegree.get(b) || 0;
+        return degreeB - degreeA; // 降序
+      });
+      
+      // 保留前 MAX_NODES 个节点
+      nodeIdsArray = nodeIdsArray.slice(0, MAX_NODES);
+      nodeIdsToLoad.clear();
+      nodeIdsArray.forEach(id => nodeIdsToLoad.add(id));
+      
+      // 过滤掉包含被移除节点的链接
+      const validNodeSet = new Set(nodeIdsArray);
+      const filteredLinks = linkList.filter(link => 
+        validNodeSet.has(link.source) && validNodeSet.has(link.target)
+      );
+      linkList.length = 0;
+      linkList.push(...filteredLinks);
+      
+      const warningMsg = `节点数超过限制（${nodeIdsArray.length} > ${MAX_NODES}），已采样保留 ${MAX_NODES} 个节点（优先保留连接数高的节点）。建议：在设置中增加节点上限`;
+      console.warn(warningMsg);
+    }
+
+    // 第三步：按对象类型分组收集节点ID
     const nodeIdsByType = new Map<string, Set<string>>();
     
     // 从链接中收集节点ID，并按类型分组
@@ -225,44 +329,59 @@ export default function GraphView() {
       }
     }
 
-    // 第三步：先批量加载所有对象类型的实例（优先加载有链接关系的类型）
-    for (const objType of objectTypes) {
+    // 第四步：批量加载节点（只加载有关系的节点，不预加载所有实例）
+    // 使用批量查询接口，大幅减少 HTTP 请求数
+    const queries = Array.from(nodeIdsByType.entries()).map(([typeName, nodeIds]) => ({
+      objectType: typeName,
+      ids: Array.from(nodeIds),
+    }));
+
+    if (queries.length > 0) {
       try {
-        // 如果该类型有链接关系，加载更多实例
-        const hasLinks = nodeIdsByType.has(objType.name);
-        const limit = hasLinks ? 1000 : 100; // 有链接的类型加载更多
+        // 使用批量查询接口一次性获取所有节点
+        const batchResults = await instanceApi.getBatchMultiType(queries);
         
-        const instances = await instanceApi.list(objType.name, 0, limit);
-        for (const instance of instances.items) {
-          nodeMap.set(instance.id, {
-            id: instance.id,
-            name: getInstanceName(instance, objType.name),
-            type: objType.name,
-            data: instance,
-            group: getTypeGroup(objType.name, objectTypes),
-          });
+        // 处理批量查询结果
+        for (const [key, instance] of Object.entries(batchResults)) {
+          if (instance) {
+            // key 格式为 "objectType:id"
+            const [typeName, id] = key.split(':', 2);
+            if (typeName && id) {
+              nodeMap.set(id, {
+                id: id,
+                name: getInstanceName(instance, typeName),
+                type: typeName,
+                data: instance,
+                group: getTypeGroup(typeName, objectTypes),
+              });
+            }
+          }
         }
       } catch (err) {
-        console.error(`Failed to load instances for ${objType.name}:`, err);
-      }
-    }
-
-    // 第四步：对于链接中引用的但未加载的节点，按类型批量加载
-    for (const [typeName, nodeIds] of nodeIdsByType.entries()) {
-      for (const nodeId of nodeIds) {
-        if (!nodeMap.has(nodeId)) {
-          try {
-            const instance = await instanceApi.get(typeName, nodeId);
-            nodeMap.set(nodeId, {
-              id: nodeId,
-              name: getInstanceName(instance, typeName),
-              type: typeName,
-              data: instance,
-              group: getTypeGroup(typeName, objectTypes),
-            });
-          } catch (err) {
-            console.error(`Failed to load instance ${nodeId} of type ${typeName}:`, err);
+        console.error('Failed to load instances batch:', err);
+        // 如果批量查询失败，回退到逐个查询（但限制数量）
+        const fallbackLimit = 100; // 回退时最多查询 100 个节点
+        let fallbackCount = 0;
+        for (const [typeName, nodeIds] of nodeIdsByType.entries()) {
+          for (const nodeId of nodeIds) {
+            if (fallbackCount >= fallbackLimit) break;
+            if (!nodeMap.has(nodeId)) {
+              try {
+                const instance = await instanceApi.get(typeName, nodeId);
+                nodeMap.set(nodeId, {
+                  id: nodeId,
+                  name: getInstanceName(instance, typeName),
+                  type: typeName,
+                  data: instance,
+                  group: getTypeGroup(typeName, objectTypes),
+                });
+                fallbackCount++;
+              } catch (err) {
+                console.error(`Failed to load instance ${nodeId} of type ${typeName}:`, err);
+              }
+            }
           }
+          if (fallbackCount >= fallbackLimit) break;
         }
       }
     }
@@ -378,6 +497,14 @@ export default function GraphView() {
             <span className="font-semibold text-gray-900">{links.length}</span>
           </div>
           <button
+            onClick={() => setShowSettings(!showSettings)}
+            className="flex items-center px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm"
+            title="设置"
+          >
+            <Cog6ToothIcon className="w-4 h-4 mr-2" />
+            设置
+          </button>
+          <button
             onClick={loadGraphData}
             className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium shadow-sm"
           >
@@ -386,6 +513,93 @@ export default function GraphView() {
           </button>
         </div>
       </div>
+
+      {/* 设置面板 */}
+      {showSettings && (
+        <div className="bg-white border-b border-gray-200 px-6 py-4 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-gray-900">图形视图设置</h3>
+            <button
+              onClick={() => setShowSettings(false)}
+              className="text-gray-400 hover:text-gray-600"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                最大节点数
+              </label>
+              <input
+                type="number"
+                min="100"
+                max="50000"
+                step="100"
+                value={maxNodes}
+                onChange={(e) => {
+                  const value = parseInt(e.target.value, 10);
+                  if (!isNaN(value) && value > 0) {
+                    setMaxNodes(value);
+                    localStorage.setItem('graphView_maxNodes', value.toString());
+                  }
+                }}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                当节点数超过此限制时，将优先保留连接数高的节点
+              </p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                每个关系类型最大关系数
+              </label>
+              <input
+                type="number"
+                min="100"
+                max="100000"
+                step="100"
+                value={maxLinksPerType}
+                onChange={(e) => {
+                  const value = parseInt(e.target.value, 10);
+                  if (!isNaN(value) && value > 0) {
+                    setMaxLinksPerType(value);
+                    localStorage.setItem('graphView_maxLinksPerType', value.toString());
+                  }
+                }}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                每个关系类型最多加载的关系数量
+              </p>
+            </div>
+          </div>
+          <div className="mt-4 flex items-center justify-between">
+            <button
+              onClick={() => {
+                const isWorkspaceMode = selectedWorkspace && 
+                  ((selectedWorkspace.object_types && selectedWorkspace.object_types.length > 0) ||
+                   (selectedWorkspace.link_types && selectedWorkspace.link_types.length > 0));
+                const defaultNodes = isWorkspaceMode ? 5000 : 1000;
+                const defaultLinks = isWorkspaceMode ? 10000 : 500;
+                setMaxNodes(defaultNodes);
+                setMaxLinksPerType(defaultLinks);
+                localStorage.setItem('graphView_maxNodes', defaultNodes.toString());
+                localStorage.setItem('graphView_maxLinksPerType', defaultLinks.toString());
+              }}
+              className="px-4 py-2 text-sm text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+            >
+              恢复默认值
+            </button>
+            <div className="text-sm text-gray-500">
+              <span>当前节点: {nodes.length} / {maxNodes}</span>
+              <span className="ml-4">当前关系: {links.length}</span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 图形区域 */}
       <div className="flex-1 relative bg-white">
@@ -584,9 +798,9 @@ export default function GraphView() {
         )}
 
         {/* 图例和统计信息 */}
-        <div className="absolute bottom-4 left-4 bg-white rounded-xl shadow-xl border border-gray-200 p-4 max-w-xs">
-          <h4 className="text-sm font-bold text-gray-900 mb-3">图例与统计</h4>
-          <div className="space-y-3 text-xs">
+        <div className="absolute bottom-12 left-4 bg-white rounded-xl shadow-xl border border-gray-200 p-4 max-w-xs max-h-[calc(100vh-200px)] overflow-y-auto">
+          <h4 className="text-sm font-bold text-gray-900 mb-3 sticky top-0 bg-white pb-2 border-b border-gray-200">图例与统计</h4>
+          <div className="space-y-3 text-xs mt-2">
             <div>
               <div className="text-gray-500 mb-2">节点类型</div>
               <div className="space-y-1.5">

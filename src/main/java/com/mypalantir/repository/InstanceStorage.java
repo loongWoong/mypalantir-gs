@@ -187,6 +187,60 @@ public class InstanceStorage {
             .collect(Collectors.toList());
     }
 
+    /**
+     * 批量获取实例
+     * @param objectType 对象类型
+     * @param ids 实例ID列表
+     * @return 实例Map，key为ID，value为实例数据（如果不存在则为null）
+     */
+    public Map<String, Map<String, Object>> getInstancesBatch(String objectType, List<String> ids) throws IOException {
+        lock.readLock().lock();
+        try {
+            Map<String, Map<String, Object>> result = new HashMap<>();
+            
+            for (String id : ids) {
+                try {
+                    Map<String, Object> instance = getInstance(objectType, id);
+                    result.put(id, instance);
+                } catch (IOException e) {
+                    // 实例不存在，跳过
+                    result.put(id, null);
+                }
+            }
+            
+            return result;
+        } finally {
+            lock.readLock().unlock();
+        }
+    }
+
+    /**
+     * 批量获取多个对象类型的实例
+     * @param typeIdMap key为对象类型，value为该类型的ID列表
+     * @return Map，key为"objectType:id"，value为实例数据（如果不存在则为null）
+     */
+    public Map<String, Map<String, Object>> getInstancesBatchMultiType(Map<String, List<String>> typeIdMap) throws IOException {
+        lock.readLock().lock();
+        try {
+            Map<String, Map<String, Object>> result = new HashMap<>();
+            
+            for (Map.Entry<String, List<String>> entry : typeIdMap.entrySet()) {
+                String objectType = entry.getKey();
+                List<String> ids = entry.getValue();
+                
+                Map<String, Map<String, Object>> instances = getInstancesBatch(objectType, ids);
+                for (Map.Entry<String, Map<String, Object>> instanceEntry : instances.entrySet()) {
+                    String key = objectType + ":" + instanceEntry.getKey();
+                    result.put(key, instanceEntry.getValue());
+                }
+            }
+            
+            return result;
+        } finally {
+            lock.readLock().unlock();
+        }
+    }
+
     public static class ListResult {
         private final List<Map<String, Object>> items;
         private final long total;
