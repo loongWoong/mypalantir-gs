@@ -94,7 +94,7 @@ export default function SchemaGraphView() {
       // 创建节点（对象类型）
       const schemaNodes: SchemaNode[] = objectTypes.map((ot, index) => ({
         id: ot.name,
-        name: ot.name,
+        name: ot.display_name || ot.name,
         description: ot.description || '',
         type: 'object_type',
         data: ot,
@@ -199,7 +199,7 @@ export default function SchemaGraphView() {
           }}
           nodeColor={(node: any) => {
             const n = node as SchemaNode;
-            return getNodeColor(n.name);
+            return getNodeColor(n.data.name); // 使用原始 name 计算颜色，保持颜色一致性
           }}
           nodeVal={(node: any) => {
             // 根据连接数调整节点大小
@@ -219,7 +219,7 @@ export default function SchemaGraphView() {
           onBackgroundClick={handleBackgroundClick}
           nodeCanvasObject={(node: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
             const n = node as SchemaNode;
-            const label = n.name;
+            const label = n.data.display_name || n.data.name;
             const fontSize = 12 / globalScale;
             ctx.font = `bold ${fontSize}px Sans-Serif`;
             ctx.textAlign = 'center';
@@ -229,7 +229,7 @@ export default function SchemaGraphView() {
             const r = node.__size || 10;
             ctx.beginPath();
             ctx.arc(node.x || 0, node.y || 0, r, 0, 2 * Math.PI, false);
-            ctx.fillStyle = getNodeColor(n.name);
+            ctx.fillStyle = getNodeColor(n.data.name); // 使用原始 name 计算颜色，保持颜色一致性
             ctx.fill();
             ctx.strokeStyle = '#ffffff';
             ctx.lineWidth = 2 / globalScale;
@@ -276,7 +276,7 @@ export default function SchemaGraphView() {
             <div className="flex-1">
               {selectedNode && (
                 <>
-                  <h3 className="text-xl font-bold text-gray-900 mb-2">{selectedNode.name}</h3>
+                  <h3 className="text-xl font-bold text-gray-900 mb-2">{selectedNode.data.display_name || selectedNode.data.name}</h3>
                   <span className="inline-block px-3 py-1 text-sm font-semibold rounded-md bg-blue-600 text-white">
                     对象类型
                   </span>

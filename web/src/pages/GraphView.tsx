@@ -686,7 +686,7 @@ export default function GraphView() {
       // 使用 d3Force 配置 linkDistance
       const linkForce = fgRef.current.d3Force('link');
       if (linkForce) {
-        linkForce.distance(120); // 增加连线默认长度，使图形更清晰
+        linkForce.distance(90); // 增加连线默认长度，使图形更清晰
       }
     }
   }, [nodes, links]);
