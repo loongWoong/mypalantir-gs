@@ -325,6 +325,93 @@ object_types:
         required: false
         description: "拆分时间"
 
+  # 收费查询相关对象类型
+  - name: TollStation
+    description: "收费站对象"
+    # 数据源映射配置：从 H2 数据库读取数据
+    data_source:
+      connection_id: local_h2
+      table: toll_stations
+      id_column: station_id
+      field_mapping:
+        name: name
+        province: province
+    properties:
+      - name: name
+        data_type: string
+        required: true
+        description: "收费站名称"
+        constraints:
+          min_length: 1
+          max_length: 100
+      
+      - name: province
+        data_type: string
+        required: true
+        description: "所属省份"
+        constraints:
+          min_length: 1
+          max_length: 50
+
+  - name: TollRecord
+    description: "收费记录对象"
+    # 数据源映射配置：从 H2 数据库读取数据
+    data_source:
+      connection_id: local_h2
+      table: toll_records
+      id_column: record_id
+      field_mapping:
+        station_id: station_id
+        vehicle_id: vehicle_id
+        amount: amount
+        charge_time: charge_time
+    properties:
+      - name: station_id
+        data_type: string
+        required: true
+        description: "收费站ID（外键）"
+      
+      - name: vehicle_id
+        data_type: string
+        required: true
+        description: "车辆ID（外键）"
+      
+      - name: amount
+        data_type: float
+        required: true
+        description: "收费金额"
+        constraints:
+          min: 0
+      
+      - name: charge_time
+        data_type: datetime
+        required: true
+        description: "收费时间"
+
+  - name: Vehicle
+    description: "车辆对象（英文版，用于收费查询）"
+    # 数据源映射配置：从 H2 数据库读取数据
+    data_source:
+      connection_id: local_h2
+      table: vehicles_en
+      id_column: vehicle_id
+      field_mapping:
+        plate: plate
+        vehicle_type: vehicle_type
+    properties:
+      - name: plate
+        data_type: string
+        required: true
+        description: "车牌号"
+        constraints:
+          min_length: 1
+          max_length: 20
+      
+      - name: vehicle_type
+        data_type: string
+        required: false
+        description: "车辆类型"
+
 link_types:
   - name: 持有
     description: "车辆持有通行介质"
@@ -465,3 +552,32 @@ link_types:
     target_type: 拆分明细
     cardinality: one-to-one
     direction: directed
+
+  # 收费查询相关关联类型
+  - name: hasTollRecords
+    description: "收费站拥有收费记录"
+    source_type: TollStation
+    target_type: TollRecord
+    cardinality: one-to-many
+    direction: directed
+    # 数据源映射配置：从 H2 数据库的中间表读取数据
+    data_source:
+      connection_id: local_h2
+      table: toll_records
+      id_column: record_id
+      source_id_column: station_id  # 源对象（收费站）的ID列
+      target_id_column: record_id   # 目标对象（收费记录）的ID列（自引用）
+
+  - name: hasVehicleRecords
+    description: "车辆拥有收费记录"
+    source_type: Vehicle
+    target_type: TollRecord
+    cardinality: one-to-many
+    direction: directed
+    # 数据源映射配置：从 H2 数据库的中间表读取数据
+    data_source:
+      connection_id: local_h2
+      table: toll_records
+      id_column: record_id
+      source_id_column: vehicle_id  # 源对象（车辆）的ID列
+      target_id_column: record_id   # 目标对象（收费记录）的ID列（自引用）

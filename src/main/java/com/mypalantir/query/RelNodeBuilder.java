@@ -20,6 +20,7 @@ import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.rex.RexInputRef;
+import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.schema.SchemaPlus;
 import org.apache.calcite.sql.SqlKind;
@@ -87,43 +88,53 @@ public class RelNodeBuilder {
         // 1. 构建 TableScan
         RelNode scan = buildTableScan(query.getFrom());
         
-        // 2. 构建 Filter（WHERE）
-        if (query.getWhere() != null && !query.getWhere().isEmpty()) {
-            scan = buildFilter(scan, query.getWhere(), objectType, dataSourceMapping);
-        }
-        
-        // 3. 构建 JOIN（如果有 links 查询）
+        // 2. 先构建 JOIN（如果有 links 查询）- 必须在 filter 之前，因为 filter 可能需要访问关联表的字段
         if (query.getLinks() != null && !query.getLinks().isEmpty()) {
             for (OntologyQuery.LinkQuery linkQuery : query.getLinks()) {
                 scan = buildJoin(scan, linkQuery, objectType);
             }
         }
         
-        // 4. 构建 Project（SELECT）
-        // 注意：如果有 JOIN，需要处理来自多个表的字段
-        // 收集所有要选择的字段：主表的字段 + 关联表的字段
-        List<String> allSelectFields = new ArrayList<>();
-        if (query.getSelect() != null && !query.getSelect().isEmpty()) {
-            allSelectFields.addAll(query.getSelect());
-        }
-        // 添加关联表的 select 字段
-        if (query.getLinks() != null && !query.getLinks().isEmpty()) {
-            for (OntologyQuery.LinkQuery linkQuery : query.getLinks()) {
-                if (linkQuery.getSelect() != null && !linkQuery.getSelect().isEmpty()) {
-                    allSelectFields.addAll(linkQuery.getSelect());
-                }
-            }
-        }
-        if (!allSelectFields.isEmpty()) {
-            scan = buildProject(scan, allSelectFields, objectType, query.getLinks());
+        // 3. 构建 Filter（WHERE 或 filter 表达式）- 在 JOIN 之后执行，可以访问关联表的字段
+        if (query.getFilter() != null && !query.getFilter().isEmpty()) {
+            // 新格式：表达式数组
+            scan = buildExpressionFilter(scan, query.getFilter(), objectType, query.getLinks());
+        } else if (query.getWhere() != null && !query.getWhere().isEmpty()) {
+            // 旧格式：Map<String, Object>
+            scan = buildFilter(scan, query.getWhere(), objectType, dataSourceMapping);
         }
         
-        // 5. 构建 Sort（ORDER BY）
+        // 4. 构建 Aggregate（如果有 group_by 或 metrics）
+        if ((query.getGroupBy() != null && !query.getGroupBy().isEmpty()) || 
+            (query.getMetrics() != null && !query.getMetrics().isEmpty())) {
+            scan = buildAggregate(scan, query.getGroupBy(), query.getMetrics(), objectType, query.getLinks());
+        } else {
+            // 5. 构建 Project（SELECT）- 仅在非聚合查询时执行
+            // 注意：如果有 JOIN，需要处理来自多个表的字段
+            // 收集所有要选择的字段：主表的字段 + 关联表的字段
+            List<String> allSelectFields = new ArrayList<>();
+            if (query.getSelect() != null && !query.getSelect().isEmpty()) {
+                allSelectFields.addAll(query.getSelect());
+            }
+            // 添加关联表的 select 字段
+            if (query.getLinks() != null && !query.getLinks().isEmpty()) {
+                for (OntologyQuery.LinkQuery linkQuery : query.getLinks()) {
+                    if (linkQuery.getSelect() != null && !linkQuery.getSelect().isEmpty()) {
+                        allSelectFields.addAll(linkQuery.getSelect());
+                    }
+                }
+            }
+            if (!allSelectFields.isEmpty()) {
+                scan = buildProject(scan, allSelectFields, objectType, query.getLinks());
+            }
+        }
+        
+        // 6. 构建 Sort（ORDER BY）
         if (query.getOrderBy() != null && !query.getOrderBy().isEmpty()) {
             scan = buildSort(scan, query.getOrderBy(), objectType, dataSourceMapping);
         }
         
-        // 6. 构建 Limit
+        // 7. 构建 Limit
         if (query.getLimit() != null && query.getLimit() > 0) {
             scan = buildLimit(scan, query.getLimit(), query.getOffset());
         }
@@ -606,12 +617,22 @@ public class RelNodeBuilder {
                 );
                 return rexBuilder.makeLiteral(nlsString, type, false);
             case INTEGER:
+            case BIGINT:
                 if (value instanceof Number) {
                     return rexBuilder.makeLiteral(
                         ((Number) value).longValue(),
                         type,
                         false
                     );
+                } else if (value instanceof String) {
+                    // 尝试将字符串解析为数字
+                    try {
+                        long longValue = Long.parseLong((String) value);
+                        return rexBuilder.makeLiteral(longValue, type, false);
+                    } catch (NumberFormatException e) {
+                        // 如果解析失败，抛出异常
+                        throw new IllegalArgumentException("Cannot convert string '" + value + "' to integer for field type " + type);
+                    }
                 }
                 break;
             case DOUBLE:
@@ -622,23 +643,437 @@ public class RelNodeBuilder {
                         type,
                         false
                     );
+                } else if (value instanceof String) {
+                    // 尝试将字符串解析为数字
+                    try {
+                        double doubleValue = Double.parseDouble((String) value);
+                        return rexBuilder.makeLiteral(doubleValue, type, false);
+                    } catch (NumberFormatException e) {
+                        throw new IllegalArgumentException("Cannot convert string '" + value + "' to double for field type " + type);
+                    }
                 }
                 break;
             case BOOLEAN:
                 if (value instanceof Boolean) {
                     return rexBuilder.makeLiteral((Boolean) value, type, false);
+                } else if (value instanceof String) {
+                    // 尝试将字符串解析为布尔值
+                    String str = ((String) value).toLowerCase().trim();
+                    if ("true".equals(str) || "1".equals(str) || "yes".equals(str)) {
+                        return rexBuilder.makeLiteral(true, type, false);
+                    } else if ("false".equals(str) || "0".equals(str) || "no".equals(str)) {
+                        return rexBuilder.makeLiteral(false, type, false);
+                    } else {
+                        throw new IllegalArgumentException("Cannot convert string '" + value + "' to boolean");
+                    }
                 }
                 break;
             case DATE:
+                // DATE 类型：使用 java.sql.Date
+                if (value instanceof String) {
+                    String dateStr = (String) value;
+                    try {
+                        java.sql.Date date = java.sql.Date.valueOf(dateStr);
+                        return rexBuilder.makeLiteral(date, type, false);
+                    } catch (IllegalArgumentException e) {
+                        throw new IllegalArgumentException("Invalid date format: " + dateStr + ". Expected format: YYYY-MM-DD");
+                    }
+                } else if (value instanceof java.sql.Date) {
+                    return rexBuilder.makeLiteral((java.sql.Date) value, type, false);
+                } else {
+                    try {
+                        java.sql.Date date = java.sql.Date.valueOf(value.toString());
+                        return rexBuilder.makeLiteral(date, type, false);
+                    } catch (IllegalArgumentException e) {
+                        throw new IllegalArgumentException("Cannot convert '" + value + "' to DATE");
+                    }
+                }
             case TIMESTAMP:
-                // 日期类型需要特殊处理
-                return rexBuilder.makeLiteral(value.toString(), type, false);
+                // TIMESTAMP 类型：使用字符串格式，让 Calcite 在 SQL 生成时处理
+                // 注意：虽然我们传递字符串，但 Calcite 会根据 type 参数知道这是 TIMESTAMP 类型
+                if (value instanceof String) {
+                    String dateStr = (String) value;
+                    // 确保日期时间格式正确
+                    if (dateStr.length() <= 10) {
+                        // 只有日期部分，添加时间部分
+                        dateStr = dateStr + " 00:00:00";
+                    }
+                    // 验证日期格式
+                    try {
+                        java.sql.Timestamp.valueOf(dateStr);  // 验证格式
+                    } catch (IllegalArgumentException e) {
+                        throw new IllegalArgumentException("Invalid timestamp format: " + dateStr + 
+                            ". Expected format: YYYY-MM-DD or YYYY-MM-DD HH:MM:SS");
+                    }
+                    // 使用字符串创建字面量，Calcite 会将其转换为 TIMESTAMP 类型
+                    // 注意：这里使用 makeLiteral 的字符串重载，Calcite 会根据 type 参数处理
+                    return rexBuilder.makeLiteral(dateStr, type, false);
+                } else if (value instanceof java.sql.Timestamp) {
+                    // 将 Timestamp 转换为字符串格式
+                    String dateStr = ((java.sql.Timestamp) value).toString();
+                    return rexBuilder.makeLiteral(dateStr, type, false);
+                } else if (value instanceof java.sql.Date) {
+                    String dateStr = ((java.sql.Date) value).toString() + " 00:00:00";
+                    return rexBuilder.makeLiteral(dateStr, type, false);
+                } else {
+                    // 转换为字符串
+                    String dateStr = value.toString();
+                    if (dateStr.length() <= 10) {
+                        dateStr = dateStr + " 00:00:00";
+                    }
+                    // 验证格式
+                    try {
+                        java.sql.Timestamp.valueOf(dateStr);
+                    } catch (IllegalArgumentException e) {
+                        throw new IllegalArgumentException("Cannot convert '" + value + "' to TIMESTAMP: " + e.getMessage());
+                    }
+                    return rexBuilder.makeLiteral(dateStr, type, false);
+                }
             default:
-                return rexBuilder.makeLiteral(value.toString(), type, false);
+                // 对于未知类型，尝试使用字符串
+                // 但需要检查类型是否支持字符串
+                if (sqlTypeName == SqlTypeName.VARCHAR || sqlTypeName == SqlTypeName.CHAR) {
+                    // 字符串类型，使用 NlsString
+                    org.apache.calcite.sql.SqlCollation defaultCollation = org.apache.calcite.sql.SqlCollation.COERCIBLE;
+                    org.apache.calcite.util.NlsString defaultNlsString = new org.apache.calcite.util.NlsString(
+                        value.toString(),
+                        "UTF-8",
+                        defaultCollation
+                    );
+                    return rexBuilder.makeLiteral(defaultNlsString, type, false);
+                } else {
+                    // 对于其他类型，尝试使用字符串（Calcite 可能会自动转换）
+                    // 但如果类型不匹配，会抛出异常
+                    try {
+                        return rexBuilder.makeLiteral(value.toString(), type, false);
+                    } catch (Exception e) {
+                        throw new IllegalArgumentException("Cannot convert value '" + value + "' (type: " + 
+                            value.getClass().getSimpleName() + ") to field type " + sqlTypeName + 
+                            ". Original error: " + e.getMessage());
+                    }
+                }
         }
         
-        // 默认转换为字符串
-        return rexBuilder.makeLiteral(value.toString(), type, false);
+        // 如果所有 case 都 break 了（没有返回），说明类型不匹配
+        throw new IllegalArgumentException("Cannot convert value '" + value + "' (type: " + 
+            value.getClass().getSimpleName() + ") to field type " + type.getSqlTypeName());
+    }
+
+    /**
+     * 构建表达式过滤器（新格式：filter 表达式数组）
+     * 例如：[["=", "province", "江苏"], ["between", "hasTollRecords.charge_time", "2024-01-01", "2024-01-31"]]
+     */
+    private RelNode buildExpressionFilter(RelNode input, List<Object> filterExpressions,
+                                         ObjectType rootObjectType, List<OntologyQuery.LinkQuery> links) throws Exception {
+        relBuilder.clear();
+        relBuilder.push(input);
+        
+        RelDataType rowType = input.getRowType();
+        RexBuilder rexBuilder = relBuilder.getRexBuilder();
+        FieldPathResolver pathResolver = new FieldPathResolver(loader);
+        List<RexNode> conditions = new ArrayList<>();
+        
+        for (Object expr : filterExpressions) {
+            if (!(expr instanceof List)) {
+                throw new IllegalArgumentException("Filter expression must be an array: " + expr);
+            }
+            
+            @SuppressWarnings("unchecked")
+            List<Object> exprList = (List<Object>) expr;
+            if (exprList.isEmpty()) {
+                continue;
+            }
+            
+            RexNode condition = buildFilterExpression(exprList, rowType, rootObjectType, links, pathResolver, rexBuilder);
+            if (condition != null) {
+                conditions.add(condition);
+            }
+        }
+        
+        // 组合所有条件（AND）
+        if (!conditions.isEmpty()) {
+            RexNode combinedCondition = conditions.size() == 1 
+                ? conditions.get(0)
+                : rexBuilder.makeCall(org.apache.calcite.sql.fun.SqlStdOperatorTable.AND, conditions);
+            relBuilder.filter(combinedCondition);
+        }
+        
+        return relBuilder.build();
+    }
+    
+    /**
+     * 构建单个过滤表达式
+     */
+    private RexNode buildFilterExpression(List<Object> expr, RelDataType rowType, ObjectType rootObjectType,
+                                         List<OntologyQuery.LinkQuery> links, FieldPathResolver pathResolver,
+                                         RexBuilder rexBuilder) throws Exception {
+        if (expr.isEmpty()) {
+            return null;
+        }
+        
+        String operator = expr.get(0).toString();
+        
+        // 处理逻辑运算符
+        if ("and".equalsIgnoreCase(operator)) {
+            List<RexNode> conditions = new ArrayList<>();
+            for (int i = 1; i < expr.size(); i++) {
+                if (expr.get(i) instanceof List) {
+                    @SuppressWarnings("unchecked")
+                    List<Object> subExpr = (List<Object>) expr.get(i);
+                    RexNode condition = buildFilterExpression(subExpr, rowType, rootObjectType, links, pathResolver, rexBuilder);
+                    if (condition != null) {
+                        conditions.add(condition);
+                    }
+                }
+            }
+            if (conditions.isEmpty()) {
+                return null;
+            }
+            return conditions.size() == 1 
+                ? conditions.get(0)
+                : rexBuilder.makeCall(org.apache.calcite.sql.fun.SqlStdOperatorTable.AND, conditions);
+        } else if ("or".equalsIgnoreCase(operator)) {
+            List<RexNode> conditions = new ArrayList<>();
+            for (int i = 1; i < expr.size(); i++) {
+                if (expr.get(i) instanceof List) {
+                    @SuppressWarnings("unchecked")
+                    List<Object> subExpr = (List<Object>) expr.get(i);
+                    RexNode condition = buildFilterExpression(subExpr, rowType, rootObjectType, links, pathResolver, rexBuilder);
+                    if (condition != null) {
+                        conditions.add(condition);
+                    }
+                }
+            }
+            if (conditions.isEmpty()) {
+                return null;
+            }
+            return conditions.size() == 1 
+                ? conditions.get(0)
+                : rexBuilder.makeCall(org.apache.calcite.sql.fun.SqlStdOperatorTable.OR, conditions);
+        }
+        
+        // 处理比较运算符
+        if (expr.size() < 3) {
+            throw new IllegalArgumentException("Filter expression must have at least 3 elements: " + expr);
+        }
+        
+        String fieldPath = expr.get(1).toString();
+        Object value = expr.size() > 2 ? expr.get(2) : null;
+        
+        // 解析字段路径
+        FieldPathResolver.FieldPath fieldPathResult = pathResolver.resolve(fieldPath, rootObjectType, links);
+        
+        // 找到字段在行类型中的索引
+        int fieldIndex = findFieldIndexByPath(fieldPathResult, rowType);
+        if (fieldIndex < 0) {
+            // 输出所有可用字段以便调试
+            String availableFields = rowType.getFieldList().stream()
+                .map(f -> f.getName())
+                .collect(java.util.stream.Collectors.joining(", "));
+            throw new IllegalArgumentException("Field '" + fieldPath + "' (property: '" + 
+                fieldPathResult.getPropertyName() + "') not found in row type. Available fields: " + availableFields);
+        }
+        
+        RexInputRef inputRef = rexBuilder.makeInputRef(
+            rowType.getFieldList().get(fieldIndex).getType(),
+            fieldIndex
+        );
+        
+        // 获取字段类型
+        RelDataType fieldType = rowType.getFieldList().get(fieldIndex).getType();
+        
+        // 根据运算符构建条件
+        switch (operator.toLowerCase()) {
+            case "=":
+            case "eq":
+                RexNode literal = buildLiteral(rexBuilder, value, fieldType);
+                return rexBuilder.makeCall(org.apache.calcite.sql.fun.SqlStdOperatorTable.EQUALS, inputRef, literal);
+            
+            case ">":
+            case "gt":
+                literal = buildLiteral(rexBuilder, value, rowType.getFieldList().get(fieldIndex).getType());
+                return rexBuilder.makeCall(org.apache.calcite.sql.fun.SqlStdOperatorTable.GREATER_THAN, inputRef, literal);
+            
+            case ">=":
+            case "gte":
+                literal = buildLiteral(rexBuilder, value, rowType.getFieldList().get(fieldIndex).getType());
+                return rexBuilder.makeCall(org.apache.calcite.sql.fun.SqlStdOperatorTable.GREATER_THAN_OR_EQUAL, inputRef, literal);
+            
+            case "<":
+            case "lt":
+                literal = buildLiteral(rexBuilder, value, rowType.getFieldList().get(fieldIndex).getType());
+                return rexBuilder.makeCall(org.apache.calcite.sql.fun.SqlStdOperatorTable.LESS_THAN, inputRef, literal);
+            
+            case "<=":
+            case "lte":
+                literal = buildLiteral(rexBuilder, value, rowType.getFieldList().get(fieldIndex).getType());
+                return rexBuilder.makeCall(org.apache.calcite.sql.fun.SqlStdOperatorTable.LESS_THAN_OR_EQUAL, inputRef, literal);
+            
+            case "between":
+                if (expr.size() < 4) {
+                    throw new IllegalArgumentException("BETWEEN expression requires 4 elements: " + expr);
+                }
+                Object value1 = expr.get(2);
+                Object value2 = expr.get(3);
+                RelDataType fieldTypeForBetween = rowType.getFieldList().get(fieldIndex).getType();
+                RexNode literal1 = buildLiteral(rexBuilder, value1, fieldTypeForBetween);
+                RexNode literal2 = buildLiteral(rexBuilder, value2, fieldTypeForBetween);
+                RexNode geCondition = rexBuilder.makeCall(org.apache.calcite.sql.fun.SqlStdOperatorTable.GREATER_THAN_OR_EQUAL, inputRef, literal1);
+                RexNode leCondition = rexBuilder.makeCall(org.apache.calcite.sql.fun.SqlStdOperatorTable.LESS_THAN_OR_EQUAL, inputRef, literal2);
+                return rexBuilder.makeCall(org.apache.calcite.sql.fun.SqlStdOperatorTable.AND, geCondition, leCondition);
+            
+            default:
+                throw new IllegalArgumentException("Unsupported filter operator: " + operator);
+        }
+    }
+    
+    /**
+     * 根据字段路径找到字段在行类型中的索引
+     * 注意：JOIN 后的字段名就是属性名，不是完整路径
+     */
+    private int findFieldIndexByPath(FieldPathResolver.FieldPath fieldPath, RelDataType rowType) {
+        String propertyName = fieldPath.getPropertyName();
+        List<org.apache.calcite.rel.type.RelDataTypeField> fields = rowType.getFieldList();
+        
+        // 首先尝试精确匹配属性名
+        for (int i = 0; i < fields.size(); i++) {
+            String fieldName = fields.get(i).getName();
+            if (propertyName.equals(fieldName)) {
+                return i;
+            }
+        }
+        
+        // 如果精确匹配失败，尝试忽略大小写匹配
+        for (int i = 0; i < fields.size(); i++) {
+            String fieldName = fields.get(i).getName();
+            if (propertyName.equalsIgnoreCase(fieldName)) {
+                return i;
+            }
+        }
+        
+        return -1;
+    }
+    
+    /**
+     * 构建聚合查询（GROUP BY + 聚合函数）
+     */
+    private RelNode buildAggregate(RelNode input, List<String> groupBy, List<Object> metrics,
+                                   ObjectType rootObjectType, List<OntologyQuery.LinkQuery> links) throws Exception {
+        relBuilder.clear();
+        relBuilder.push(input);
+        
+        RelDataType rowType = input.getRowType();
+        RexBuilder rexBuilder = relBuilder.getRexBuilder();
+        FieldPathResolver pathResolver = new FieldPathResolver(loader);
+        
+        // 构建分组字段
+        List<RexNode> groupByNodes = new ArrayList<>();
+        List<String> groupByNames = new ArrayList<>();
+        if (groupBy != null && !groupBy.isEmpty()) {
+            for (String fieldPath : groupBy) {
+                FieldPathResolver.FieldPath fieldPathResult = pathResolver.resolve(fieldPath, rootObjectType, links);
+                int fieldIndex = findFieldIndexByPath(fieldPathResult, rowType);
+                if (fieldIndex < 0) {
+                    throw new IllegalArgumentException("Group by field '" + fieldPath + "' not found");
+                }
+                RexInputRef inputRef = rexBuilder.makeInputRef(
+                    rowType.getFieldList().get(fieldIndex).getType(),
+                    fieldIndex
+                );
+                groupByNodes.add(inputRef);
+                groupByNames.add(fieldPathResult.getPropertyName());
+            }
+        }
+        
+        // 构建聚合函数
+        List<RelBuilder.AggCall> aggregateCalls = new ArrayList<>();
+        List<String> aggregateNames = new ArrayList<>();
+        if (metrics != null && !metrics.isEmpty()) {
+            for (Object metricObj : metrics) {
+                if (!(metricObj instanceof List)) {
+                    throw new IllegalArgumentException("Metric must be an array: " + metricObj);
+                }
+                
+                @SuppressWarnings("unchecked")
+                List<Object> metric = (List<Object>) metricObj;
+                if (metric.size() < 2) {
+                    throw new IllegalArgumentException("Metric must have at least 2 elements: " + metric);
+                }
+                
+                String function = metric.get(0).toString().toLowerCase();
+                String fieldPath = metric.get(1).toString();
+                String alias = metric.size() > 2 ? metric.get(2).toString() : null;
+                
+                // 解析字段路径
+                FieldPathResolver.FieldPath fieldPathResult = pathResolver.resolve(fieldPath, rootObjectType, links);
+                int fieldIndex = findFieldIndexByPath(fieldPathResult, rowType);
+                if (fieldIndex < 0) {
+                    throw new IllegalArgumentException("Metric field '" + fieldPath + "' not found");
+                }
+                
+                // 使用 field() 方法获取字段引用
+                org.apache.calcite.rex.RexNode fieldNode = relBuilder.field(fieldIndex);
+                
+                // 构建聚合函数调用
+                RelBuilder.AggCall aggregateCall;
+                switch (function) {
+                    case "sum":
+                        aggregateCall = relBuilder.aggregateCall(
+                            org.apache.calcite.sql.fun.SqlStdOperatorTable.SUM,
+                            fieldNode
+                        );
+                        break;
+                    case "avg":
+                        aggregateCall = relBuilder.aggregateCall(
+                            org.apache.calcite.sql.fun.SqlStdOperatorTable.AVG,
+                            fieldNode
+                        );
+                        break;
+                    case "count":
+                        aggregateCall = relBuilder.aggregateCall(
+                            org.apache.calcite.sql.fun.SqlStdOperatorTable.COUNT,
+                            fieldNode
+                        );
+                        break;
+                    case "min":
+                        aggregateCall = relBuilder.aggregateCall(
+                            org.apache.calcite.sql.fun.SqlStdOperatorTable.MIN,
+                            fieldNode
+                        );
+                        break;
+                    case "max":
+                        aggregateCall = relBuilder.aggregateCall(
+                            org.apache.calcite.sql.fun.SqlStdOperatorTable.MAX,
+                            fieldNode
+                        );
+                        break;
+                    default:
+                        throw new IllegalArgumentException("Unsupported aggregate function: " + function);
+                }
+                
+                aggregateCalls.add(aggregateCall);
+                aggregateNames.add(alias != null ? alias : function + "_" + fieldPathResult.getPropertyName());
+            }
+        }
+        
+        // 如果没有分组字段，只有聚合函数，也需要构建 Aggregate
+        if (!groupByNodes.isEmpty() || !aggregateCalls.isEmpty()) {
+            if (!groupByNodes.isEmpty()) {
+                // 有分组字段
+                relBuilder.aggregate(
+                    relBuilder.groupKey(groupByNodes),
+                    aggregateCalls.toArray(new RelBuilder.AggCall[0])
+                );
+            } else {
+                // 只有聚合函数，没有分组
+                relBuilder.aggregate(
+                    relBuilder.groupKey(),
+                    aggregateCalls.toArray(new RelBuilder.AggCall[0])
+                );
+            }
+        }
+        
+        return relBuilder.build();
     }
 
     /**
