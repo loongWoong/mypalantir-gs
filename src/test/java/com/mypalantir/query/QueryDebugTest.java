@@ -1,6 +1,9 @@
 package com.mypalantir.query;
 
 import com.mypalantir.meta.Loader;
+import com.mypalantir.repository.IInstanceStorage;
+import com.mypalantir.service.MappingService;
+import com.mypalantir.service.DatabaseMetadataService;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.List;
@@ -51,7 +54,9 @@ public class QueryDebugTest {
         System.out.println("============================");
         
         // 构建 RelNode
-        RelNodeBuilder builder = new RelNodeBuilder(loader);
+        // 注意：测试环境需要传入 null，因为这是简单的调试测试
+        // 在实际应用中，这些参数应该通过依赖注入提供
+        RelNodeBuilder builder = new RelNodeBuilder(loader, null, null, null);
         builder.initialize();
         
         try {

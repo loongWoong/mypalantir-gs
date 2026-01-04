@@ -4,9 +4,9 @@
 
 本文档详细记录了从提交 `4989e74c521b154c12ea922f2a737438e45141a8`（车辆-卡模型）之后的所有功能变动和关键修改内容。
 
-**文档生成时间：** 2025-12-31  
+**文档生成时间：** 2026-01-04  
 **起始提交：** 4989e74c521b154c12ea922f2a737438e45141a8  
-**最新提交：** 053c18ba5f26f0a36ecbe229fb8577178e6fa025
+**最新提交：** 44895e969b06d7e16addc5c7e9779a78aae46992
 
 ---
 
@@ -23,14 +23,18 @@
 | 批量数据获取 | 847094a | ✅ 完成 | 优化图形视图加载性能 |
 | 血缘查询 | 053c18b | ✅ 完成 | 支持正向、反向、全链血缘查询 |
 | UI 优化 | fc743af | ✅ 完成 | 支持中文显示名称 |
+| 查询引擎 | 9234bdb | ✅ 完成 | 基于 Apache Calcite 的查询执行引擎 |
+| 查询修复 | 88d949e, e64ee4b | ✅ 完成 | 修复查询功能，改进 SQL 生成和结果映射 |
+| Neo4j 适配 | 98a34aa | ✅ 完成 | 修复接入 Neo4j 后数据格式变更问题 |
+| Schema 增强 | 662ef92, 23bf138, 44895e9 | ✅ 完成 | Schema 重构和数据源映射功能增强 |
 
 ### 1.2 统计数据
 
-- **总提交数：** 9 个功能提交
-- **新增文件：** 15+ 个新文件
-- **代码变更：** 约 8000+ 行新增代码
-- **新增 API 接口：** 20+ 个
-- **新增前端组件：** 5+ 个
+- **总提交数：** 19 个功能提交
+- **新增文件：** 20+ 个新文件
+- **代码变更：** 约 12000+ 行新增代码
+- **新增 API 接口：** 25+ 个
+- **新增前端组件：** 6+ 个
 
 ---
 
@@ -356,6 +360,196 @@
 
 ---
 
+### 2.9 基于 Calcite 的查询执行引擎（提交 9234bdb）
+
+**提交时间：** 2025-12-30 22:02:50  
+**提交哈希：** 9234bdb7cd8eede6cfd2aa7bbb4a5743f217e8b7
+
+#### 功能描述
+
+实现基于 Apache Calcite 的查询执行引擎，支持 OntologyQuery DSL 查询语言，自动将 Ontology 概念映射到数据库表名和列名。
+
+#### 关键修改
+
+1. **查询引擎核心组件**
+   - **QueryService.java**（新增）：查询服务入口，解析和执行查询
+   - **QueryExecutor.java**（新增）：查询执行器，将 OntologyQuery 转换为 RelNode 并执行
+   - **RelNodeBuilder.java**（新增）：RelNode 构建器，将 OntologyQuery 转换为 Calcite RelNode
+   - **OntologyRelToSqlConverter.java**（新增）：自定义 SQL 转换器，自动映射表名和列名
+   - **OntologyQuery.java**（新增）：查询 DSL 定义类
+   - **OntologyQueryParser.java**（新增）：查询解析器
+
+2. **Schema 工厂（OntologySchemaFactory.java）**（新增）
+   - 创建 Calcite Schema，将 Ontology 对象类型映射为 Calcite 表
+   - 实现 JdbcOntologyTable，将 Ontology 查询转换为数据库 SQL
+
+3. **查询控制器（QueryController.java）**（新增）
+   - 新增 `POST /api/v1/query` 接口
+
+4. **依赖管理（pom.xml）**
+   - 添加 `calcite-core` 依赖
+   - 添加 `h2` 数据库依赖（用于 Calcite 测试）
+
+5. **字符编码和 Collation 修复**
+   - 使用 NlsString 和 UTF-8 字符集
+   - 使用 SqlCollation.COERCIBLE 修复 Collation 错误
+
+#### 技术细节
+
+- **查询流程：** OntologyQuery → RelNode（逻辑计划）→ SQL（执行计划）→ 执行
+- **映射机制：** RelNode 逻辑层使用 Ontology 概念，SQL 生成时映射为数据库名称
+- **支持功能：** WHERE、SELECT、ORDER BY、LIMIT 等查询功能
+
+---
+
+### 2.10 查询功能修复（提交 88d949e, e64ee4b）
+
+**提交时间：** 2025-12-30 22:18:05, 2025-12-30 23:50:36  
+**提交哈希：** 88d949e9e15a4fba7f42fdbf891b87ee1f7d6887, e64ee4b6326bba4c91d983997ce3491490b8fd5b
+
+#### 功能描述
+
+修复查询功能中的多个问题，改进 SQL 生成和结果映射逻辑。
+
+#### 关键修改
+
+1. **查询结果修复（88d949e）**
+   - 添加 `id` 字段到查询结果
+   - 修复前端实例列表显示问题
+
+2. **SQL 生成优化（e64ee4b）**
+   - 修复 JOIN 条件字段名错误
+   - 移除不正确的表/列名替换（保持 Ontology 名称在 Calcite schema 中）
+   - 改进 QueryExecutor 中的列到属性映射
+   - 在 RelNode projection 中包含链接对象的选择字段
+   - 标准化 JdbcOntologyTable 中的表/列大小写以兼容 H2
+
+3. **调试输出**
+   - 添加查询执行管道的调试输出
+
+---
+
+### 2.11 查询架构文档（提交 f3c181e）
+
+**提交时间：** 2025-12-31 10:12:42  
+**提交哈希：** f3c181ea98bba28af4b6dae5671367d3086881e1
+
+#### 功能描述
+
+添加查询架构文档到 README，说明查询引擎的核心流程和关键组件。
+
+#### 关键修改
+
+1. **README.md 更新**
+   - 添加查询架构章节，说明核心流程和关键组件
+   - 文档化 OntologyQuery DSL、RelNodeBuilder 和查询执行管道
+   - 更新功能列表，包含数据源映射和查询引擎
+   - 添加 Apache Calcite 和 H2 Database 到技术栈
+   - 添加 Query API 端点文档
+
+---
+
+### 2.12 Neo4j 数据格式适配（提交 98a34aa）
+
+**提交时间：** 2025-12-31 16:20:53  
+**提交哈希：** 98a34aa90357747febe7bc641e191df2fce5affb
+
+#### 功能描述
+
+修复接入 Neo4j 后数据格式变更引起的查询展示问题。
+
+#### 关键修改
+
+- 适配 Neo4j 数据格式变更
+- 修复查询结果展示问题
+
+---
+
+### 2.13 Schema 定义增强和数据源合并逻辑（提交 662ef92）
+
+**提交时间：** 2026-01-04 09:06:52  
+**提交哈希：** 662ef92654f79858ea5c8c153720a95fbf600c1c
+
+#### 功能描述
+
+增强 Schema 定义，引入新的对象类型，改进数据源合并逻辑。
+
+#### 关键修改
+
+1. **Schema 扩展（schema.yaml）**
+   - 引入新的对象类型：车辆、媒体、交易记录、道路管理实体等
+
+2. **数据源合并逻辑改进（Loader.java）**
+   - 优先使用用户定义的数据源，同时避免重复
+   - 改进数据源合并算法
+
+3. **前端优化**
+   - **SchemaBrowser.tsx**：优化条件渲染，使链接和对象类型详情显示更清晰
+
+---
+
+### 2.14 数据映射功能增强（提交 23bf138）
+
+**提交时间：** 2026-01-04 11:57:57  
+**提交哈希：** 23bf138364aee474c12b9ac2728ff228c79e02fa
+
+#### 功能描述
+
+更新 Schema 并增强数据映射功能，改进数据验证和用户反馈。
+
+#### 关键修改
+
+1. **Schema 更新（schema.yaml）**
+   - 添加新的数据源和对象类型，包括 EntryTransaction 和 Path 详情
+
+2. **数据验证增强（Validator.java）**
+   - 支持 'integer' 作为 'int' 的别名
+
+3. **前端组件增强**
+   - **DataMapping.tsx**：集成 toast 通知，提供更好的用户反馈
+   - **InstanceDetail.tsx**：集成 toast 通知
+   - **SchemaGraphView.tsx**：
+     - 添加节点拖动功能
+     - 改进链接渲染逻辑，提升可视化效果
+
+---
+
+### 2.15 Schema 重构和数据源映射功能增强（提交 44895e9）
+
+**提交时间：** 2026-01-04 15:15:25  
+**提交哈希：** 44895e969b06d7e16addc5c7e9779a78aae46992
+
+#### 功能描述
+
+重构 Schema，从 schema.yaml 中移除已弃用的数据源配置，增强数据源映射功能，改进查询服务和图形视图。
+
+#### 关键修改
+
+1. **Schema 清理**
+   - 从 schema.yaml 中移除已弃用的数据源配置
+
+2. **查询服务更新**
+   - **QueryService.java**：更新以使用新的数据源映射逻辑
+   - **QueryExecutor.java**：更新以使用新的数据源映射逻辑
+   - **RelNodeBuilder.java**：更新以使用新的数据源映射逻辑
+
+3. **SQL 生成增强（OntologyRelToSqlConverter.java）**
+   - 在 SQL 生成时优先使用映射
+   - 改进映射查找逻辑
+
+4. **图形视图改进**
+   - **SchemaGraphView.tsx**：支持按显示名称展示对象类型和关联类型
+   - **GraphView.tsx**：支持按显示名称展示对象类型和关联类型
+
+5. **SchemaBrowser 增强**
+   - 添加映射数据的加载状态与错误处理
+   - 改进用户体验
+
+6. **InstanceDetail 更新**
+   - 新增"查看实例图谱"按钮
+
+---
+
 ## 三、技术架构变化
 
 ### 3.1 后端架构
@@ -377,7 +571,23 @@ com.mypalantir.service/
 ```
 com.mypalantir.controller/
 ├── DatabaseController.java        # 数据库相关 API
-└── MappingController.java         # 映射相关 API
+├── MappingController.java         # 映射相关 API
+└── QueryController.java            # 查询相关 API
+```
+
+#### 新增查询引擎层
+
+```
+com.mypalantir.query/
+├── QueryService.java              # 查询服务入口
+├── QueryExecutor.java             # 查询执行器
+├── RelNodeBuilder.java            # RelNode 构建器
+├── OntologyQuery.java             # 查询 DSL 定义
+├── OntologyQueryParser.java       # 查询解析器
+├── OntologyRelToSqlConverter.java # SQL 转换器
+└── schema/
+    ├── OntologySchemaFactory.java # Schema 工厂
+    └── JdbcOntologyTable.java     # JDBC 表实现
 ```
 
 #### 配置管理增强
@@ -462,6 +672,10 @@ web/src/api/client.ts
 
 - `POST /api/v1/links/{linkType}/sync` - 同步关系
 
+#### 查询相关
+
+- `POST /api/v1/query` - 执行 OntologyQuery 查询
+
 ### 4.2 接口变更
 
 - `GET /api/v1/instances/{objectType}` - 新增 `mappingId` 查询参数
@@ -514,6 +728,16 @@ DB_TYPE=mysql
 <dependency>
     <groupId>com.fasterxml.jackson.datatype</groupId>
     <artifactId>jackson-datatype-jsr310</artifactId>
+</dependency>
+<dependency>
+    <groupId>org.apache.calcite</groupId>
+    <artifactId>calcite-core</artifactId>
+    <version>1.35.0</version>
+</dependency>
+<dependency>
+    <groupId>com.h2database</groupId>
+    <artifactId>h2</artifactId>
+    <version>2.2.224</version>
 </dependency>
 ```
 
@@ -583,6 +807,35 @@ DB_TYPE=mysql
    - **反向血缘**：查看所有上游节点
    - **全链血缘**：查看所有相关节点
 
+### 6.5 查询引擎使用流程
+
+1. **执行查询**
+   - 使用 `POST /api/v1/query` 接口
+   - 传入 OntologyQuery JSON 格式的查询请求
+
+2. **查询语法**
+   ```json
+   {
+     "from": "object_type_name",
+     "select": ["property1", "property2"],
+     "where": {
+       "property1": "value1"
+     },
+     "links": [
+       {
+         "name": "link_type_name",
+         "select": ["property1"]
+       }
+     ],
+     "orderBy": "property1",
+     "limit": 100
+   }
+   ```
+
+3. **查询结果**
+   - 返回符合查询条件的实例列表
+   - 包含主对象和链接对象的属性
+
 ---
 
 ## 七、注意事项
@@ -645,4 +898,4 @@ DB_TYPE=mysql
 ---
 
 **文档维护者：** 开发团队  
-**最后更新：** 2025-12-31
+**最后更新：** 2026-01-04

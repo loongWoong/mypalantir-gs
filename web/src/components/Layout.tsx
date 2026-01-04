@@ -7,7 +7,6 @@ import {
   Bars3Icon,
   XMarkIcon,
   ChartBarIcon,
-  ServerIcon,
   MagnifyingGlassIcon,
   PlusIcon,
   PencilIcon,

@@ -7,10 +7,13 @@
 ### 核心功能
 - **元数据模型定义**：使用 YAML 格式定义对象类型、属性和关系类型
 - **数据源映射**：支持将 ObjectType 和 LinkType 映射到外部数据库（PostgreSQL、MySQL、H2 等）
-- **查询引擎**：基于 Apache Calcite 的查询引擎，支持通过 Ontology 概念查询外部数据库
+- **查询引擎**：基于 Apache Calcite 的查询执行引擎，支持 OntologyQuery DSL 查询语言
 - **关联查询**：支持通过 LinkType 进行 JOIN 查询，实现跨表关联
 - **双 Schema 架构**：系统 Schema（内置模型）和用户 Schema（业务模型）分离管理
 - **文件系统存储**：支持文件系统存储（用于未配置数据源的 ObjectType）
+- **批量查询优化**：批量获取实例 API，大幅优化图形视图加载性能
+- **血缘查询**：支持正向、反向、全链血缘查询功能
+- **关系自动同步**：基于属性映射规则自动创建关系实例
 - **RESTful API**：提供完整的 API 用于模型查询和实例数据管理
 - **数据验证**：完整的模型验证和数据验证机制
 
@@ -28,13 +31,15 @@
 - **系统工作空间**：内置系统工作空间，包含系统对象和关系
 
 ### 前端功能
-- **Schema 浏览器**：图形化查看对象类型、关系类型及其属性映射
+- **Schema 浏览器**：图形化查看对象类型、关系类型及其属性映射，支持交互式过滤
+- **Schema 关系图**：力导向图可视化展示 Schema 定义，支持节点拖动和关系连线
 - **实例管理**：创建、查看、编辑、删除实例数据
 - **多条件检索**：支持多属性条件过滤查询实例
 - **关系管理**：查看和管理对象之间的关系，支持关系同步
 - **数据映射界面**：ER 图形式配置数据库表列与对象属性的映射
-- **实例关系图**：力导向图可视化展示实例及其关系
-- **交互式过滤**：在 Schema 浏览器中点击对象/关系进行关联过滤
+- **实例关系图**：力导向图可视化展示实例及其关系，支持血缘查询
+- **工作空间管理**：创建工作空间，对对象类型和关系类型进行分组管理
+- **查询界面**：支持 OntologyQuery DSL 查询，查看查询结果
 
 ## 项目结构
 
@@ -47,7 +52,8 @@ mypalantir-gs/
 │   │   │       ├── config/         # 配置管理（包括数据库配置、环境变量加载）
 │   │   │       ├── meta/           # 元数据模型和解析器
 │   │   │       ├── repository/     # 数据访问层（文件系统存储）
-│   │   │       ├── service/        # 业务逻辑层（包括数据库服务、映射服务、同步服务）
+│   │   │       ├── service/        # 业务逻辑层（包括数据库服务、映射服务、同步服务、查询服务）
+│   │   │       ├── query/          # 查询引擎（基于 Apache Calcite）
 │   │   │       └── controller/      # REST 控制器
 │   │   └── resources/     # 资源文件
 │   │       ├── application.properties
@@ -87,12 +93,12 @@ mypalantir-gs/
 ### 后端
 - **Java 17**
 - **Spring Boot 3.2.0**
-- **Apache Calcite 1.37.0** (查询引擎)
-- **Jackson** (JSON/YAML 处理)
+- **Apache Calcite 1.35.0** (查询执行引擎)
+- **Jackson** (JSON/YAML 处理，包含 Java 8 时间支持)
 - **SnakeYAML** (YAML 解析)
 - **MySQL Connector** (数据库连接)
 - **dotenv-java** (环境变量加载)
-- **H2 Database** (本地测试数据库)
+- **H2 Database** (本地测试数据库，用于 Calcite 测试)
 - **Maven** (构建工具)
 
 ### 前端
@@ -273,6 +279,8 @@ Web UI 开发服务器在 `http://localhost:5173`，会自动代理 API 请求�
 - `GET /api/v1/instances/{objectType}/{id}` - 获取实例详情
 - `PUT /api/v1/instances/{objectType}/{id}` - 更新实例
 - `DELETE /api/v1/instances/{objectType}/{id}` - 删除实例
+- `POST /api/v1/instances/{objectType}/batch` - 批量获取单个对象类型的实例
+- `POST /api/v1/instances/batch` - 批量获取多个对象类型的实例
 - `POST /api/v1/instances/{objectType}/sync-from-mapping/{mappingId}` - 从映射数据源同步抽取数据
 
 ### Link API
@@ -303,7 +311,14 @@ Web UI 开发服务器在 `http://localhost:5173`，会自动代理 API 请求�
 - `GET /api/v1/mappings/by-table/{tableId}` - 根据表查询映射
 
 ### Query API
-- `POST /api/v1/query` - 执行 Ontology 查询（支持 `from`、`select`、`where`、`links`、`orderBy`、`limit` 等）
+- `POST /api/v1/query` - 执行 OntologyQuery 查询（支持 `from`、`select`、`where`、`links`、`orderBy`、`limit` 等）
+
+### Workspace API
+- `GET /api/v1/workspaces` - 列出所有工作空间
+- `GET /api/v1/workspaces/{id}` - 获取工作空间详情
+- `POST /api/v1/workspaces` - 创建工作空间
+- `PUT /api/v1/workspaces/{id}` - 更新工作空间
+- `DELETE /api/v1/workspaces/{id}` - 删除工作空间
 
 ## 开发
 
@@ -402,7 +417,8 @@ mypalantir-gs/
 │   │   ├── LinkController.java       # 关系 CRUD API
 │   │   ├── InstanceLinkController.java # 实例关系查询 API
 │   │   ├── DatabaseController.java    # 数据库操作 API
-│   │   └── MappingController.java     # 映射管理 API
+│   │   ├── MappingController.java     # 映射管理 API
+│   │   └── QueryController.java       # 查询 API
 │   ├── meta/            # 元数据模型
 │   │   ├── OntologySchema.java   # Schema 根对象
 │   │   ├── ObjectType.java       # 对象类型
@@ -450,8 +466,8 @@ mypalantir-gs/
 
 1. **Meta（元数据）层**：负责加载和验证 YAML Schema 定义，支持系统 Schema 和用户 Schema 合并
 2. **Repository（存储）层**：文件系统存储实现，使用 JSON 格式
-3. **Query（查询）层**：基于 Apache Calcite 的查询引擎，支持 Ontology 概念查询外部数据库
-4. **Service（服务）层**：业务逻辑，包括数据验证、数据库集成、数据映射、数据同步和查询服务
+3. **Query（查询）层**：基于 Apache Calcite 的查询执行引擎，支持 OntologyQuery DSL 查询语言
+4. **Service（服务）层**：业务逻辑，包括数据验证、数据库集成、数据映射、数据同步、关系同步和查询服务
 5. **Controller（控制器）层**：RESTful API 端点
 
 ## 数据模型
@@ -542,6 +558,45 @@ link_types:
 1. 点击"Filter"按钮打开过滤面板
 2. 添加过滤条件（属性名和值）
 3. 系统会根据所有条件进行 AND 查询
+
+### 查询引擎使用
+
+1. **执行查询**：
+   - 使用 `POST /api/v1/query` 接口
+   - 传入 OntologyQuery JSON 格式的查询请求
+
+2. **查询语法**：
+   ```json
+   {
+     "from": "object_type_name",
+     "select": ["property1", "property2"],
+     "where": {
+       "property1": "value1"
+     },
+     "links": [
+       {
+         "name": "link_type_name",
+         "select": ["property1"]
+       }
+     ],
+     "orderBy": [{"field": "property1", "direction": "ASC"}],
+     "limit": 100
+   }
+   ```
+
+3. **查询结果**：
+   - 返回符合查询条件的实例列表
+   - 包含主对象和链接对象的属性
+
+### 血缘查询
+
+在 Instance Graph 界面：
+1. 选择查询模式：
+   - **直接关系**：只显示直接连接的节点
+   - **正向血缘**：从当前节点向后递归查询所有下游节点
+   - **反向血缘**：从当前节点向前递归查询所有上游节点
+   - **全链血缘**：从当前节点前后递归查询所有相关节点
+2. 系统会自动加载并显示相关节点和关系
 
 ## 许可证
 

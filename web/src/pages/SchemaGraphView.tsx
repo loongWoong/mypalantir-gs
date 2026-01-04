@@ -287,8 +287,7 @@ export default function SchemaGraphView() {
             const l = link as SchemaLink;
             return `${l.name}\n${l.description || ''}\n${l.cardinality} (${l.direction})`;
           }}
-          linkDirectionalArrowLength={4}
-          linkDirectionalArrowRelPos={1}
+          linkDirectionalArrowLength={0}
           linkColor={() => '#94a3b8'}
           linkWidth={1}
           onNodeDrag={handleNodeDrag}
