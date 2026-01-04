@@ -175,9 +175,7 @@ export default function SchemaBrowser() {
       {/* Object Type / Link Type / Link Type Details */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">
-          {selectedLinkType ? 'Link Type Details' : '
-          {selectedObjectType ? 'Object Type Details'}
-        ' : selectedLinkType ? 'Link Type Details' : 'Details'}
+          {selectedLinkType ? 'Link Type Details' : selectedObjectType ? 'Object Type Details' : 'Details'}
         </h2>
         {selectedLinkType ? (
           <div>

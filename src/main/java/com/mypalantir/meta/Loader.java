@@ -88,6 +88,23 @@ public class Loader {
         }
         merged.setLinkTypes(mergedLinkTypes);
         
+        // 合并数据源：用户 schema 的数据源优先，然后添加系统 schema 中不存在的数据源
+        List<DataSourceConfig> mergedDataSources = new ArrayList<>();
+        if (userSchema.getDataSources() != null) {
+            mergedDataSources.addAll(userSchema.getDataSources());
+        }
+        if (systemSchema.getDataSources() != null) {
+            for (DataSourceConfig systemDs : systemSchema.getDataSources()) {
+                // 检查是否已存在同 ID 的数据源
+                boolean exists = mergedDataSources.stream()
+                    .anyMatch(ds -> ds.getId().equals(systemDs.getId()));
+                if (!exists) {
+                    mergedDataSources.add(systemDs);
+                }
+            }
+        }
+        merged.setDataSources(mergedDataSources);
+        
         return merged;
     }
 
