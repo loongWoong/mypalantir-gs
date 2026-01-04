@@ -5,6 +5,7 @@ import { instanceApi, schemaApi, linkApi } from '../api/client';
 import { ArrowLeftIcon, PencilIcon, TrashIcon, LinkIcon } from '@heroicons/react/24/outline';
 import { useNavigate } from 'react-router-dom';
 import InstanceForm from '../components/InstanceForm';
+import { ToastContainer, useToast } from '../components/Toast';
 
 export default function InstanceDetail() {
   const { objectType, id } = useParams<{ objectType: string; id: string }>();
@@ -15,6 +16,8 @@ export default function InstanceDetail() {
   const [connectedInstances, setConnectedInstances] = useState<Instance[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const { toasts, showToast, removeToast } = useToast();
 
   useEffect(() => {
     if (objectType && id) {
@@ -26,6 +29,7 @@ export default function InstanceDetail() {
     if (!objectType || !id) return;
     try {
       setLoading(true);
+      setError(null);
       const [instanceData, objectTypeData] = await Promise.all([
         instanceApi.get(objectType, id),
         schemaApi.getObjectType(objectType),
@@ -53,8 +57,13 @@ export default function InstanceDetail() {
           console.error('Failed to load links:', error);
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to load data:', error);
+      const errorMessage = error.response?.status === 404 
+        ? `实例不存在或已被删除 (ID: ${id})`
+        : error.response?.data?.message || error.message || '加载实例详情失败';
+      setError(errorMessage);
+      showToast(errorMessage, 'error');
     } finally {
       setLoading(false);
     }
@@ -73,11 +82,37 @@ export default function InstanceDetail() {
   };
 
   if (loading) {
-    return <div className="text-center py-12">Loading...</div>;
+    return (
+      <div>
+        <div className="text-center py-12">Loading...</div>
+        <ToastContainer toasts={toasts} onClose={removeToast} />
+      </div>
+    );
   }
 
-  if (!instance || !objectTypeDef) {
-    return <div className="text-center py-12">Instance not found</div>;
+  if (error || !instance || !objectTypeDef) {
+    return (
+      <div>
+        <div className="text-center py-12">
+          <div className="text-red-600 font-semibold mb-2">
+            {error || 'Instance not found'}
+          </div>
+          <p className="text-gray-600 mb-4">
+            {error 
+              ? '无法加载实例详情，请检查实例ID是否正确或实例是否已被删除。'
+              : '实例不存在或无法加载。'}
+          </p>
+          <RouterLink
+            to={`/instances/${objectType || ''}`}
+            className="inline-flex items-center text-blue-600 hover:text-blue-800"
+          >
+            <ArrowLeftIcon className="w-4 h-4 mr-2" />
+            返回列表
+          </RouterLink>
+        </div>
+        <ToastContainer toasts={toasts} onClose={removeToast} />
+      </div>
+    );
   }
 
   return (
@@ -183,6 +218,9 @@ export default function InstanceDetail() {
           </div>
         )}
       </div>
+
+      {/* Toast 通知 */}
+      <ToastContainer toasts={toasts} onClose={removeToast} />
     </div>
   );
 }

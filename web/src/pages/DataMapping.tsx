@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import type { ObjectType } from '../api/client';
 import { schemaApi, databaseApi, mappingApi } from '../api/client';
 import { XMarkIcon, CheckIcon } from '@heroicons/react/24/outline';
+import { ToastContainer, useToast } from '../components/Toast';
 
 interface Column {
   name: string;
@@ -23,6 +24,7 @@ export default function DataMapping() {
   const [databaseId, setDatabaseId] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const { toasts, showToast, removeToast } = useToast();
 
   useEffect(() => {
     if (objectType) {
@@ -164,8 +166,11 @@ export default function DataMapping() {
         mappings,
         primaryKeyColumn || undefined
       );
-      alert('映射关系保存成功！');
-      navigate(`/instances/${objectType}?mappingId=${mappingId}`);
+      showToast('映射关系保存成功！', 'success');
+      // 延迟导航，让用户看到提示
+      setTimeout(() => {
+        navigate(`/instances/${objectType}?mappingId=${mappingId}`);
+      }, 500);
     } catch (error: any) {
       console.error('Failed to save mapping:', error);
       alert('保存失败: ' + (error.response?.data?.message || error.message));
@@ -312,6 +317,9 @@ export default function DataMapping() {
           )}
         </div>
       </div>
+
+      {/* Toast 通知 */}
+      <ToastContainer toasts={toasts} onClose={removeToast} />
     </div>
   );
 }

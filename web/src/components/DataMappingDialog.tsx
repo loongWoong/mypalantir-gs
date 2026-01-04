@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import type { ObjectType, Instance } from '../api/client';
 import { databaseApi, mappingApi, instanceApi } from '../api/client';
 import { XMarkIcon, CheckIcon, LinkIcon } from '@heroicons/react/24/outline';
+import { ToastContainer, useToast } from './Toast';
 
 interface Column {
   name: string;
@@ -33,10 +34,18 @@ export default function DataMappingDialog({
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [step, setStep] = useState<'database' | 'table' | 'mapping'>('database');
+  const { toasts, showToast, removeToast } = useToast();
 
   useEffect(() => {
     loadDatabases();
   }, []);
+
+  // 当只有一个数据源时，自动选择
+  useEffect(() => {
+    if (databases.length === 1 && !selectedDatabaseId) {
+      setSelectedDatabaseId(databases[0].id);
+    }
+  }, [databases, selectedDatabaseId]);
 
   useEffect(() => {
     if (selectedDatabaseId) {
@@ -196,7 +205,7 @@ export default function DataMappingDialog({
         mappings,
         primaryKeyColumn || undefined
       );
-      alert('映射关系保存成功！');
+      showToast('映射关系保存成功！', 'success');
       onSuccess();
       onClose();
     } catch (error: any) {
@@ -500,6 +509,9 @@ export default function DataMappingDialog({
           </div>
         </div>
       </div>
+
+      {/* Toast 通知 */}
+      <ToastContainer toasts={toasts} onClose={removeToast} />
     </div>
   );
 }

@@ -205,7 +205,7 @@ public class Validator {
                     }
                 }
             }
-        } else if ("int".equals(dataType) || "long".equals(dataType) || "float".equals(dataType)) {
+        } else if ("int".equals(dataType) || "integer".equals(dataType) || "long".equals(dataType) || "float".equals(dataType)) {
             if (constraints.containsKey("min") && constraints.containsKey("max")) {
                 Object minObj = constraints.get("min");
                 Object maxObj = constraints.get("max");
@@ -234,6 +234,10 @@ public class Validator {
         if (dataType.startsWith("array<") && dataType.endsWith(">")) {
             String innerType = dataType.substring(6, dataType.length() - 1);
             return isValidDataType(innerType);
+        }
+        // 支持 integer 作为 int 的别名（向后兼容）
+        if ("integer".equals(dataType)) {
+            return true;
         }
         return VALID_DATA_TYPES.contains(dataType);
     }

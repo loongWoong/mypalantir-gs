@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import ForceGraph2D from 'react-force-graph-2d';
 import type { ObjectType, LinkType } from '../api/client';
 import { schemaApi } from '../api/client';
@@ -18,8 +18,8 @@ interface SchemaNode {
 }
 
 interface SchemaLink {
-  source: string;
-  target: string;
+  source: SchemaNode | string; // 可以是节点对象引用或字符串 ID
+  target: SchemaNode | string; // 可以是节点对象引用或字符串 ID
   id: string;
   name: string;
   description: string;
@@ -57,6 +57,7 @@ export default function SchemaGraphView() {
   const [selectedNode, setSelectedNode] = useState<SchemaNode | null>(null);
   const [selectedLink, setSelectedLink] = useState<SchemaLink | null>(null);
   const [graphData, setGraphData] = useState({ nodes, links });
+  const fgRef = useRef<any>(null);
 
   useEffect(() => {
     loadSchemaGraph();
@@ -102,30 +103,30 @@ export default function SchemaGraphView() {
       }));
 
       // 创建边（关系类型）
-      const schemaLinks: SchemaLink[] = linkTypes.map((lt) => {
-        // 确保源和目标节点存在
-        const sourceExists = schemaNodes.some(n => n.id === lt.source_type);
-        const targetExists = schemaNodes.some(n => n.id === lt.target_type);
-        
-        if (!sourceExists || !targetExists) {
-          console.warn(`Link ${lt.name} references non-existent node: ${lt.source_type} -> ${lt.target_type}`);
-        }
+      // 注意：source 和 target 必须是节点对象的引用，而不是字符串 ID
+      const schemaLinks: SchemaLink[] = linkTypes
+        .map((lt) => {
+          // 查找源和目标节点对象
+          const sourceNode = schemaNodes.find(n => n.id === lt.source_type);
+          const targetNode = schemaNodes.find(n => n.id === lt.target_type);
+          
+          if (!sourceNode || !targetNode) {
+            console.warn(`Link ${lt.name} references non-existent node: ${lt.source_type} -> ${lt.target_type}`);
+            return null;
+          }
 
-        return {
-          source: lt.source_type,
-          target: lt.target_type,
-          id: `${lt.name}_${lt.source_type}_${lt.target_type}`,
-          name: lt.name,
-          description: lt.description || '',
-          cardinality: lt.cardinality,
-          direction: lt.direction,
-          data: lt,
-        };
-      }).filter(link => {
-        // 过滤掉引用不存在节点的边
-        return schemaNodes.some(n => n.id === link.source) && 
-               schemaNodes.some(n => n.id === link.target);
-      });
+          return {
+            source: sourceNode, // 使用节点对象引用，而不是字符串 ID
+            target: targetNode, // 使用节点对象引用，而不是字符串 ID
+            id: `${lt.name}_${lt.source_type}_${lt.target_type}`,
+            name: lt.display_name || lt.name,
+            description: lt.description || '',
+            cardinality: lt.cardinality,
+            direction: lt.direction,
+            data: lt,
+          } as SchemaLink;
+        })
+        .filter((link): link is SchemaLink => link !== null);
 
       setNodes(schemaNodes);
       setLinks(schemaLinks);
@@ -150,6 +151,81 @@ export default function SchemaGraphView() {
   const handleBackgroundClick = useCallback(() => {
     setSelectedNode(null);
     setSelectedLink(null);
+  }, []);
+
+  // 处理节点拖动
+  const handleNodeDrag = useCallback((node: any) => {
+    // 更新节点的位置，使关系线能够跟随
+    node.fx = node.x;
+    node.fy = node.y;
+    
+    // 直接更新 graphData 中的节点对象，确保关系线能够实时跟随
+    // ForceGraph2D 会自动重新渲染，linkCanvasObject 会使用最新的节点位置
+    setGraphData(prevData => {
+      const updatedNodes = prevData.nodes.map((n: any) => {
+        if (n.id === node.id) {
+          // 更新被拖动的节点
+          n.x = node.x;
+          n.y = node.y;
+          n.fx = node.x;
+          n.fy = node.y;
+          return n;
+        }
+        return n;
+      });
+      
+      // 更新 links 中的节点引用，确保关系线能够实时跟随
+      // 如果 link 的 source/target 是节点对象，需要更新引用
+      const updatedLinks = prevData.links.map((link: any) => {
+        // 如果 source 是节点对象且是被拖动的节点，更新引用
+        if (typeof link.source === 'object' && link.source.id === node.id) {
+          const updatedNode = updatedNodes.find((n: any) => n.id === node.id);
+          if (updatedNode) {
+            link.source = updatedNode;
+          }
+        }
+        // 如果 target 是节点对象且是被拖动的节点，更新引用
+        if (typeof link.target === 'object' && link.target.id === node.id) {
+          const updatedNode = updatedNodes.find((n: any) => n.id === node.id);
+          if (updatedNode) {
+            link.target = updatedNode;
+          }
+        }
+        return link;
+      });
+      
+      // 返回新的 graphData，确保 ForceGraph2D 重新渲染
+      return {
+        nodes: updatedNodes,
+        links: updatedLinks
+      };
+    });
+  }, []);
+
+  // 处理节点拖动结束
+  const handleNodeDragEnd = useCallback((node: any) => {
+    // 固定节点位置，使关系线保持拉长的状态
+    node.fx = node.x;
+    node.fy = node.y;
+    
+    // 更新状态
+    setNodes(prevNodes => 
+      prevNodes.map(n => 
+        n.id === node.id 
+          ? { ...n, x: node.x, y: node.y }
+          : n
+      )
+    );
+    
+    // 更新 graphData
+    setGraphData(prevData => ({
+      nodes: prevData.nodes.map((n: any) => 
+        n.id === node.id 
+          ? { ...n, x: node.x, y: node.y, fx: node.x, fy: node.y }
+          : n
+      ),
+      links: prevData.links
+    }));
   }, []);
 
   if (loading) {
@@ -192,6 +268,7 @@ export default function SchemaGraphView() {
       {/* 图视图 */}
       <div className="flex-1 relative bg-white">
         <ForceGraph2D
+          ref={fgRef}
           graphData={graphData}
           nodeLabel={(node: any) => {
             const n = node as SchemaNode;
@@ -210,13 +287,18 @@ export default function SchemaGraphView() {
             const l = link as SchemaLink;
             return `${l.name}\n${l.description || ''}\n${l.cardinality} (${l.direction})`;
           }}
-          linkDirectionalArrowLength={6}
+          linkDirectionalArrowLength={4}
           linkDirectionalArrowRelPos={1}
           linkColor={() => '#94a3b8'}
-          linkWidth={2}
+          linkWidth={1}
+          onNodeDrag={handleNodeDrag}
+          onNodeDragEnd={handleNodeDragEnd}
           onNodeClick={handleNodeClick}
           onLinkClick={handleLinkClick}
           onBackgroundClick={handleBackgroundClick}
+          // 降低物理引擎的强度，使拖动后的位置更容易保持
+          d3AlphaDecay={0.0228}
+          d3VelocityDecay={0.4}
           nodeCanvasObject={(node: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
             const n = node as SchemaNode;
             const label = n.data.display_name || n.data.name;
@@ -246,19 +328,80 @@ export default function SchemaGraphView() {
           }}
           linkCanvasObject={(link: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
             const l = link as SchemaLink;
-            // 绘制关系标签（仅在缩放足够大时）
-            if (globalScale > 0.8) {
-              const midX = ((link.source.x || 0) + (link.target.x || 0)) / 2;
-              const midY = ((link.source.y || 0) + (link.target.y || 0)) / 2;
+            const source = link.source;
+            const target = link.target;
+            
+            // 获取节点位置和大小
+            const sourceX = source.x || 0;
+            const sourceY = source.y || 0;
+            const targetX = target.x || 0;
+            const targetY = target.y || 0;
+            const sourceRadius = source.__size || 10;
+            const targetRadius = target.__size || 10;
+            
+            // 计算方向向量
+            const dx = targetX - sourceX;
+            const dy = targetY - sourceY;
+            const linkLength = Math.sqrt(dx * dx + dy * dy);
+            
+            if (linkLength === 0) return; // 避免除零错误
+            
+            // 单位向量
+            const unitX = dx / linkLength;
+            const unitY = dy / linkLength;
+            
+            // 计算连接到节点边缘的起点和终点
+            const startX = sourceX + unitX * sourceRadius;
+            const startY = sourceY + unitY * sourceRadius;
+            const endX = targetX - unitX * targetRadius;
+            const endY = targetY - unitY * targetRadius;
+            
+            // 绘制关系线（减小线宽）
+            ctx.beginPath();
+            ctx.moveTo(startX, startY);
+            ctx.lineTo(endX, endY);
+            ctx.strokeStyle = '#94a3b8';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+            
+            // 绘制箭头（在目标节点边缘）
+            const arrowLength = 4;
+            const arrowAngle = Math.atan2(dy, dx);
+            
+            ctx.beginPath();
+            ctx.moveTo(endX, endY);
+            ctx.lineTo(
+              endX - arrowLength * Math.cos(arrowAngle - Math.PI / 6),
+              endY - arrowLength * Math.sin(arrowAngle - Math.PI / 6)
+            );
+            ctx.lineTo(
+              endX - arrowLength * Math.cos(arrowAngle + Math.PI / 6),
+              endY - arrowLength * Math.sin(arrowAngle + Math.PI / 6)
+            );
+            ctx.closePath();
+            ctx.fillStyle = '#94a3b8';
+            ctx.fill();
+            
+            // 绘制关系标签（降低显示阈值，使标签更容易显示）
+            if (globalScale > 0.6) {
+              const midX = (startX + endX) / 2;
+              const midY = (startY + endY) / 2;
               
-              ctx.font = `${10 / globalScale}px Sans-Serif`;
+              // 使用 display_name，如果没有则使用 name
+              const label = l.data.display_name || l.name;
+              
+              // 增大字号，从10改为16
+              const fontSize = 16 / globalScale;
+              ctx.font = `bold ${fontSize}px Sans-Serif`;
               ctx.textAlign = 'center';
               ctx.textBaseline = 'middle';
-              ctx.fillStyle = '#64748b';
-              ctx.strokeStyle = '#ffffff';
-              ctx.lineWidth = 3 / globalScale;
-              ctx.strokeText(l.name, midX, midY);
-              ctx.fillText(l.name, midX, midY);
+              
+              // 使用更易读的颜色：深色文字配白色描边
+              ctx.fillStyle = '#1e293b'; // 深灰色文字
+              ctx.strokeStyle = '#ffffff'; // 白色描边
+              ctx.lineWidth = 4 / globalScale; // 稍粗的描边
+              ctx.strokeText(label, midX, midY);
+              ctx.fillText(label, midX, midY);
             }
           }}
           cooldownTicks={100}

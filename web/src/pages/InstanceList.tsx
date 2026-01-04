@@ -6,6 +6,7 @@ import { useWorkspace } from '../WorkspaceContext';
 import { PlusIcon, PencilIcon, TrashIcon, ArrowPathIcon, CloudArrowDownIcon, XMarkIcon, LinkIcon, ArrowDownTrayIcon, FunnelIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline';
 import InstanceForm from '../components/InstanceForm';
 import DataMappingDialog from '../components/DataMappingDialog';
+import { ToastContainer, useToast } from '../components/Toast';
 
 export default function InstanceList() {
   const { objectType } = useParams<{ objectType: string }>();
@@ -32,6 +33,7 @@ export default function InstanceList() {
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState<Array<{ property: string; value: string }>>([]);
   const limit = 20;
+  const { toasts, showToast, removeToast } = useToast();
 
   // 判断是否为系统对象类型（不需要关联按钮）
   const isSystemObjectType = (type: string | undefined) => {
@@ -154,6 +156,10 @@ export default function InstanceList() {
       // 加载所有数据库实例供选择
       const dbList = await instanceApi.list('database', 0, 100);
       setDatabases(dbList.items);
+      // 如果只有一个数据源，自动选择
+      if (dbList.items.length === 1) {
+        setSelectedDatabaseId(dbList.items[0].id);
+      }
       setShowSyncDialog(true);
     } catch (error) {
       console.error('Failed to load databases:', error);
@@ -163,20 +169,22 @@ export default function InstanceList() {
 
   const handleSync = async () => {
     if (!selectedDatabaseId) {
-      alert('请选择数据源');
+      showToast('请选择数据源', 'error');
       return;
     }
 
     try {
       setSyncing(true);
       const result = await databaseApi.syncTables(selectedDatabaseId);
-      alert(`同步完成！\n创建表: ${result.tables_created}\n创建列: ${result.columns_created}\n更新列: ${result.columns_updated}`);
+      const message = `同步完成！\n创建表: ${result.tables_created}\n创建列: ${result.columns_created}\n更新列: ${result.columns_updated}`;
+      showToast(message, 'success');
       setShowSyncDialog(false);
       setSelectedDatabaseId('');
       loadData(); // 刷新列表
     } catch (error: any) {
       console.error('Failed to sync tables:', error);
-      alert('同步失败: ' + (error.response?.data?.message || error.message));
+      const errorMessage = '同步失败: ' + (error.response?.data?.message || error.message);
+      showToast(errorMessage, 'error');
     } finally {
       setSyncing(false);
     }
@@ -236,7 +244,7 @@ export default function InstanceList() {
     try {
       setExtracting(true);
       await instanceApi.syncFromMapping(objectType, targetMappingId);
-      alert('数据抽取完成！已从数据库同步数据到实例中。');
+      showToast('数据抽取完成！已从数据库同步数据到实例中。', 'success');
       setShowSyncExtractDialog(false);
       setSelectedMappingId('');
       loadData(); // 刷新列表
@@ -689,6 +697,9 @@ export default function InstanceList() {
           </div>
         </div>
       )}
+
+      {/* Toast 通知 */}
+      <ToastContainer toasts={toasts} onClose={removeToast} />
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import type { Link, LinkType } from '../api/client';
 import { linkApi, schemaApi } from '../api/client';
 import { ArrowPathIcon } from '@heroicons/react/24/outline';
+import { ToastContainer, useToast } from '../components/Toast';
 
 export default function LinkList() {
   const { linkType } = useParams<{ linkType: string }>();
@@ -13,6 +14,7 @@ export default function LinkList() {
   const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);
   const limit = 20;
+  const { toasts, showToast, removeToast } = useToast();
 
   useEffect(() => {
     if (linkType) {
@@ -43,11 +45,13 @@ export default function LinkList() {
     try {
       setSyncing(true);
       const result = await linkApi.sync(linkType);
-      alert(`同步完成！\n创建关系: ${result.links_created}`);
+      const message = `同步完成！\n创建关系: ${result.links_created}`;
+      showToast(message, 'success');
       loadData(); // 刷新列表
     } catch (error: any) {
       console.error('Failed to sync links:', error);
-      alert('同步失败: ' + (error.response?.data?.message || error.message));
+      const errorMessage = '同步失败: ' + (error.response?.data?.message || error.message);
+      showToast(errorMessage, 'error');
     } finally {
       setSyncing(false);
     }
@@ -194,6 +198,9 @@ export default function LinkList() {
           </div>
         )}
       </div>
+
+      {/* Toast 通知 */}
+      <ToastContainer toasts={toasts} onClose={removeToast} />
     </div>
   );
 }
