@@ -58,6 +58,8 @@ export default function SchemaGraphView() {
   const [selectedLink, setSelectedLink] = useState<SchemaLink | null>(null);
   const [graphData, setGraphData] = useState({ nodes, links });
   const fgRef = useRef<any>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const hasAutoZoomed = useRef(false);
 
   useEffect(() => {
     loadSchemaGraph();
@@ -131,6 +133,8 @@ export default function SchemaGraphView() {
       setNodes(schemaNodes);
       setLinks(schemaLinks);
       setGraphData({ nodes: schemaNodes, links: schemaLinks });
+      // 重置自动缩放标志，允许新数据加载后再次自动缩放
+      hasAutoZoomed.current = false;
     } catch (error) {
       console.error('Failed to load schema graph:', error);
     } finally {
@@ -266,7 +270,7 @@ export default function SchemaGraphView() {
       </div>
 
       {/* 图视图 */}
-      <div className="flex-1 relative bg-white">
+      <div ref={containerRef} className="flex-1 relative bg-white">
         <ForceGraph2D
           ref={fgRef}
           graphData={graphData}
@@ -301,6 +305,7 @@ export default function SchemaGraphView() {
           nodeCanvasObject={(node: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
             const n = node as SchemaNode;
             const label = n.data.display_name || n.data.name;
+            // 统一字体大小：使用与关系标签相同的计算方式
             const fontSize = 12 / globalScale;
             ctx.font = `bold ${fontSize}px Sans-Serif`;
             ctx.textAlign = 'center';
@@ -316,11 +321,11 @@ export default function SchemaGraphView() {
             ctx.lineWidth = 2 / globalScale;
             ctx.stroke();
 
-            // 绘制标签（仅在缩放足够大时）
-            if (globalScale > 0.5) {
+            // 绘制标签（降低显示阈值，使标签更容易显示）
+            if (globalScale > 0.4) {
               ctx.fillStyle = '#ffffff';
               ctx.strokeStyle = '#1f2937';
-              ctx.lineWidth = 2 / globalScale;
+              ctx.lineWidth = 3 / globalScale; // 稍粗的描边，与关系标签保持一致
               ctx.strokeText(label, node.x || 0, node.y || 0);
               ctx.fillText(label, node.x || 0, node.y || 0);
             }
@@ -381,16 +386,16 @@ export default function SchemaGraphView() {
             ctx.fillStyle = '#94a3b8';
             ctx.fill();
             
-            // 绘制关系标签（降低显示阈值，使标签更容易显示）
-            if (globalScale > 0.6) {
+            // 绘制关系标签（与节点标签使用相同的显示阈值和字体大小）
+            if (globalScale > 0.4) {
               const midX = (startX + endX) / 2;
               const midY = (startY + endY) / 2;
               
               // 使用 display_name，如果没有则使用 name
               const label = l.data.display_name || l.name;
               
-              // 增大字号，从10改为16
-              const fontSize = 16 / globalScale;
+              // 统一字体大小：与节点标签保持一致
+              const fontSize = 12 / globalScale;
               ctx.font = `bold ${fontSize}px Sans-Serif`;
               ctx.textAlign = 'center';
               ctx.textBaseline = 'middle';
@@ -398,14 +403,89 @@ export default function SchemaGraphView() {
               // 使用更易读的颜色：深色文字配白色描边
               ctx.fillStyle = '#1e293b'; // 深灰色文字
               ctx.strokeStyle = '#ffffff'; // 白色描边
-              ctx.lineWidth = 4 / globalScale; // 稍粗的描边
+              ctx.lineWidth = 3 / globalScale; // 与节点标签保持一致的描边宽度
               ctx.strokeText(label, midX, midY);
               ctx.fillText(label, midX, midY);
             }
           }}
           cooldownTicks={100}
           onEngineStop={() => {
-            // 图布局完成后可以执行的操作
+            // 图布局完成后自动放大显示（只执行一次，不会缩小回去）
+            if (fgRef.current && containerRef.current && graphData.nodes.length > 0 && !hasAutoZoomed.current) {
+              hasAutoZoomed.current = true;
+              setTimeout(() => {
+                if (fgRef.current && containerRef.current) {
+                  try {
+                    // 计算所有节点的边界（包含节点半径）
+                    const nodes = graphData.nodes;
+                    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+                    let maxNodeRadius = 0;
+                    
+                    nodes.forEach((node: any) => {
+                      if (node.x !== undefined && node.y !== undefined) {
+                        // 获取节点半径（优先使用 ForceGraph2D 计算的实际大小，否则根据连接数计算）
+                        let nodeRadius = node.__size || 10;
+                        if (!node.__size) {
+                          const linkCount = links.filter(l => 
+                            (typeof l.source === 'object' ? l.source.id : l.source) === node.id || 
+                            (typeof l.target === 'object' ? l.target.id : l.target) === node.id
+                          ).length;
+                          nodeRadius = 8 + Math.min(linkCount * 2, 20);
+                        }
+                        maxNodeRadius = Math.max(maxNodeRadius, nodeRadius);
+                        
+                        // 计算包含节点半径的边界
+                        minX = Math.min(minX, node.x - nodeRadius);
+                        minY = Math.min(minY, node.y - nodeRadius);
+                        maxX = Math.max(maxX, node.x + nodeRadius);
+                        maxY = Math.max(maxY, node.y + nodeRadius);
+                      }
+                    });
+                    
+                    if (isFinite(minX) && isFinite(minY) && isFinite(maxX) && isFinite(maxY)) {
+                      // 计算中心点
+                      const centerX = (minX + maxX) / 2;
+                      const centerY = (minY + maxY) / 2;
+                      const graphWidth = maxX - minX;
+                      const graphHeight = maxY - minY;
+                      
+                      // 获取容器的实际尺寸
+                      const containerRect = containerRef.current.getBoundingClientRect();
+                      const containerWidth = containerRect.width;
+                      const containerHeight = containerRect.height;
+                      
+                      // 目标：图占满80%的显示区域
+                      const targetWidth = containerWidth * 0.8;
+                      const targetHeight = containerHeight * 0.8;
+                      
+                      // 计算合适的缩放比例，确保图占满80%区域
+                      // 使用较小的缩放比例以确保图完全可见
+                      const scaleX = targetWidth / Math.max(graphWidth, 100);
+                      const scaleY = targetHeight / Math.max(graphHeight, 100);
+                      const targetScale = Math.min(scaleX, scaleY);
+                      
+                      // 先居中，然后应用缩放
+                      if (targetScale > 0 && isFinite(targetScale)) {
+                        fgRef.current.centerAt(centerX, centerY, 400);
+                        setTimeout(() => {
+                          if (fgRef.current) {
+                            fgRef.current.zoom(targetScale, 400);
+                          }
+                        }, 450);
+                      }
+                    }
+                  } catch (error) {
+                    console.error('Failed to zoom graph:', error);
+                    // 如果出错，尝试简单的缩放
+                    try {
+                      fgRef.current.zoom(1.5, 400);
+                    } catch (e) {
+                      console.error('Fallback zoom also failed:', e);
+                    }
+                  }
+                }
+              }, 200);
+            }
           }}
         />
       </div>
