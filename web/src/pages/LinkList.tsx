@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, Link as RouterLink } from 'react-router-dom';
 import type { Link, LinkType } from '../api/client';
 import { linkApi, schemaApi } from '../api/client';
 import { ArrowPathIcon } from '@heroicons/react/24/outline';
@@ -146,14 +146,20 @@ export default function LinkList() {
                 links.map((link) => (
                   <tr key={link.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="text-sm font-mono text-blue-600">
+                      <RouterLink
+                        to={`/instances/${linkTypeDef.source_type}/${link.source_id}`}
+                        className="text-sm font-mono text-blue-600 hover:text-blue-800 hover:underline"
+                      >
                         {link.source_id.substring(0, 8)}...
-                      </span>
+                      </RouterLink>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="text-sm font-mono text-blue-600">
+                      <RouterLink
+                        to={`/instances/${linkTypeDef.target_type}/${link.target_id}`}
+                        className="text-sm font-mono text-blue-600 hover:text-blue-800 hover:underline"
+                      >
                         {link.target_id.substring(0, 8)}...
-                      </span>
+                      </RouterLink>
                     </td>
                     {(linkTypeDef.properties || []).map((prop) => (
                       <td key={prop.name} className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">

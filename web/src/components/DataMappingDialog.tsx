@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { ObjectType, Instance } from '../api/client';
 import { databaseApi, mappingApi, instanceApi } from '../api/client';
 import { XMarkIcon, CheckIcon, LinkIcon } from '@heroicons/react/24/outline';
@@ -31,33 +31,129 @@ export default function DataMappingDialog({
   const [columns, setColumns] = useState<Column[]>([]);
   const [mappings, setMappings] = useState<Record<string, string>>({});
   const [primaryKeyColumn, setPrimaryKeyColumn] = useState<string>('');
+  const [existingMappingId, setExistingMappingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [step, setStep] = useState<'database' | 'table' | 'mapping'>('database');
+  const [isLoadingExistingMapping, setIsLoadingExistingMapping] = useState(false);
+  const hasLoadedExistingMapping = useRef(false);
   const { toasts, showToast, removeToast } = useToast();
 
   useEffect(() => {
     loadDatabases();
   }, []);
 
-  // 当只有一个数据源时，自动选择
+  // 加载已有的映射关系（在数据库列表加载完成后，只执行一次）
   useEffect(() => {
-    if (databases.length === 1 && !selectedDatabaseId) {
+    if (databases.length > 0 && !hasLoadedExistingMapping.current) {
+      loadExistingMapping();
+    }
+  }, [databases.length]);
+
+  // 加载已有的映射关系
+  const loadExistingMapping = async () => {
+    // 如果数据库列表还没加载完成，或已经加载过，直接返回
+    if (databases.length === 0 || hasLoadedExistingMapping.current) {
+      return;
+    }
+    
+    try {
+      hasLoadedExistingMapping.current = true;
+      setIsLoadingExistingMapping(true);
+      const existingMappings = await mappingApi.getByObjectType(objectType);
+      if (existingMappings && existingMappings.length > 0) {
+        // 使用第一个映射关系
+        const mapping = existingMappings[0];
+        const tableId = mapping.table_id;
+        
+        if (tableId) {
+          // 获取表信息
+          const table = await instanceApi.get('table', tableId);
+          const tableName = table.name;
+          const databaseId = table.database_id;
+          
+          if (databaseId && tableName) {
+            // 检查数据库是否在列表中
+            const dbExists = databases.some(db => db.id === databaseId);
+            if (dbExists) {
+              // 保存已有的映射 ID，用于后续更新
+              if (mapping.id) {
+                setExistingMappingId(mapping.id);
+              }
+              
+              // 先设置数据库（这会触发 loadTables，但会被 isLoadingExistingMapping 阻止）
+              setSelectedDatabaseId(databaseId);
+              
+              // 等待一下，确保状态更新
+              await new Promise(resolve => setTimeout(resolve, 50));
+              
+              // 加载表列表
+              const tablesData = await databaseApi.getTables(databaseId);
+              setTables(tablesData);
+              
+              // 等待一下，确保表列表已设置
+              await new Promise(resolve => setTimeout(resolve, 50));
+              
+              // 设置表（这会触发 loadColumns，但会被 isLoadingExistingMapping 阻止）
+              setSelectedTable(tableName);
+              
+              // 等待一下，确保状态更新
+              await new Promise(resolve => setTimeout(resolve, 50));
+              
+              // 加载列信息
+              const columnsData = await databaseApi.getColumns(databaseId, tableName);
+              setColumns(columnsData.map((col: any) => ({
+                name: col.name,
+                data_type: col.data_type,
+                nullable: col.nullable,
+                is_primary_key: col.is_primary_key || false,
+              })));
+              
+              // 回显字段映射关系（column_property_mappings 是 {列名: 属性名}）
+              if (mapping.column_property_mappings) {
+                setMappings(mapping.column_property_mappings);
+              }
+              
+              // 回显主键列
+              if (mapping.primary_key_column) {
+                setPrimaryKeyColumn(mapping.primary_key_column);
+              }
+              
+              // 最后跳转到映射配置步骤
+              setStep('mapping');
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load existing mapping:', error);
+      hasLoadedExistingMapping.current = false; // 失败时重置，允许重试
+      // 如果加载失败，不影响正常流程
+    } finally {
+      setIsLoadingExistingMapping(false);
+    }
+  };
+
+  // 当只有一个数据源时，自动选择（只有在没有加载已有映射时）
+  useEffect(() => {
+    if (databases.length === 1 && !selectedDatabaseId && !isLoadingExistingMapping) {
       setSelectedDatabaseId(databases[0].id);
     }
-  }, [databases, selectedDatabaseId]);
+  }, [databases, selectedDatabaseId, isLoadingExistingMapping]);
 
+  // 加载表列表（只有在不是加载已有映射时）
   useEffect(() => {
-    if (selectedDatabaseId) {
+    if (selectedDatabaseId && !isLoadingExistingMapping) {
       loadTables();
     }
-  }, [selectedDatabaseId]);
+  }, [selectedDatabaseId, isLoadingExistingMapping]);
 
+  // 加载列信息（只有在不是加载已有映射时）
   useEffect(() => {
-    if (selectedTable && selectedDatabaseId) {
+    if (selectedTable && selectedDatabaseId && !isLoadingExistingMapping) {
       loadColumns();
     }
-  }, [selectedTable, selectedDatabaseId]);
+  }, [selectedTable, selectedDatabaseId, isLoadingExistingMapping]);
 
   const loadDatabases = async () => {
     try {
@@ -140,22 +236,28 @@ export default function DataMappingDialog({
         is_primary_key: col.is_primary_key || false,
       })));
 
-      // 自动匹配：尝试根据名称匹配列和属性（支持完全匹配、驼峰/下划线互转）
-      const autoMappings: Record<string, string> = {};
-      columnsData.forEach((col: any) => {
-        const matchingProp = objectTypeDef.properties.find(
-          (prop) => isNameMatch(prop.name, col.name)
-        );
-        if (matchingProp) {
-          autoMappings[col.name] = matchingProp.name;
-        }
-      });
-      setMappings(autoMappings);
+      // 只有在没有已有映射时才进行自动匹配
+      const hasExistingMappings = Object.keys(mappings).length > 0;
+      if (!hasExistingMappings) {
+        // 自动匹配：尝试根据名称匹配列和属性（支持完全匹配、驼峰/下划线互转）
+        const autoMappings: Record<string, string> = {};
+        columnsData.forEach((col: any) => {
+          const matchingProp = objectTypeDef.properties.find(
+            (prop) => isNameMatch(prop.name, col.name)
+          );
+          if (matchingProp) {
+            autoMappings[col.name] = matchingProp.name;
+          }
+        });
+        setMappings(autoMappings);
 
-      // 设置主键列
-      const pkColumn = columnsData.find((col: any) => col.is_primary_key);
-      if (pkColumn) {
-        setPrimaryKeyColumn(pkColumn.name);
+        // 设置主键列（只有在没有已有主键列时才设置）
+        if (!primaryKeyColumn) {
+          const pkColumn = columnsData.find((col: any) => col.is_primary_key);
+          if (pkColumn) {
+            setPrimaryKeyColumn(pkColumn.name);
+          }
+        }
       }
     } catch (error) {
       console.error('Failed to load columns:', error);
@@ -191,21 +293,34 @@ export default function DataMappingDialog({
     try {
       setSaving(true);
 
-      // 从tables中找到对应的table实例ID
-      const tableInfo = tables.find((t) => t.name === selectedTable);
-      if (!tableInfo || !tableInfo.id) {
-        alert('无法找到表信息，请刷新页面重试');
-        return;
-      }
+      // 如果已有映射 ID，则更新；否则创建新的
+      if (existingMappingId) {
+        // 更新已有映射
+        await mappingApi.update(
+          existingMappingId,
+          mappings,
+          primaryKeyColumn || undefined
+        );
+        showToast('映射关系更新成功！', 'success');
+      } else {
+        // 创建新映射
+        // 从tables中找到对应的table实例ID
+        const tableInfo = tables.find((t) => t.name === selectedTable);
+        if (!tableInfo || !tableInfo.id) {
+          alert('无法找到表信息，请刷新页面重试');
+          return;
+        }
 
-      const tableId = tableInfo.id;
-      await mappingApi.create(
-        objectType,
-        tableId,
-        mappings,
-        primaryKeyColumn || undefined
-      );
-      showToast('映射关系保存成功！', 'success');
+        const tableId = tableInfo.id;
+        await mappingApi.create(
+          objectType,
+          tableId,
+          mappings,
+          primaryKeyColumn || undefined
+        );
+        showToast('映射关系保存成功！', 'success');
+      }
+      
       onSuccess();
       onClose();
     } catch (error: any) {
@@ -503,7 +618,9 @@ export default function DataMappingDialog({
                 disabled={saving || Object.keys(mappings).length === 0}
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {saving ? '保存中...' : '保存映射'}
+                {saving 
+                  ? (existingMappingId ? '更新中...' : '保存中...') 
+                  : (existingMappingId ? '更新映射' : '保存映射')}
               </button>
             )}
           </div>
