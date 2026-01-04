@@ -4,6 +4,8 @@ import com.mypalantir.meta.Loader;
 import com.mypalantir.query.OntologyQuery;
 import com.mypalantir.query.QueryExecutor;
 import com.mypalantir.query.QueryParser;
+import com.mypalantir.repository.IInstanceStorage;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.Map;
@@ -15,10 +17,18 @@ import java.util.Map;
 public class QueryService {
     private final Loader loader;
     private final QueryParser parser;
+    private final IInstanceStorage instanceStorage;
+    private final MappingService mappingService;
+    private final DatabaseMetadataService databaseMetadataService;
     private QueryExecutor executor;
 
-    public QueryService(Loader loader) {
+    @Autowired
+    public QueryService(Loader loader, IInstanceStorage instanceStorage,
+                       MappingService mappingService, DatabaseMetadataService databaseMetadataService) {
         this.loader = loader;
+        this.instanceStorage = instanceStorage;
+        this.mappingService = mappingService;
+        this.databaseMetadataService = databaseMetadataService;
         this.parser = new QueryParser();
     }
 
@@ -48,7 +58,7 @@ public class QueryService {
         
         // 执行查询
         if (executor == null) {
-            executor = new QueryExecutor(loader);
+            executor = new QueryExecutor(loader, instanceStorage, mappingService, databaseMetadataService);
             executor.initialize();
         }
         

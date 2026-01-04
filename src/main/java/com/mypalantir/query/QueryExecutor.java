@@ -3,6 +3,8 @@ package com.mypalantir.query;
 import com.mypalantir.meta.DataSourceMapping;
 import com.mypalantir.meta.Loader;
 import com.mypalantir.query.schema.OntologySchemaFactory;
+import com.mypalantir.repository.IInstanceStorage;
+import com.mypalantir.service.MappingService;
 import org.apache.calcite.DataContext;
 import org.apache.calcite.adapter.java.JavaTypeFactory;
 import org.apache.calcite.jdbc.CalciteConnection;
@@ -27,6 +29,7 @@ import org.apache.calcite.tools.FrameworkConfig;
 import org.apache.calcite.tools.Frameworks;
 import org.apache.calcite.tools.RelBuilder;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
@@ -43,14 +46,22 @@ import java.util.Map;
  */
 public class QueryExecutor {
     private final Loader loader;
+    private final IInstanceStorage instanceStorage;
+    private final MappingService mappingService;
+    private final com.mypalantir.service.DatabaseMetadataService databaseMetadataService;
     private final RelNodeBuilder relNodeBuilder;
     private SchemaPlus rootSchema;
     private Connection calciteConnection;
     private org.apache.calcite.tools.FrameworkConfig frameworkConfig;
 
-    public QueryExecutor(Loader loader) {
+    public QueryExecutor(Loader loader, IInstanceStorage instanceStorage,
+                         com.mypalantir.service.MappingService mappingService,
+                         com.mypalantir.service.DatabaseMetadataService databaseMetadataService) {
         this.loader = loader;
-        this.relNodeBuilder = new RelNodeBuilder(loader);
+        this.instanceStorage = instanceStorage;
+        this.mappingService = mappingService;
+        this.databaseMetadataService = databaseMetadataService;
+        this.relNodeBuilder = new RelNodeBuilder(loader, instanceStorage, mappingService, databaseMetadataService);
     }
 
     /**
@@ -138,9 +149,9 @@ public class QueryExecutor {
         UnicodeH2SqlDialect unicodeDialect = UnicodeH2SqlDialect.DEFAULT;
         
         // 使用自定义的 OntologyRelToSqlConverter 将 RelNode 转换为 SQL
-        // 这个转换器会自动处理表名和列名的映射
+        // 这个转换器会自动处理表名和列名的映射（基于映射关系）
         OntologyRelToSqlConverter converter = 
-            new OntologyRelToSqlConverter(unicodeDialect, loader);
+            new OntologyRelToSqlConverter(unicodeDialect, loader, instanceStorage, mappingService);
         
         org.apache.calcite.rel.rel2sql.RelToSqlConverter.Result result = converter.visitRoot(relNode);
         
@@ -155,11 +166,61 @@ public class QueryExecutor {
             throw new IllegalArgumentException("Object type '" + originalQuery.getFrom() + "' not found");
         }
         
-        com.mypalantir.meta.DataSourceMapping dataSourceMapping = objectType.getDataSource();
+        // 从映射关系获取 DataSourceMapping
+        com.mypalantir.meta.DataSourceMapping dataSourceMapping = getDataSourceMappingFromMapping(objectType);
         
         // 执行 SQL（这是 Calcite 的标准执行方式）
         // 注意：需要将结果中的数据库列名映射回属性名
         return executeSql(sql, originalQuery, objectType, dataSourceMapping);
+    }
+    
+    /**
+     * 从映射关系获取 DataSourceMapping
+     */
+    private com.mypalantir.meta.DataSourceMapping getDataSourceMappingFromMapping(com.mypalantir.meta.ObjectType objectType) {
+        try {
+            List<Map<String, Object>> mappings = mappingService.getMappingsByObjectType(objectType.getName());
+            if (mappings == null || mappings.isEmpty()) {
+                // 如果没有映射关系，返回 schema 中定义的 data_source（向后兼容）
+                return objectType.getDataSource();
+            }
+            
+            // 使用第一个映射关系
+            Map<String, Object> mappingData = mappings.get(0);
+            String tableId = (String) mappingData.get("table_id");
+            if (tableId == null) {
+                return objectType.getDataSource();
+            }
+            
+            // 获取表信息
+            Map<String, Object> table = instanceStorage.getInstance("table", tableId);
+            String tableName = (String) table.get("name");
+            String primaryKeyColumn = (String) mappingData.get("primary_key_column");
+            
+            @SuppressWarnings("unchecked")
+            Map<String, String> columnPropertyMappings = (Map<String, String>) mappingData.get("column_property_mappings");
+            
+            // column_property_mappings 的结构是 {列名: 属性名}，需要反转为 {属性名: 列名}
+            Map<String, String> fieldMapping = new HashMap<>();
+            if (columnPropertyMappings != null) {
+                for (Map.Entry<String, String> entry : columnPropertyMappings.entrySet()) {
+                    String columnName = entry.getKey();
+                    String propertyName = entry.getValue();
+                    fieldMapping.put(propertyName, columnName);
+                }
+            }
+            
+            com.mypalantir.meta.DataSourceMapping dataSourceMapping = new com.mypalantir.meta.DataSourceMapping();
+            dataSourceMapping.setTable(tableName);
+            dataSourceMapping.setIdColumn(primaryKeyColumn != null ? primaryKeyColumn : "id");
+            dataSourceMapping.setFieldMapping(fieldMapping);
+            
+            return dataSourceMapping;
+        } catch (Exception e) {
+            System.err.println("Failed to get DataSourceMapping from mapping for " + objectType.getName() + ": " + e.getMessage());
+            // 回退到 schema 中定义的 data_source
+            return objectType.getDataSource();
+        }
     }
     
     /**
@@ -315,70 +376,88 @@ public class QueryExecutor {
     private QueryResult executeSql(String sql, OntologyQuery query, 
                                     com.mypalantir.meta.ObjectType objectType, 
                                     com.mypalantir.meta.DataSourceMapping dataSourceMapping) throws SQLException {
-        // 使用 Calcite 执行 SQL
-        try (Statement stmt = calciteConnection.createStatement();
-             ResultSet rs = stmt.executeQuery(sql)) {
+        // 根据 mapping 获取实际的数据库连接
+        Connection dbConnection = null;
+        try {
+            String databaseId = dataSourceMapping != null ? dataSourceMapping.getConnectionId() : null;
+            if (databaseId == null || databaseId.isEmpty() || databaseId.equals("default")) {
+                // 使用默认连接
+                dbConnection = databaseMetadataService.getConnectionForDatabase(null);
+            } else {
+                // 使用指定数据库的连接
+                dbConnection = databaseMetadataService.getConnectionForDatabase(databaseId);
+            }
             
-            List<Map<String, Object>> rows = new ArrayList<>();
+            System.out.println("[executeSql] Using database connection for databaseId: " + databaseId);
+            System.out.println("[executeSql] Executing SQL: " + sql);
             
-            // 获取列信息
-            int columnCount = rs.getMetaData().getColumnCount();
-            List<String> propertyNames = new ArrayList<>();  // 使用属性名而不是列名
-            
-            // 构建列名到属性名的映射（支持多表）
-            java.util.Map<String, String> columnToPropertyMap = buildColumnToPropertyMap(
-                query, objectType, dataSourceMapping);
-            
-            // 获取列名并映射为属性名
-            for (int i = 1; i <= columnCount; i++) {
-                String dbColumnName = rs.getMetaData().getColumnName(i);
-                // 如果结果中有别名（如 "车牌号"），直接使用别名
-                String alias = rs.getMetaData().getColumnLabel(i);
-                if (alias != null && !alias.equals(dbColumnName)) {
-                    // 使用别名作为属性名
-                    propertyNames.add(alias);
-                } else {
-                    // 否则，尝试从映射中获取属性名
-                    String propertyName = columnToPropertyMap.get(dbColumnName.toUpperCase());
-                    if (propertyName != null) {
-                        propertyNames.add(propertyName);
+            // 使用实际的数据库连接执行 SQL
+            try (Statement stmt = dbConnection.createStatement();
+                 ResultSet rs = stmt.executeQuery(sql)) {
+                
+                List<Map<String, Object>> rows = new ArrayList<>();
+                
+                // 获取列信息
+                int columnCount = rs.getMetaData().getColumnCount();
+                List<String> propertyNames = new ArrayList<>();  // 使用属性名而不是列名
+                
+                // 构建列名到属性名的映射（支持多表）
+                java.util.Map<String, String> columnToPropertyMap = buildColumnToPropertyMap(
+                    query, objectType, dataSourceMapping);
+                
+                // 获取列名并映射为属性名
+                for (int i = 1; i <= columnCount; i++) {
+                    String dbColumnName = rs.getMetaData().getColumnName(i);
+                    // 如果结果中有别名（如 "车牌号"），直接使用别名
+                    String alias = rs.getMetaData().getColumnLabel(i);
+                    if (alias != null && !alias.equals(dbColumnName)) {
+                        // 使用别名作为属性名
+                        propertyNames.add(alias);
                     } else {
-                        // 如果列名包含表名（如 "通行介质"."介质编号"），尝试提取属性名
-                        // Calcite 生成的 SQL 可能使用 "表名"."列名" 格式
-                        if (dbColumnName.contains(".")) {
-                            String[] parts = dbColumnName.split("\\.", 2);
-                            if (parts.length == 2) {
-                                // 去掉引号
-                                String possiblePropertyName = parts[1].replaceAll("\"", "");
-                                // 检查是否是属性名（在映射中）
-                                if (columnToPropertyMap.containsValue(possiblePropertyName)) {
-                                    propertyNames.add(possiblePropertyName);
+                        // 否则，尝试从映射中获取属性名
+                        String propertyName = columnToPropertyMap.get(dbColumnName.toUpperCase());
+                        if (propertyName != null) {
+                            propertyNames.add(propertyName);
+                        } else {
+                            // 如果列名包含表名（如 "通行介质"."介质编号"），尝试提取属性名
+                            // Calcite 生成的 SQL 可能使用 "表名"."列名" 格式
+                            if (dbColumnName.contains(".")) {
+                                String[] parts = dbColumnName.split("\\.", 2);
+                                if (parts.length == 2) {
+                                    // 去掉引号
+                                    String possiblePropertyName = parts[1].replaceAll("\"", "");
+                                    // 检查是否是属性名（在映射中）
+                                    if (columnToPropertyMap.containsValue(possiblePropertyName)) {
+                                        propertyNames.add(possiblePropertyName);
+                                    } else {
+                                        propertyNames.add(possiblePropertyName);
+                                    }
                                 } else {
-                                    propertyNames.add(possiblePropertyName);
+                                    propertyNames.add(dbColumnName);
                                 }
                             } else {
+                                // 如果找不到映射，使用原始列名
                                 propertyNames.add(dbColumnName);
                             }
-                        } else {
-                            // 如果找不到映射，使用原始列名
-                            propertyNames.add(dbColumnName);
                         }
                     }
                 }
-            }
-            
-            // 读取数据
-            while (rs.next()) {
-                Map<String, Object> row = new java.util.HashMap<>();
-                for (int i = 1; i <= columnCount; i++) {
-                    String propertyName = propertyNames.get(i - 1);
-                    Object value = rs.getObject(i);
-                    row.put(propertyName, value);
+                
+                // 读取数据
+                while (rs.next()) {
+                    Map<String, Object> row = new java.util.HashMap<>();
+                    for (int i = 1; i <= columnCount; i++) {
+                        String propertyName = propertyNames.get(i - 1);
+                        Object value = rs.getObject(i);
+                        row.put(propertyName, value);
+                    }
+                    rows.add(row);
                 }
-                rows.add(row);
+                
+                return new QueryResult(rows, propertyNames);
             }
-            
-            return new QueryResult(rows, propertyNames);
+        } catch (IOException e) {
+            throw new SQLException("Failed to get database connection: " + e.getMessage(), e);
         }
     }
 

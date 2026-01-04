@@ -87,8 +87,10 @@ public class MyPalantirApplication {
     }
 
     @Bean
-    public QueryService queryService(Loader loader) {
-        return new QueryService(loader);
+    public QueryService queryService(Loader loader, IInstanceStorage instanceStorage,
+                                    com.mypalantir.service.MappingService mappingService,
+                                    com.mypalantir.service.DatabaseMetadataService databaseMetadataService) {
+        return new QueryService(loader, instanceStorage, mappingService, databaseMetadataService);
     }
 
     @Bean

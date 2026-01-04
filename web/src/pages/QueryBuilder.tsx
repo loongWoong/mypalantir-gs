@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import type { ObjectType, LinkType, QueryRequest, QueryResult } from '../api/client';
 import { schemaApi, queryApi } from '../api/client';
+import { useWorkspace } from '../WorkspaceContext';
 import { 
   PlayIcon, 
   DocumentDuplicateIcon, 
@@ -11,6 +12,7 @@ import {
 } from '@heroicons/react/24/outline';
 
 export default function QueryBuilder() {
+  const { selectedWorkspace } = useWorkspace();
   const [objectTypes, setObjectTypes] = useState<ObjectType[]>([]);
   const [linkTypes, setLinkTypes] = useState<LinkType[]>([]);
   const [selectedObjectType, setSelectedObjectType] = useState<ObjectType | null>(null);
@@ -34,14 +36,19 @@ export default function QueryBuilder() {
     loadSchema();
   }, []);
 
+  // 根据工作空间过滤对象类型
+  const filteredObjectTypes = selectedWorkspace && selectedWorkspace.object_types && selectedWorkspace.object_types.length > 0
+    ? objectTypes.filter((ot) => selectedWorkspace.object_types!.includes(ot.name))
+    : objectTypes;
+
   useEffect(() => {
     if (query.from) {
-      const ot = objectTypes.find(o => o.name === query.from);
+      const ot = filteredObjectTypes.find(o => o.name === query.from);
       setSelectedObjectType(ot || null);
     } else {
       setSelectedObjectType(null);
     }
-  }, [query.from, objectTypes]);
+  }, [query.from, filteredObjectTypes]);
 
   useEffect(() => {
     // 更新 query.where 基于 whereConditions
@@ -237,8 +244,8 @@ export default function QueryBuilder() {
             className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="">选择对象类型...</option>
-            {objectTypes.map(ot => (
-              <option key={ot.name} value={ot.name}>{ot.name}</option>
+            {filteredObjectTypes.map(ot => (
+              <option key={ot.name} value={ot.name}>{ot.display_name || ot.name}</option>
             ))}
           </select>
         </div>

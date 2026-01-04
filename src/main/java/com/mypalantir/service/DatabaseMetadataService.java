@@ -140,7 +140,10 @@ public class DatabaseMetadataService {
         return results;
     }
 
-    private Connection getConnectionForDatabase(String databaseId) throws SQLException, IOException {
+    /**
+     * 获取数据库连接（公开方法，供其他服务使用）
+     */
+    public Connection getConnectionForDatabase(String databaseId) throws SQLException, IOException {
         // 如果是默认数据库，使用默认连接
         if (databaseId == null || databaseId.isEmpty()) {
             return connectionManager.getConnection();

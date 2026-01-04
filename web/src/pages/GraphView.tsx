@@ -37,6 +37,8 @@ export default function GraphView() {
   const [loading, setLoading] = useState(true);
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
   const [graphData, setGraphData] = useState({ nodes, links });
+  const [objectTypes, setObjectTypes] = useState<any[]>([]);
+  const [linkTypes, setLinkTypes] = useState<any[]>([]);
   
   // 节点和关系上限配置（从 localStorage 读取或使用默认值）
   const [maxNodes, setMaxNodes] = useState<number>(() => {
@@ -296,6 +298,10 @@ export default function GraphView() {
     } else {
       linkTypes = allLinkTypes;
     }
+    
+    // 保存 objectTypes 和 linkTypes 以便在图例中使用
+    setObjectTypes(objectTypes);
+    setLinkTypes(linkTypes);
 
     const nodeMap = new Map<string, GraphNode>();
     const linkList: GraphLink[] = [];
@@ -465,6 +471,10 @@ export default function GraphView() {
     } else {
       linkTypes = allLinkTypes;
     }
+    
+    // 保存 objectTypes 和 linkTypes 以便在图例中使用
+    setObjectTypes(objectTypes);
+    setLinkTypes(linkTypes);
 
     const nodeMap = new Map<string, GraphNode>();
     const linkList: GraphLink[] = [];
@@ -715,7 +725,8 @@ export default function GraphView() {
 
   const getNodeLabel = (node: GraphNode) => {
     const name = node.name || node.id.substring(0, 8);
-    const type = node.type;
+    const objectType = objectTypes.find(ot => ot.name === node.type);
+    const typeDisplayName = objectType?.display_name || node.type;
     // 尝试获取一些关键属性
     const keyProps: string[] = [];
     if (node.data.name) keyProps.push(`Name: ${node.data.name}`);
@@ -723,11 +734,13 @@ export default function GraphView() {
     if (node.data.age !== undefined) keyProps.push(`Age: ${node.data.age}`);
     if (node.data.founded_year) keyProps.push(`Year: ${node.data.founded_year}`);
     
-    return `${name}\n[${type}]${keyProps.length > 0 ? '\n' + keyProps.join('\n') : ''}`;
+    return `${name}\n[${typeDisplayName}]${keyProps.length > 0 ? '\n' + keyProps.join('\n') : ''}`;
   };
 
   const getLinkLabel = (link: GraphLink) => {
-    const labels: string[] = [link.type];
+    const linkType = linkTypes.find(lt => lt.name === link.type);
+    const typeDisplayName = linkType?.display_name || link.type;
+    const labels: string[] = [typeDisplayName];
     // 添加关系的关键属性
     if (link.data.start_date) labels.push(`Start: ${link.data.start_date}`);
     if (link.data.position) labels.push(`Position: ${link.data.position}`);
@@ -1033,7 +1046,7 @@ export default function GraphView() {
               <div className="flex-1">
                 <h3 className="text-xl font-bold text-gray-900 mb-2">{selectedNode.name}</h3>
                 <span className="inline-block px-3 py-1 text-sm font-semibold rounded-md bg-blue-600 text-white">
-                  {selectedNode.type}
+                  {objectTypes.find(ot => ot.name === selectedNode.type)?.display_name || selectedNode.type}
                 </span>
               </div>
               <button
@@ -1135,6 +1148,8 @@ export default function GraphView() {
                 {Array.from(new Set(nodes.map(n => n.type))).map((type, idx) => {
                   const typeNodes = nodes.filter(n => n.type === type);
                   const color = nodeColor({ group: idx } as GraphNode);
+                  const objectType = objectTypes.find(ot => ot.name === type);
+                  const displayName = objectType?.display_name || type;
                   return (
                     <div key={type} className="flex items-center justify-between">
                       <div className="flex items-center">
@@ -1142,7 +1157,7 @@ export default function GraphView() {
                           className="w-4 h-4 rounded-full mr-2 border-2 border-gray-300"
                           style={{ backgroundColor: color }}
                         ></div>
-                        <span className="text-gray-700 font-medium">{type}</span>
+                        <span className="text-gray-700 font-medium">{displayName}</span>
                       </div>
                       <span className="text-gray-500">{typeNodes.length}</span>
                     </div>
@@ -1156,6 +1171,8 @@ export default function GraphView() {
                 {Array.from(new Set(links.map(l => l.type))).map((type) => {
                   const typeLinks = links.filter(l => l.type === type);
                   const color = getLinkTypeColor(type);
+                  const linkType = linkTypes.find(lt => lt.name === type);
+                  const displayName = linkType?.display_name || type;
                   return (
                     <div key={type} className="flex items-center justify-between">
                       <div className="flex items-center">
@@ -1163,7 +1180,7 @@ export default function GraphView() {
                           className="w-6 h-0.5 mr-2"
                           style={{ backgroundColor: color }}
                         ></div>
-                        <span className="text-gray-700 font-medium">{type}</span>
+                        <span className="text-gray-700 font-medium">{displayName}</span>
                       </div>
                       <span className="text-gray-500">{typeLinks.length}</span>
                     </div>

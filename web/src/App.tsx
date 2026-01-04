@@ -5,7 +5,7 @@ import InstanceList from './pages/InstanceList';
 import InstanceDetail from './pages/InstanceDetail';
 import LinkList from './pages/LinkList';
 import SchemaGraphView from './pages/SchemaGraphView';
-import DataMapping from './pages/DataMapping';
+import GraphView from './pages/GraphView';
 import DataSourceManagement from './pages/DataSourceManagement';
 import QueryBuilder from './pages/QueryBuilder';
 
@@ -19,8 +19,8 @@ function App() {
           <Route path="/instances/:objectType" element={<InstanceList />} />
           <Route path="/instances/:objectType/:id" element={<InstanceDetail />} />
           <Route path="/links/:linkType" element={<LinkList />} />
-          <Route path="/data-mapping/:objectType" element={<DataMapping />} />
           <Route path="/schema-graph" element={<SchemaGraphView />} />
+          <Route path="/graph/:objectType/:instanceId" element={<GraphView />} />
           <Route path="/data-sources" element={<DataSourceManagement />} />
           <Route path="/query" element={<QueryBuilder />} />
         </Routes>

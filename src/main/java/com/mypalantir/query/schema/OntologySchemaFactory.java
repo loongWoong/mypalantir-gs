@@ -5,24 +5,38 @@ import com.mypalantir.meta.DataSourceMapping;
 import com.mypalantir.meta.LinkType;
 import com.mypalantir.meta.Loader;
 import com.mypalantir.meta.ObjectType;
+import com.mypalantir.repository.IInstanceStorage;
+import com.mypalantir.service.MappingService;
+import com.mypalantir.service.DatabaseMetadataService;
 import org.apache.calcite.jdbc.CalciteConnection;
 import org.apache.calcite.schema.SchemaPlus;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
  * 将 Ontology Schema 转换为 Calcite Schema
+ * 现在基于映射关系（mapping）创建表，而不是从 ObjectType.getDataSource()
  */
 public class OntologySchemaFactory {
     private final Loader loader;
+    private final IInstanceStorage instanceStorage;
+    private final MappingService mappingService;
+    private final DatabaseMetadataService databaseMetadataService;
     private final Map<String, Connection> dataSourceConnections = new HashMap<>();
+    private final Map<String, Connection> databaseConnections = new HashMap<>(); // 基于 databaseId 的连接
 
-    public OntologySchemaFactory(Loader loader) {
+    public OntologySchemaFactory(Loader loader, IInstanceStorage instanceStorage, 
+                                 MappingService mappingService, DatabaseMetadataService databaseMetadataService) {
         this.loader = loader;
+        this.instanceStorage = instanceStorage;
+        this.mappingService = mappingService;
+        this.databaseMetadataService = databaseMetadataService;
     }
 
     /**
@@ -53,10 +67,10 @@ public class OntologySchemaFactory {
             }
         }
 
-        // 为每个 ObjectType 创建 Table
+        // 为每个 ObjectType 创建 Table（基于映射关系）
         if (loader.getSchema() != null && loader.getSchema().getObjectTypes() != null) {
             for (ObjectType objectType : loader.getSchema().getObjectTypes()) {
-                OntologyTable table = createTable(objectType);
+                OntologyTable table = createTableFromMapping(objectType);
                 if (table != null) {
                     // 直接将表添加到 rootSchema
                     rootSchema.add(objectType.getName(), table);
@@ -149,23 +163,120 @@ public class OntologySchemaFactory {
     }
 
     /**
-     * 为 ObjectType 创建 Table
+     * 为 ObjectType 创建 Table（基于映射关系）
      */
-    private OntologyTable createTable(ObjectType objectType) {
-        DataSourceMapping mapping = objectType.getDataSource();
-        
-        if (mapping != null && mapping.isConfigured()) {
-            // 从数据库读取
-            Connection connection = dataSourceConnections.get(mapping.getConnectionId());
-            if (connection != null) {
-                return new JdbcOntologyTable(objectType, mapping, connection);
+    private OntologyTable createTableFromMapping(ObjectType objectType) {
+        try {
+            // 从映射关系获取表和数据源信息
+            List<Map<String, Object>> mappings = mappingService.getMappingsByObjectType(objectType.getName());
+            if (mappings == null || mappings.isEmpty()) {
+                // 如果没有映射关系，尝试使用 schema 中定义的 data_source（向后兼容）
+                DataSourceMapping mapping = objectType.getDataSource();
+                if (mapping != null && mapping.isConfigured()) {
+                    Connection connection = dataSourceConnections.get(mapping.getConnectionId());
+                    if (connection != null) {
+                        return new JdbcOntologyTable(objectType, mapping, connection);
+                    }
+                }
+                return null;
             }
-        } else {
-            // 从文件系统读取（后续实现）
-            // return new FileSystemOntologyTable(objectType);
+            
+            // 使用第一个映射关系（如果有多个，可以选择第一个）
+            Map<String, Object> mappingData = mappings.get(0);
+            String tableId = (String) mappingData.get("table_id");
+            if (tableId == null) {
+                return null;
+            }
+            
+            // 获取表信息
+            Map<String, Object> table = instanceStorage.getInstance("table", tableId);
+            String tableName = (String) table.get("name");
+            String databaseId = (String) table.get("database_id");
+            
+            if (tableName == null || databaseId == null) {
+                return null;
+            }
+            
+            // 获取数据库连接
+            Connection connection = getDatabaseConnection(databaseId);
+            if (connection == null) {
+                return null;
+            }
+            
+            // 构建 DataSourceMapping 对象
+            @SuppressWarnings("unchecked")
+            Map<String, String> columnPropertyMappings = (Map<String, String>) mappingData.get("column_property_mappings");
+            String primaryKeyColumn = (String) mappingData.get("primary_key_column");
+            
+            // column_property_mappings 的结构是 {列名: 属性名}，需要反转为 {属性名: 列名}
+            Map<String, String> fieldMapping = new HashMap<>();
+            if (columnPropertyMappings != null) {
+                for (Map.Entry<String, String> entry : columnPropertyMappings.entrySet()) {
+                    String columnName = entry.getKey();
+                    String propertyName = entry.getValue();
+                    fieldMapping.put(propertyName, columnName);
+                }
+            }
+            
+            DataSourceMapping dataSourceMapping = new DataSourceMapping();
+            dataSourceMapping.setTable(tableName);
+            dataSourceMapping.setIdColumn(primaryKeyColumn != null ? primaryKeyColumn : "id");
+            dataSourceMapping.setFieldMapping(fieldMapping);
+            // connection_id 可以设置为 databaseId，用于标识连接
+            dataSourceMapping.setConnectionId(databaseId);
+            
+            return new JdbcOntologyTable(objectType, dataSourceMapping, connection);
+        } catch (Exception e) {
+            System.err.println("Failed to create table from mapping for " + objectType.getName() + ": " + e.getMessage());
+            return null;
+        }
+    }
+    
+    /**
+     * 获取数据库连接（基于 databaseId）
+     */
+    private Connection getDatabaseConnection(String databaseId) {
+        // 检查缓存
+        if (databaseConnections.containsKey(databaseId)) {
+            Connection conn = databaseConnections.get(databaseId);
+            try {
+                if (conn != null && !conn.isClosed()) {
+                    return conn;
+                }
+            } catch (SQLException e) {
+                // 连接已关闭，从缓存中移除
+                databaseConnections.remove(databaseId);
+            }
         }
         
-        return null;
+        try {
+            // 获取数据库实例信息
+            Map<String, Object> database = instanceStorage.getInstance("database", databaseId);
+            String host = (String) database.get("host");
+            Integer port = database.get("port") instanceof Number 
+                ? ((Number) database.get("port")).intValue() 
+                : 3306;
+            String dbName = (String) database.get("database_name");
+            String username = (String) database.get("username");
+            String password = (String) database.get("password");
+            
+            if (host == null || dbName == null || username == null) {
+                System.err.println("Missing required database connection info for " + databaseId);
+                return null;
+            }
+            
+            // 加载 MySQL 驱动
+            Class.forName("com.mysql.cj.jdbc.Driver");
+            
+            String url = String.format("jdbc:mysql://%s:%d/%s?useSSL=false&serverTimezone=UTC&characterEncoding=utf8",
+                    host, port, dbName);
+            Connection conn = DriverManager.getConnection(url, username, password != null ? password : "");
+            databaseConnections.put(databaseId, conn);
+            return conn;
+        } catch (Exception e) {
+            System.err.println("Failed to get connection for database " + databaseId + ": " + e.getMessage());
+            return null;
+        }
     }
     
     /**
@@ -228,6 +339,15 @@ public class OntologySchemaFactory {
             }
         }
         dataSourceConnections.clear();
+        
+        for (Connection conn : databaseConnections.values()) {
+            try {
+                conn.close();
+            } catch (SQLException e) {
+                // 忽略关闭错误
+            }
+        }
+        databaseConnections.clear();
     }
 }
 

@@ -6,6 +6,9 @@ import com.mypalantir.meta.Loader;
 import com.mypalantir.meta.ObjectType;
 import com.mypalantir.meta.Property;
 import com.mypalantir.query.schema.OntologySchemaFactory;
+import com.mypalantir.repository.IInstanceStorage;
+import com.mypalantir.service.MappingService;
+import com.mypalantir.service.DatabaseMetadataService;
 import org.apache.calcite.jdbc.CalciteConnection;
 import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.plan.volcano.VolcanoPlanner;
@@ -40,14 +43,19 @@ import java.util.Map;
  */
 public class RelNodeBuilder {
     private final Loader loader;
+    private final IInstanceStorage instanceStorage;
+    private final MappingService mappingService;
     private final OntologySchemaFactory schemaFactory;
     SchemaPlus rootSchema;  // package-private for access from QueryExecutor
     FrameworkConfig frameworkConfig;  // package-private for access from QueryExecutor
     private RelBuilder relBuilder;
 
-    public RelNodeBuilder(Loader loader) {
+    public RelNodeBuilder(Loader loader, IInstanceStorage instanceStorage, 
+                          MappingService mappingService, DatabaseMetadataService databaseMetadataService) {
         this.loader = loader;
-        this.schemaFactory = new OntologySchemaFactory(loader);
+        this.instanceStorage = instanceStorage;
+        this.mappingService = mappingService;
+        this.schemaFactory = new OntologySchemaFactory(loader, instanceStorage, mappingService, databaseMetadataService);
     }
 
     /**
@@ -82,7 +90,8 @@ public class RelNodeBuilder {
             throw new IllegalArgumentException("Object type '" + query.getFrom() + "' not found");
         }
 
-        DataSourceMapping dataSourceMapping = objectType.getDataSource();
+        // 从映射关系获取 DataSourceMapping（如果存在），否则使用 schema 中定义的
+        DataSourceMapping dataSourceMapping = getDataSourceMappingFromMapping(objectType);
 
         // 1. 构建 TableScan
         RelNode scan = buildTableScan(query.getFrom());
@@ -641,6 +650,55 @@ public class RelNodeBuilder {
         return rexBuilder.makeLiteral(value.toString(), type, false);
     }
 
+    /**
+     * 从映射关系获取 DataSourceMapping
+     */
+    private DataSourceMapping getDataSourceMappingFromMapping(ObjectType objectType) {
+        try {
+            List<Map<String, Object>> mappings = mappingService.getMappingsByObjectType(objectType.getName());
+            if (mappings == null || mappings.isEmpty()) {
+                // 如果没有映射关系，返回 schema 中定义的 data_source（向后兼容）
+                return objectType.getDataSource();
+            }
+            
+            // 使用第一个映射关系
+            Map<String, Object> mappingData = mappings.get(0);
+            String tableId = (String) mappingData.get("table_id");
+            if (tableId == null) {
+                return objectType.getDataSource();
+            }
+            
+            // 获取表信息
+            Map<String, Object> table = instanceStorage.getInstance("table", tableId);
+            String tableName = (String) table.get("name");
+            String primaryKeyColumn = (String) mappingData.get("primary_key_column");
+            
+            @SuppressWarnings("unchecked")
+            Map<String, String> columnPropertyMappings = (Map<String, String>) mappingData.get("column_property_mappings");
+            
+            // column_property_mappings 的结构是 {列名: 属性名}，需要反转为 {属性名: 列名}
+            Map<String, String> fieldMapping = new java.util.HashMap<>();
+            if (columnPropertyMappings != null) {
+                for (Map.Entry<String, String> entry : columnPropertyMappings.entrySet()) {
+                    String columnName = entry.getKey();
+                    String propertyName = entry.getValue();
+                    fieldMapping.put(propertyName, columnName);
+                }
+            }
+            
+            DataSourceMapping dataSourceMapping = new DataSourceMapping();
+            dataSourceMapping.setTable(tableName);
+            dataSourceMapping.setIdColumn(primaryKeyColumn != null ? primaryKeyColumn : "id");
+            dataSourceMapping.setFieldMapping(fieldMapping);
+            
+            return dataSourceMapping;
+        } catch (Exception e) {
+            System.err.println("Failed to get DataSourceMapping from mapping for " + objectType.getName() + ": " + e.getMessage());
+            // 回退到 schema 中定义的 data_source
+            return objectType.getDataSource();
+        }
+    }
+    
     /**
      * 关闭资源
      */

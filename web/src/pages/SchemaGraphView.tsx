@@ -427,7 +427,7 @@ export default function SchemaGraphView() {
               )}
               {selectedLink && (
                 <>
-                  <h3 className="text-xl font-bold text-gray-900 mb-2">{selectedLink.name}</h3>
+                  <h3 className="text-xl font-bold text-gray-900 mb-2">{selectedLink.data.display_name || selectedLink.name}</h3>
                   <span className="inline-block px-3 py-1 text-sm font-semibold rounded-md bg-green-600 text-white">
                     关系类型
                   </span>

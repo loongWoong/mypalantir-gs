@@ -194,7 +194,7 @@ export default function Layout({ children }: LayoutProps) {
               Schema Graph
             </Link>
 
-            <Link
+            {/* <Link
               to="/data-sources"
               className={`flex items-center px-3 py-2 rounded-lg mb-2 ${
                 isActive('/data-sources')
@@ -204,7 +204,7 @@ export default function Layout({ children }: LayoutProps) {
             >
               <ServerIcon className="w-5 h-5 mr-3" />
               Data Sources
-            </Link>
+            </Link> */}
 
             <Link
               to="/query"
