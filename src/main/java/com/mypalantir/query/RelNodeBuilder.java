@@ -1075,8 +1075,12 @@ public class RelNodeBuilder {
                         throw new IllegalArgumentException("Unsupported aggregate function: " + function);
                 }
                 
+                // 如果有别名，使用 as() 方法设置别名
+                String finalAlias = alias != null ? alias : function + "_" + fieldPathResult.getPropertyName();
+                aggregateCall = aggregateCall.as(finalAlias);
+                
                 aggregateCalls.add(aggregateCall);
-                aggregateNames.add(alias != null ? alias : function + "_" + fieldPathResult.getPropertyName());
+                aggregateNames.add(finalAlias);
             }
         }
         

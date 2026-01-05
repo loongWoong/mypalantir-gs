@@ -19,22 +19,83 @@ data_sources:
       DB_CLOSE_DELAY: -1  # 连接关闭后保持数据库打开的时间（-1 表示永久）
 
 object_types:
-  - name: 车辆
-    description: "车辆对象"
+  - name: 收费站
+    description: "收费站对象"
     # 数据源映射配置：从 H2 数据库读取数据
     data_source:
       connection_id: local_h2
-      table: vehicles
+      table: toll_stations
+      id_column: station_id
+      field_mapping:
+        名称: name
+        省份: province
+    properties:
+      - name: 名称
+        data_type: string
+        required: true
+        description: "收费站名称"
+        constraints:
+          min_length: 1
+          max_length: 100
+      
+      - name: 省份
+        data_type: string
+        required: true
+        description: "所属省份"
+        constraints:
+          min_length: 1
+          max_length: 50
+
+  - name: 收费记录
+    description: "收费记录对象"
+    # 数据源映射配置：从 H2 数据库读取数据
+    data_source:
+      connection_id: local_h2
+      table: toll_records
+      id_column: record_id
+      field_mapping:
+        收费站ID: station_id
+        车辆ID: vehicle_id
+        金额: amount
+        收费时间: charge_time
+    properties:
+      - name: 收费站ID
+        data_type: string
+        required: true
+        description: "收费站ID（外键）"
+      
+      - name: 车辆ID
+        data_type: string
+        required: true
+        description: "车辆ID（外键）"
+      
+      - name: 金额
+        data_type: float
+        required: true
+        description: "收费金额"
+        constraints:
+          min: 0
+      
+      - name: 收费时间
+        data_type: datetime
+        required: true
+        description: "收费时间"
+
+  - name: 车辆
+    description: "车辆对象（用于收费查询）"
+    # 数据源映射配置：从 H2 数据库读取数据
+    data_source:
+      connection_id: local_h2
+      table: vehicles_en
       id_column: vehicle_id
       field_mapping:
-        车牌号: plate_number
+        车牌号: plate
         车辆类型: vehicle_type
-        车主姓名: owner_name
     properties:
       - name: 车牌号
         data_type: string
         required: true
-        description: "车牌号码"
+        description: "车牌号"
         constraints:
           min_length: 1
           max_length: 20
@@ -43,521 +104,12 @@ object_types:
         data_type: string
         required: false
         description: "车辆类型"
-      
-      - name: 车主姓名
-        data_type: string
-        required: false
-        description: "车主姓名"
-        constraints:
-          max_length: 100
-
-  - name: 通行介质
-    description: "通行介质（ETC卡、OBU等）"
-    # 数据源映射配置：从 H2 数据库读取数据
-    data_source:
-      connection_id: local_h2
-      table: media
-      id_column: media_id
-      field_mapping:
-        介质编号: media_number
-        介质类型: media_type
-        发行日期: issue_date
-    properties:
-      - name: 介质编号
-        data_type: string
-        required: true
-        description: "介质唯一编号"
-        constraints:
-          min_length: 1
-          max_length: 50
-      
-      - name: 介质类型
-        data_type: string
-        required: true
-        description: "介质类型（ETC卡、OBU等）"
-      
-      - name: 发行日期
-        data_type: date
-        required: false
-        description: "发行日期"
-
-  - name: 交易流水
-    description: "交易流水记录"
-    # 数据源映射配置示例（已注释，实际使用时取消注释）
-    # data_source:
-    #   connection_id: transaction_db
-    #   table: transaction_records
-    #   id_column: transaction_id
-    #   field_mapping:
-    #     交易时间: transaction_time
-    #     交易金额: amount
-    #     交易类型: transaction_type
-    properties:
-      - name: 交易时间
-        data_type: datetime
-        required: true
-        description: "交易发生时间"
-      
-      - name: 交易金额
-        data_type: float
-        required: true
-        description: "交易金额"
-        constraints:
-          min: 0
-      
-      - name: 交易类型
-        data_type: string
-        required: true
-        description: "交易类型"
-
-  - name: 路段业主
-    description: "路段业主单位"
-    properties:
-      - name: 业主名称
-        data_type: string
-        required: true
-        description: "业主单位名称"
-        constraints:
-          min_length: 1
-          max_length: 200
-      
-      - name: 统一社会信用代码
-        data_type: string
-        required: false
-        description: "统一社会信用代码"
-        constraints:
-          max_length: 50
-
-  - name: 收费公路
-    description: "收费公路"
-    properties:
-      - name: 公路名称
-        data_type: string
-        required: true
-        description: "公路名称"
-        constraints:
-          min_length: 1
-          max_length: 200
-      
-      - name: 公路编码
-        data_type: string
-        required: false
-        description: "公路编码"
-        constraints:
-          max_length: 50
-      
-      - name: 起始桩号
-        data_type: string
-        required: false
-        description: "起始桩号"
-      
-      - name: 终止桩号
-        data_type: string
-        required: false
-        description: "终止桩号"
-
-  - name: 收费站
-    description: "收费站"
-    properties:
-      - name: 收费站名称
-        data_type: string
-        required: true
-        description: "收费站名称"
-        constraints:
-          min_length: 1
-          max_length: 100
-      
-      - name: 收费站编码
-        data_type: string
-        required: false
-        description: "收费站编码"
-        constraints:
-          max_length: 50
-      
-      - name: 桩号
-        data_type: string
-        required: false
-        description: "收费站桩号"
-
-  - name: ETC门架
-    description: "ETC门架"
-    properties:
-      - name: 门架名称
-        data_type: string
-        required: true
-        description: "门架名称"
-        constraints:
-          min_length: 1
-          max_length: 100
-      
-      - name: 门架编码
-        data_type: string
-        required: false
-        description: "门架编码"
-        constraints:
-          max_length: 50
-      
-      - name: 桩号
-        data_type: string
-        required: false
-        description: "门架桩号"
-
-  - name: 收费单元
-    description: "收费单元"
-    properties:
-      - name: 单元名称
-        data_type: string
-        required: true
-        description: "收费单元名称"
-        constraints:
-          min_length: 1
-          max_length: 100
-      
-      - name: 单元编码
-        data_type: string
-        required: false
-        description: "收费单元编码"
-        constraints:
-          max_length: 50
-      
-      - name: 里程
-        data_type: float
-        required: false
-        description: "收费单元里程"
-        constraints:
-          min: 0
-
-  - name: 车道
-    description: "收费站车道"
-    properties:
-      - name: 车道编号
-        data_type: string
-        required: true
-        description: "车道编号"
-        constraints:
-          min_length: 1
-          max_length: 20
-      
-      - name: 车道类型
-        data_type: string
-        required: false
-        description: "车道类型（ETC、MTC等）"
-
-  - name: 标识点
-    description: "标识点（ETC门架或车道）"
-    properties:
-      - name: 标识点编码
-        data_type: string
-        required: true
-        description: "标识点唯一编码"
-        constraints:
-          min_length: 1
-          max_length: 50
-      
-      - name: 标识点类型
-        data_type: string
-        required: true
-        description: "标识点类型（ETC门架、车道）"
-      
-      - name: 桩号
-        data_type: string
-        required: false
-        description: "标识点桩号"
-
-  - name: 车辆通行路径
-    description: "车辆通行路径"
-    properties:
-      - name: 通行开始时间
-        data_type: datetime
-        required: true
-        description: "通行开始时间"
-      
-      - name: 通行结束时间
-        data_type: datetime
-        required: false
-        description: "通行结束时间"
-      
-      - name: 通行状态
-        data_type: string
-        required: false
-        description: "通行状态"
-
-  - name: 通行拟合路径
-    description: "通行拟合路径"
-    properties:
-      - name: 拟合时间
-        data_type: datetime
-        required: true
-        description: "拟合时间"
-      
-      - name: 拟合状态
-        data_type: string
-        required: false
-        description: "拟合状态"
-      
-      - name: 总里程
-        data_type: float
-        required: false
-        description: "总里程"
-        constraints:
-          min: 0
-
-  - name: 拆分明细
-    description: "拆分明细"
-    properties:
-      - name: 拆分金额
-        data_type: float
-        required: true
-        description: "拆分金额"
-        constraints:
-          min: 0
-      
-      - name: 拆分比例
-        data_type: float
-        required: false
-        description: "拆分比例"
-        constraints:
-          min: 0
-          max: 1
-      
-      - name: 拆分时间
-        data_type: datetime
-        required: false
-        description: "拆分时间"
-
-  # 收费查询相关对象类型
-  - name: TollStation
-    description: "收费站对象"
-    # 数据源映射配置：从 H2 数据库读取数据
-    data_source:
-      connection_id: local_h2
-      table: toll_stations
-      id_column: station_id
-      field_mapping:
-        name: name
-        province: province
-    properties:
-      - name: name
-        data_type: string
-        required: true
-        description: "收费站名称"
-        constraints:
-          min_length: 1
-          max_length: 100
-      
-      - name: province
-        data_type: string
-        required: true
-        description: "所属省份"
-        constraints:
-          min_length: 1
-          max_length: 50
-
-  - name: TollRecord
-    description: "收费记录对象"
-    # 数据源映射配置：从 H2 数据库读取数据
-    data_source:
-      connection_id: local_h2
-      table: toll_records
-      id_column: record_id
-      field_mapping:
-        station_id: station_id
-        vehicle_id: vehicle_id
-        amount: amount
-        charge_time: charge_time
-    properties:
-      - name: station_id
-        data_type: string
-        required: true
-        description: "收费站ID（外键）"
-      
-      - name: vehicle_id
-        data_type: string
-        required: true
-        description: "车辆ID（外键）"
-      
-      - name: amount
-        data_type: float
-        required: true
-        description: "收费金额"
-        constraints:
-          min: 0
-      
-      - name: charge_time
-        data_type: datetime
-        required: true
-        description: "收费时间"
-
-  - name: Vehicle
-    description: "车辆对象（英文版，用于收费查询）"
-    # 数据源映射配置：从 H2 数据库读取数据
-    data_source:
-      connection_id: local_h2
-      table: vehicles_en
-      id_column: vehicle_id
-      field_mapping:
-        plate: plate
-        vehicle_type: vehicle_type
-    properties:
-      - name: plate
-        data_type: string
-        required: true
-        description: "车牌号"
-        constraints:
-          min_length: 1
-          max_length: 20
-      
-      - name: vehicle_type
-        data_type: string
-        required: false
-        description: "车辆类型"
 
 link_types:
-  - name: 持有
-    description: "车辆持有通行介质"
-    source_type: 车辆
-    target_type: 通行介质
-    cardinality: one-to-many
-    direction: directed
-    # 数据源映射配置：从 H2 数据库的中间表读取数据
-    data_source:
-      connection_id: local_h2
-      table: vehicle_media
-      id_column: link_id
-      source_id_column: vehicle_id  # 源对象（车辆）的ID列
-      target_id_column: media_id    # 目标对象（通行介质）的ID列
-      field_mapping:
-        绑定时间: bind_time
-        绑定状态: bind_status
-    properties:
-      - name: 绑定时间
-        data_type: datetime
-        required: false
-        description: "绑定时间"
-      
-      - name: 绑定状态
-        data_type: string
-        required: false
-        description: "绑定状态"
-
-  - name: 关联交易
-    description: "车辆关联交易流水"
-    source_type: 车辆
-    target_type: 交易流水
-    cardinality: one-to-many
-    direction: directed
-
-  - name: 管理
-    description: "路段业主管理收费公路"
-    source_type: 路段业主
-    target_type: 收费公路
-    cardinality: one-to-many
-    direction: directed
-    properties:
-      - name: 管理开始时间
-        data_type: date
-        required: false
-        description: "管理开始时间"
-
-  - name: 包含收费站
-    description: "收费公路包含收费站"
-    source_type: 收费公路
-    target_type: 收费站
-    cardinality: one-to-many
-    direction: directed
-
-  - name: 包含ETC门架
-    description: "收费公路包含ETC门架"
-    source_type: 收费公路
-    target_type: ETC门架
-    cardinality: one-to-many
-    direction: directed
-
-  - name: 包含收费单元
-    description: "收费公路包含收费单元"
-    source_type: 收费公路
-    target_type: 收费单元
-    cardinality: one-to-many
-    direction: directed
-
-  - name: 代收
-    description: "ETC门架代收收费单元"
-    source_type: ETC门架
-    target_type: 收费单元
-    cardinality: one-to-many
-    direction: directed
-
-  - name: 包含车道
-    description: "收费站包含车道"
-    source_type: 收费站
-    target_type: 车道
-    cardinality: one-to-many
-    direction: directed
-
-  - name: 继承标识点_ETC门架
-    description: "ETC门架继承标识点"
-    source_type: ETC门架
-    target_type: 标识点
-    cardinality: one-to-one
-    direction: directed
-
-  - name: 继承标识点_车道
-    description: "车道继承标识点"
-    source_type: 车道
-    target_type: 标识点
-    cardinality: one-to-one
-    direction: directed
-
-  - name: 生成
-    description: "标识点生成交易流水"
-    source_type: 标识点
-    target_type: 交易流水
-    cardinality: one-to-many
-    direction: directed
-    properties:
-      - name: 生成时间
-        data_type: datetime
-        required: false
-        description: "生成时间"
-
-  - name: 汇聚为
-    description: "交易流水汇聚为车辆通行路径"
-    source_type: 交易流水
-    target_type: 车辆通行路径
-    cardinality: many-to-one
-    direction: directed
-
-  - name: 拟合为
-    description: "车辆通行路径拟合为通行拟合路径"
-    source_type: 车辆通行路径
-    target_type: 通行拟合路径
-    cardinality: one-to-one
-    direction: directed
-    properties:
-      - name: 拟合时间
-        data_type: datetime
-        required: false
-        description: "拟合时间"
-
-  - name: 拆分为
-    description: "通行拟合路径拆分为拆分明细"
-    source_type: 通行拟合路径
-    target_type: 拆分明细
-    cardinality: one-to-many
-    direction: directed
-
-  - name: 关联拆分明细
-    description: "收费单元关联拆分明细"
-    source_type: 收费单元
-    target_type: 拆分明细
-    cardinality: one-to-one
-    direction: directed
-
-  # 收费查询相关关联类型
-  - name: hasTollRecords
+  - name: 拥有收费记录
     description: "收费站拥有收费记录"
-    source_type: TollStation
-    target_type: TollRecord
+    source_type: 收费站
+    target_type: 收费记录
     cardinality: one-to-many
     direction: directed
     # 数据源映射配置：从 H2 数据库的中间表读取数据
@@ -568,10 +120,10 @@ link_types:
       source_id_column: station_id  # 源对象（收费站）的ID列
       target_id_column: record_id   # 目标对象（收费记录）的ID列（自引用）
 
-  - name: hasVehicleRecords
+  - name: 拥有车辆记录
     description: "车辆拥有收费记录"
-    source_type: Vehicle
-    target_type: TollRecord
+    source_type: 车辆
+    target_type: 收费记录
     cardinality: one-to-many
     direction: directed
     # 数据源映射配置：从 H2 数据库的中间表读取数据

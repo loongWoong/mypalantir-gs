@@ -86,13 +86,43 @@ public class QueryExecutor {
         }
 
         // 直接构建 RelNode
+        System.out.println("\n" + "=".repeat(80));
+        System.out.println("=== Building RelNode ===");
         org.apache.calcite.rel.RelNode relNode = relNodeBuilder.buildRelNode(query);
+        
+        // 打印 RelNode 信息（递归显示整个树）
+        System.out.println("RelNode Tree Structure:");
+        printRelNodeTree(relNode, 0);
+        System.out.println("=".repeat(80) + "\n");
         
         // 优化 RelNode
         org.apache.calcite.rel.RelNode optimizedRelNode = optimizeRelNode(relNode);
         
         // 执行 RelNode（传入原始查询以便回退）
         return executeRelNode(optimizedRelNode, query);
+    }
+    
+    /**
+     * 递归打印 RelNode 树结构
+     */
+    private void printRelNodeTree(org.apache.calcite.rel.RelNode relNode, int indent) {
+        String indentStr = "  ".repeat(indent);
+        System.out.println(indentStr + "└─ " + relNode.getClass().getSimpleName());
+        System.out.println(indentStr + "   RowType: " + relNode.getRowType());
+        System.out.println(indentStr + "   Fields:");
+        for (int i = 0; i < relNode.getRowType().getFieldCount(); i++) {
+            org.apache.calcite.rel.type.RelDataTypeField field = relNode.getRowType().getFieldList().get(i);
+            System.out.println(indentStr + "     [" + i + "] " + field.getName() + " : " + field.getType());
+        }
+        System.out.println(indentStr + "   Description: " + relNode.toString());
+        
+        // 递归打印输入节点
+        if (relNode.getInputs() != null && !relNode.getInputs().isEmpty()) {
+            System.out.println(indentStr + "   Inputs:");
+            for (int i = 0; i < relNode.getInputs().size(); i++) {
+                printRelNodeTree(relNode.getInputs().get(i), indent + 1);
+            }
+        }
     }
     
     /**
@@ -142,10 +172,23 @@ public class QueryExecutor {
         OntologyRelToSqlConverter converter = 
             new OntologyRelToSqlConverter(unicodeDialect, loader);
         
+        // 调试：打印查询信息
+        System.out.println("\n" + "=".repeat(80));
+        System.out.println("=== Converting RelNode to SQL ===");
+        System.out.println("Query Object: " + originalQuery.getFrom());
+        System.out.println("Query has Links: " + (originalQuery.getLinks() != null && !originalQuery.getLinks().isEmpty()));
+        System.out.println("Query has GroupBy: " + (originalQuery.getGroupBy() != null && !originalQuery.getGroupBy().isEmpty()));
+        System.out.println("Query has Metrics: " + (originalQuery.getMetrics() != null && !originalQuery.getMetrics().isEmpty()));
+        
         org.apache.calcite.rel.rel2sql.RelToSqlConverter.Result result = converter.visitRoot(relNode);
         
         // 获取映射后的 SQL（传入原始查询以支持 JOIN）
         String sql = converter.getMappedSql(result, originalQuery);
+        
+        // 调试：打印生成的 SQL
+        System.out.println("=== Generated SQL ===");
+        System.out.println(sql);
+        System.out.println("=".repeat(80) + "\n");
         
         // 获取 ObjectType 和 DataSourceMapping（用于结果映射）
         com.mypalantir.meta.ObjectType objectType;
