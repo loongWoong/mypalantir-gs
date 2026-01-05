@@ -63,7 +63,18 @@ INSERT INTO vehicles (vehicle_id, plate_number, vehicle_type, owner_name) VALUES
 ('VEH005', '苏E33333', '小型客车', '钱七'),
 ('VEH006', '苏F44444', '小型客车', '孙八'),
 ('VEH007', '苏G55555', '小型客车', '周九'),
-('VEH008', '苏H66666', '小型客车', '吴十');
+('VEH008', '苏H66666', '小型客车', '吴十'),
+-- 添加收费查询使用的车辆ID（与 vehicles_en 对应）
+('VEH_EN001', '苏A12345', '小型客车', '张三'),
+('VEH_EN002', '苏B67890', '小型客车', '李四'),
+('VEH_EN003', '苏C11111', '大型客车', '王五'),
+('VEH_EN004', '苏D22222', '小型货车', '赵六'),
+('VEH_EN005', '苏E33333', '小型客车', '钱七'),
+('VEH_EN006', '苏F44444', '小型客车', '孙八'),
+('VEH_EN007', '苏G55555', '小型客车', '周九'),
+('VEH_EN008', '苏H66666', '小型客车', '吴十'),
+('VEH_EN009', '浙A99999', '小型客车', '浙江车主'),
+('VEH_EN010', '沪A88888', '小型客车', '上海车主');
 
 -- 插入测试数据：车辆-通行介质关联（一对多关系）
 -- 一个车辆可以持有多个通行介质
@@ -109,7 +120,7 @@ CREATE TABLE IF NOT EXISTS toll_records (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     CONSTRAINT fk_tr_station FOREIGN KEY (station_id) REFERENCES toll_stations(station_id) ON DELETE CASCADE,
-    CONSTRAINT fk_tr_vehicle FOREIGN KEY (vehicle_id) REFERENCES vehicles_en(vehicle_id) ON DELETE CASCADE
+    CONSTRAINT fk_tr_vehicle FOREIGN KEY (vehicle_id) REFERENCES vehicles(vehicle_id) ON DELETE CASCADE
 );
 
 -- 创建索引

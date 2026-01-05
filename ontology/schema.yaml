@@ -82,15 +82,16 @@ object_types:
         description: "收费时间"
 
   - name: 车辆
-    description: "车辆对象（用于收费查询）"
+    description: "车辆对象"
     # 数据源映射配置：从 H2 数据库读取数据
     data_source:
       connection_id: local_h2
-      table: vehicles_en
+      table: vehicles
       id_column: vehicle_id
       field_mapping:
-        车牌号: plate
+        车牌号: plate_number
         车辆类型: vehicle_type
+        车主姓名: owner_name
     properties:
       - name: 车牌号
         data_type: string
@@ -104,6 +105,46 @@ object_types:
         data_type: string
         required: false
         description: "车辆类型"
+      
+      - name: 车主姓名
+        data_type: string
+        required: false
+        description: "车主姓名"
+        constraints:
+          max_length: 100
+
+  - name: 通行介质
+    description: "通行介质对象（ETC卡、OBU等）"
+    # 数据源映射配置：从 H2 数据库读取数据
+    data_source:
+      connection_id: local_h2
+      table: media
+      id_column: media_id
+      field_mapping:
+        介质编号: media_number
+        介质类型: media_type
+        发行日期: issue_date
+    properties:
+      - name: 介质编号
+        data_type: string
+        required: true
+        description: "介质编号（唯一标识）"
+        constraints:
+          min_length: 1
+          max_length: 50
+      
+      - name: 介质类型
+        data_type: string
+        required: true
+        description: "介质类型（ETC卡、OBU等）"
+        constraints:
+          min_length: 1
+          max_length: 50
+      
+      - name: 发行日期
+        data_type: date
+        required: false
+        description: "发行日期"
 
 link_types:
   - name: 拥有收费记录
@@ -133,3 +174,31 @@ link_types:
       id_column: record_id
       source_id_column: vehicle_id  # 源对象（车辆）的ID列
       target_id_column: record_id   # 目标对象（收费记录）的ID列（自引用）
+
+  - name: 持有
+    description: "车辆持有通行介质（多对多关系，使用关系表模式）"
+    source_type: 车辆
+    target_type: 通行介质
+    cardinality: many-to-many
+    direction: undirected  # 无向关系，可以从任意方向查询
+    # 数据源映射配置：使用独立的中间表存储关系（关系表模式）
+    data_source:
+      connection_id: local_h2
+      table: vehicle_media  # 中间表，不同于车辆表和通行介质表
+      id_column: link_id
+      source_id_column: vehicle_id  # 源对象（车辆）的ID列
+      target_id_column: media_id    # 目标对象（通行介质）的ID列
+      link_mode: relation_table  # 显式指定为关系表模式
+      field_mapping:
+        绑定时间: bind_time
+        绑定状态: bind_status
+    properties:
+      - name: 绑定时间
+        data_type: datetime
+        required: false
+        description: "车辆与通行介质的绑定时间"
+      
+      - name: 绑定状态
+        data_type: string
+        required: false
+        description: "绑定状态（已激活、已停用等）"

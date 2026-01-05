@@ -35,6 +35,7 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * 将 OntologyQuery 直接构建为 RelNode
@@ -423,7 +424,112 @@ public class RelNodeBuilder {
             throw new IllegalArgumentException("Source object type '" + sourceObjectType.getName() + "' does not have data source configured");
         }
         
-        // 7. 扫描中间表（vehicle_media）
+        // 7. 判断 LinkType 映射模式
+        boolean isForeignKeyMode = linkMapping.isForeignKeyMode(targetObjectType);
+        
+        if (isForeignKeyMode) {
+            // 外键模式：直接 JOIN 目标表（目标表中包含外键）
+            return buildForeignKeyJoin(leftInput, sourceObjectType, targetObjectType, 
+                                      linkMapping, targetMapping);
+        } else {
+            // 关系表模式：通过中间表 JOIN（当前实现）
+            return buildRelationTableJoin(leftInput, sourceObjectType, targetObjectType, 
+                                         linkType, linkMapping, targetMapping);
+        }
+    }
+
+    /**
+     * 构建外键模式的 JOIN（直接 JOIN 目标表，目标表中包含外键）
+     * 例如：收费站 JOIN 收费记录（通过 toll_records.station_id）
+     * 
+     * @param leftInput 左表（源对象表）
+     * @param sourceObjectType 源对象类型
+     * @param targetObjectType 目标对象类型
+     * @param linkMapping LinkType 的数据源映射
+     * @param targetMapping 目标对象的数据源映射
+     * @return JOIN 后的 RelNode
+     */
+    private RelNode buildForeignKeyJoin(RelNode leftInput, ObjectType sourceObjectType,
+                                        ObjectType targetObjectType,
+                                        DataSourceMapping linkMapping,
+                                        DataSourceMapping targetMapping) throws Exception {
+        relBuilder.clear();
+        relBuilder.push(leftInput);
+        
+        // 扫描目标表（外键就在这个表中）
+        RelNode targetTableScan = buildTableScan(targetObjectType.getName());
+        relBuilder.push(targetTableScan);
+        
+        RelDataType leftRowType = leftInput.getRowType();
+        RelDataType targetRowType = targetTableScan.getRowType();
+        RexBuilder rexBuilder = relBuilder.getRexBuilder();
+        
+        // 源表的 ID 字段（索引 0）
+        int leftIdIndex = 0;
+        RexNode leftIdRef = rexBuilder.makeInputRef(
+            leftRowType.getFieldList().get(leftIdIndex).getType(),
+            leftIdIndex
+        );
+        
+        // 目标表的外键字段（source_id_column）
+        String sourceIdColumn = linkMapping.getSourceIdColumn();
+        if (sourceIdColumn == null || sourceIdColumn.isEmpty()) {
+            throw new IllegalArgumentException("Source ID column is not configured for foreign key mode link type");
+        }
+        
+        // 在目标表的行类型中查找外键字段
+        // 注意：外键字段在目标表中，需要通过 field_mapping 找到对应的属性名
+        // 或者直接使用数据库列名（如果 Calcite Schema 中使用了列名）
+        int targetForeignKeyIndex = findFieldIndexInRowType(sourceIdColumn, targetRowType);
+        if (targetForeignKeyIndex < 0) {
+            // 如果直接查找失败，尝试通过 field_mapping 反向查找
+            String propertyName = targetMapping.getPropertyName(sourceIdColumn);
+            if (propertyName != null) {
+                targetForeignKeyIndex = findFieldIndexInRowType(propertyName, targetRowType);
+            }
+        }
+        
+        if (targetForeignKeyIndex < 0) {
+            throw new IllegalArgumentException("Foreign key column '" + sourceIdColumn + 
+                "' not found in target table '" + targetObjectType.getName() + 
+                "'. Available fields: " + targetRowType.getFieldList().stream()
+                    .map(f -> f.getName()).collect(java.util.stream.Collectors.joining(", ")));
+        }
+        
+        RexNode targetForeignKeyRef = rexBuilder.makeInputRef(
+            targetRowType.getFieldList().get(targetForeignKeyIndex).getType(),
+            leftRowType.getFieldCount() + targetForeignKeyIndex
+        );
+        
+        // JOIN 条件：source_table.id = target_table.source_id_column
+        RexNode joinCondition = rexBuilder.makeCall(
+            org.apache.calcite.sql.fun.SqlStdOperatorTable.EQUALS,
+            leftIdRef,
+            targetForeignKeyRef
+        );
+        
+        relBuilder.join(JoinRelType.LEFT, joinCondition);
+        return relBuilder.build();
+    }
+
+    /**
+     * 构建关系表模式的 JOIN（通过中间表，两次 JOIN）
+     * 例如：车辆 JOIN vehicle_media JOIN 通行介质
+     * 
+     * @param leftInput 左表（源对象表）
+     * @param sourceObjectType 源对象类型
+     * @param targetObjectType 目标对象类型
+     * @param linkType LinkType
+     * @param linkMapping LinkType 的数据源映射
+     * @param targetMapping 目标对象的数据源映射
+     * @return JOIN 后的 RelNode
+     */
+    private RelNode buildRelationTableJoin(RelNode leftInput, ObjectType sourceObjectType,
+                                          ObjectType targetObjectType,
+                                          LinkType linkType,
+                                          DataSourceMapping linkMapping,
+                                          DataSourceMapping targetMapping) throws Exception {
+        // 扫描中间表（例如：vehicle_media）
         // 注意：中间表在 Schema 中使用表名（小写），与 mapping.getTable() 一致
         String linkTableName = linkMapping.getTable();  // 小写表名，与 Schema 中的名称一致
         RelNode linkTableScan = buildTableScan(linkTableName);
@@ -433,7 +539,7 @@ public class RelNodeBuilder {
         relBuilder.push(leftInput);  // 左表（车辆表）
         relBuilder.push(linkTableScan);  // 中间表
         
-        // 8. 构建第一个 JOIN 条件：vehicles.vehicle_id = vehicle_media.vehicle_id
+        // 构建第一个 JOIN 条件：source_table.id = link_table.source_id_column
         RelDataType leftRowType = leftInput.getRowType();
         RelDataType linkRowType = linkTableScan.getRowType();
         RexBuilder rexBuilder = relBuilder.getRexBuilder();
@@ -466,14 +572,14 @@ public class RelNodeBuilder {
             linkSourceIdRef
         );
         
-        // 9. 执行第一个 JOIN（LEFT JOIN）
+        // 执行第一个 JOIN（LEFT JOIN）
         relBuilder.join(JoinRelType.LEFT, joinCondition1);
         RelNode firstJoin = relBuilder.build();
         
         // 获取第一个 JOIN 后的行类型（用于计算字段偏移）
         RelDataType firstJoinRowType = firstJoin.getRowType();
         
-        // 10. 扫描目标表（media）
+        // 扫描目标表
         RelNode targetTableScan = buildTableScan(linkType.getTargetType());
         
         // 准备第二个 JOIN
@@ -481,7 +587,7 @@ public class RelNodeBuilder {
         relBuilder.push(firstJoin);  // 第一个 JOIN 的结果
         relBuilder.push(targetTableScan);  // 目标表
         
-        // 11. 构建第二个 JOIN 条件：vehicle_media.media_id = media.media_id
+        // 构建第二个 JOIN 条件：link_table.target_id_column = target_table.id
         RelDataType targetRowType = targetTableScan.getRowType();
         String targetIdColumn = linkMapping.getTargetIdColumn();
         int linkTargetIdIndex = findFieldIndexInRowType(targetIdColumn, linkRowType);
@@ -522,7 +628,7 @@ public class RelNodeBuilder {
             targetIdRef
         );
         
-        // 12. 执行第二个 JOIN（LEFT JOIN）
+        // 执行第二个 JOIN（LEFT JOIN）
         relBuilder.join(JoinRelType.LEFT, joinCondition2);
         RelNode finalJoin = relBuilder.build();
         

@@ -521,6 +521,35 @@ export default function SchemaBrowser() {
                             <span className="text-xs text-gray-500 ml-2">({selectedLinkType.target_type})</span>
                           </div>
                         )}
+                        {selectedLinkType.data_source.link_mode && (
+                          <div>
+                            <span className="text-gray-600">Link Mode:</span>{' '}
+                            <span className="font-medium px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs">
+                              {selectedLinkType.data_source.link_mode === 'foreign_key' ? '外键模式' : 
+                               selectedLinkType.data_source.link_mode === 'relation_table' ? '关系表模式' : 
+                               selectedLinkType.data_source.link_mode}
+                            </span>
+                            <span className="text-xs text-gray-500 ml-2">(显式配置)</span>
+                          </div>
+                        )}
+                        {!selectedLinkType.data_source.link_mode && selectedLinkType.data_source.source_id_column && (
+                          <div>
+                            <span className="text-gray-600">Link Mode:</span>{' '}
+                            <span className="font-medium px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs">
+                              自动检测
+                            </span>
+                            <span className="text-xs text-gray-500 ml-2">
+                              ({(() => {
+                                // 尝试判断模式：如果 table 与目标表的 table 相同，则为外键模式
+                                const targetType = objectTypes.find(ot => ot.name === selectedLinkType!.target_type);
+                                if (targetType?.data_source?.table === selectedLinkType.data_source.table) {
+                                  return '外键模式（检测到）';
+                                }
+                                return '关系表模式（检测到）';
+                              })()})
+                            </span>
+                          </div>
+                        )}
                       </div>
 
                       {/* 数据源详细信息 */}

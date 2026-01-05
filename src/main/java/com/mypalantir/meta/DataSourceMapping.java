@@ -43,6 +43,15 @@ public class DataSourceMapping {
     private String targetIdColumn;
 
     /**
+     * LinkType 映射模式：
+     * - "foreign_key": 外键模式，关系信息存储在目标表中（通过外键）
+     * - "relation_table": 关系表模式，使用独立的中间表存储关系
+     * - null: 自动检测模式（如果 table 与目标表的 table 相同，则为外键模式）
+     */
+    @JsonProperty("link_mode")
+    private String linkMode;
+
+    /**
      * 属性映射：ObjectType/LinkType 属性名 -> 数据库列名
      * 例如：{"车牌号": "plate_number", "车辆类型": "vehicle_type"}
      * 对于 LinkType，还可以映射 link type 的属性，如 {"绑定时间": "bind_time", "绑定状态": "bind_status"}
@@ -95,6 +104,15 @@ public class DataSourceMapping {
         this.targetIdColumn = targetIdColumn;
     }
 
+    @JsonGetter("link_mode")
+    public String getLinkMode() {
+        return linkMode;
+    }
+
+    public void setLinkMode(String linkMode) {
+        this.linkMode = linkMode;
+    }
+
     @JsonGetter("field_mapping")
     public Map<String, String> getFieldMapping() {
         return fieldMapping;
@@ -135,6 +153,27 @@ public class DataSourceMapping {
         return connectionId != null && !connectionId.isEmpty() 
             && table != null && !table.isEmpty()
             && idColumn != null && !idColumn.isEmpty();
+    }
+
+    /**
+     * 判断 LinkType 是否为外键模式
+     * @param targetObjectType 目标 ObjectType（用于自动检测模式）
+     * @return true 表示外键模式，false 表示关系表模式
+     */
+    public boolean isForeignKeyMode(ObjectType targetObjectType) {
+        // 如果显式指定了 link_mode，直接使用
+        if (linkMode != null) {
+            return "foreign_key".equalsIgnoreCase(linkMode);
+        }
+        
+        // 自动检测：如果 table 与目标表的 table 相同，则为外键模式
+        if (targetObjectType != null && targetObjectType.getDataSource() != null) {
+            DataSourceMapping targetMapping = targetObjectType.getDataSource();
+            return table != null && table.equals(targetMapping.getTable());
+        }
+        
+        // 默认返回 false（关系表模式）
+        return false;
     }
 }
 

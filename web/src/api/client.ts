@@ -57,6 +57,7 @@ export interface DataSourceMapping {
   id_column: string;
   source_id_column?: string;  // 用于 LinkType：源对象ID列
   target_id_column?: string;  // 用于 LinkType：目标对象ID列
+  link_mode?: string;  // LinkType 映射模式："foreign_key" 或 "relation_table"，null 表示自动检测
   field_mapping: Record<string, string>;
   configured?: boolean;  // 后端可能返回的配置状态字段
 }
