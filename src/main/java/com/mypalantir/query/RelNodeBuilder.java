@@ -689,8 +689,8 @@ public class RelNodeBuilder {
                     }
                 }
             case TIMESTAMP:
-                // TIMESTAMP 类型：使用字符串格式，让 Calcite 在 SQL 生成时处理
-                // 注意：虽然我们传递字符串，但 Calcite 会根据 type 参数知道这是 TIMESTAMP 类型
+                // TIMESTAMP 类型：Calcite 的 makeLiteral 期望 Long（时间戳毫秒数）
+                // 我们需要将字符串解析为 Timestamp，然后获取毫秒数
                 if (value instanceof String) {
                     String dateStr = (String) value;
                     // 确保日期时间格式正确
@@ -698,36 +698,41 @@ public class RelNodeBuilder {
                         // 只有日期部分，添加时间部分
                         dateStr = dateStr + " 00:00:00";
                     }
-                    // 验证日期格式
+                    // 解析为 Timestamp 对象，然后获取毫秒数
                     try {
-                        java.sql.Timestamp.valueOf(dateStr);  // 验证格式
+                        java.sql.Timestamp timestamp = java.sql.Timestamp.valueOf(dateStr);
+                        long timestampMillis = timestamp.getTime();
+                        // 使用 Long（时间戳毫秒数）创建字面量，但指定类型为 TIMESTAMP
+                        return rexBuilder.makeLiteral(timestampMillis, type, false);
                     } catch (IllegalArgumentException e) {
                         throw new IllegalArgumentException("Invalid timestamp format: " + dateStr + 
-                            ". Expected format: YYYY-MM-DD or YYYY-MM-DD HH:MM:SS");
+                            ". Expected format: YYYY-MM-DD or YYYY-MM-DD HH:MM:SS. Error: " + e.getMessage());
                     }
-                    // 使用字符串创建字面量，Calcite 会将其转换为 TIMESTAMP 类型
-                    // 注意：这里使用 makeLiteral 的字符串重载，Calcite 会根据 type 参数处理
-                    return rexBuilder.makeLiteral(dateStr, type, false);
                 } else if (value instanceof java.sql.Timestamp) {
-                    // 将 Timestamp 转换为字符串格式
-                    String dateStr = ((java.sql.Timestamp) value).toString();
-                    return rexBuilder.makeLiteral(dateStr, type, false);
+                    // 获取时间戳毫秒数
+                    long timestampMillis = ((java.sql.Timestamp) value).getTime();
+                    return rexBuilder.makeLiteral(timestampMillis, type, false);
                 } else if (value instanceof java.sql.Date) {
-                    String dateStr = ((java.sql.Date) value).toString() + " 00:00:00";
-                    return rexBuilder.makeLiteral(dateStr, type, false);
+                    // 获取时间戳毫秒数
+                    long timestampMillis = ((java.sql.Date) value).getTime();
+                    return rexBuilder.makeLiteral(timestampMillis, type, false);
+                } else if (value instanceof Number) {
+                    // 如果已经是数字，直接使用
+                    long timestampMillis = ((Number) value).longValue();
+                    return rexBuilder.makeLiteral(timestampMillis, type, false);
                 } else {
-                    // 转换为字符串
+                    // 转换为字符串再解析
                     String dateStr = value.toString();
                     if (dateStr.length() <= 10) {
                         dateStr = dateStr + " 00:00:00";
                     }
-                    // 验证格式
                     try {
-                        java.sql.Timestamp.valueOf(dateStr);
+                        java.sql.Timestamp timestamp = java.sql.Timestamp.valueOf(dateStr);
+                        long timestampMillis = timestamp.getTime();
+                        return rexBuilder.makeLiteral(timestampMillis, type, false);
                     } catch (IllegalArgumentException e) {
                         throw new IllegalArgumentException("Cannot convert '" + value + "' to TIMESTAMP: " + e.getMessage());
                     }
-                    return rexBuilder.makeLiteral(dateStr, type, false);
                 }
             default:
                 // 对于未知类型，尝试使用字符串
@@ -1014,19 +1019,38 @@ public class RelNodeBuilder {
                 // 使用 field() 方法获取字段引用
                 org.apache.calcite.rex.RexNode fieldNode = relBuilder.field(fieldIndex);
                 
+                // 获取字段类型
+                RelDataType fieldType = rowType.getFieldList().get(fieldIndex).getType();
+                
                 // 构建聚合函数调用
                 RelBuilder.AggCall aggregateCall;
                 switch (function) {
                     case "sum":
+                        // 对于 SUM 函数，如果字段类型是 DECIMAL 或可能返回 DECIMAL（如数据库列是 DECIMAL），
+                        // 先转换为 DOUBLE 再求和，避免 BigDecimal 无法转换为 Double 的错误
+                        org.apache.calcite.rex.RexNode sumFieldNode = fieldNode;
+                        SqlTypeName fieldSqlType = fieldType.getSqlTypeName();
+                        if (fieldSqlType == SqlTypeName.DECIMAL || fieldSqlType == SqlTypeName.DOUBLE || fieldSqlType == SqlTypeName.FLOAT) {
+                            // 将数值类型转换为 DOUBLE，确保 SUM 返回 DOUBLE 而不是 DECIMAL
+                            RelDataType doubleType = relBuilder.getTypeFactory().createSqlType(SqlTypeName.DOUBLE);
+                            sumFieldNode = rexBuilder.makeCast(doubleType, fieldNode, false);
+                        }
                         aggregateCall = relBuilder.aggregateCall(
                             org.apache.calcite.sql.fun.SqlStdOperatorTable.SUM,
-                            fieldNode
+                            sumFieldNode
                         );
                         break;
                     case "avg":
+                        // 对于 AVG 函数，也转换为 DOUBLE
+                        org.apache.calcite.rex.RexNode avgFieldNode = fieldNode;
+                        SqlTypeName avgFieldSqlType = fieldType.getSqlTypeName();
+                        if (avgFieldSqlType == SqlTypeName.DECIMAL || avgFieldSqlType == SqlTypeName.DOUBLE || avgFieldSqlType == SqlTypeName.FLOAT) {
+                            RelDataType doubleType = relBuilder.getTypeFactory().createSqlType(SqlTypeName.DOUBLE);
+                            avgFieldNode = rexBuilder.makeCast(doubleType, fieldNode, false);
+                        }
                         aggregateCall = relBuilder.aggregateCall(
                             org.apache.calcite.sql.fun.SqlStdOperatorTable.AVG,
-                            fieldNode
+                            avgFieldNode
                         );
                         break;
                     case "count":

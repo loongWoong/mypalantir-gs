@@ -373,6 +373,22 @@ public class QueryExecutor {
                 for (int i = 1; i <= columnCount; i++) {
                     String propertyName = propertyNames.get(i - 1);
                     Object value = rs.getObject(i);
+                    
+                    // 类型转换：Calcite 期望的类型
+                    // 如果值是 BigDecimal，根据列类型或列名判断是否需要转换为 Double
+                    if (value instanceof java.math.BigDecimal) {
+                        int sqlType = rs.getMetaData().getColumnType(i);
+                        String columnLabel = rs.getMetaData().getColumnLabel(i);
+                        // 检查列类型是否是 DOUBLE 或 FLOAT，或者列名包含聚合函数（如 SUM, AVG）
+                        if (sqlType == java.sql.Types.DOUBLE || sqlType == java.sql.Types.FLOAT || 
+                            sqlType == java.sql.Types.REAL || sqlType == java.sql.Types.NUMERIC ||
+                            (columnLabel != null && (columnLabel.contains("SUM") || columnLabel.contains("AVG") || 
+                             columnLabel.equals("$f1") || columnLabel.startsWith("total_")))) {
+                            // 转换为 Double
+                            value = ((java.math.BigDecimal) value).doubleValue();
+                        }
+                    }
+                    
                     row.put(propertyName, value);
                 }
                 rows.add(row);
