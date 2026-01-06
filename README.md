@@ -1,175 +1,341 @@
-# MyPalantir - Foundry Ontology 仿制项目
+# MyPalantir - 基于 Ontology 的数据模型管理平台
 
-一个基于 Java (Spring Boot) 实现的数据模型管理平台，仿照 Palantir Foundry Ontology 的核心功能。
+一个仿照 Palantir Foundry Ontology 设计理念的数据模型管理平台，通过 Ontology（本体）抽象层实现业务概念与物理数据源的解耦，提供统一的查询接口和语义化的数据访问能力。
 
-## 功能特性
+## 核心理念
 
-### 核心功能
-- **元数据模型定义**：使用 YAML 格式定义对象类型、属性和关系类型
-- **数据源映射**：支持将 ObjectType 和 LinkType 映射到外部数据库（PostgreSQL、MySQL、H2 等）
-- **查询引擎**：基于 Apache Calcite 的查询执行引擎，支持 OntologyQuery DSL 查询语言
-- **关联查询**：支持通过 LinkType 进行 JOIN 查询，实现跨表关联
-- **双 Schema 架构**：系统 Schema（内置模型）和用户 Schema（业务模型）分离管理
-- **文件系统存储**：支持文件系统存储（用于未配置数据源的 ObjectType）
-- **批量查询优化**：批量获取实例 API，大幅优化图形视图加载性能
-- **血缘查询**：支持正向、反向、全链血缘查询功能
-- **关系自动同步**：基于属性映射规则自动创建关系实例
-- **RESTful API**：提供完整的 API 用于模型查询和实例数据管理
-- **数据验证**：完整的模型验证和数据验证机制
+### Ontology 驱动的数据模型
 
-### 数据集成功能
-- **数据库连接管理**：支持 MySQL 等数据库连接配置
-- **数据源管理**：管理多个数据源（database 对象类型）
-- **表结构同步**：从数据库自动同步表（table）和列（column）信息
-- **数据映射**：建立数据库表列与对象属性的映射关系
-- **数据抽取**：基于映射关系从数据库抽取数据到本体实例
-
-### 工作空间功能
-- **工作空间管理**：创建和管理多个工作空间
-- **对象分组**：将对象类型和关系类型分组到不同工作空间
-- **界面过滤**：根据工作空间过滤显示对象和关系
-- **系统工作空间**：内置系统工作空间，包含系统对象和关系
-
-### 前端功能
-- **Schema 浏览器**：图形化查看对象类型、关系类型及其属性映射，支持交互式过滤
-- **Schema 关系图**：力导向图可视化展示 Schema 定义，支持节点拖动和关系连线
-- **实例管理**：创建、查看、编辑、删除实例数据
-- **多条件检索**：支持多属性条件过滤查询实例
-- **关系管理**：查看和管理对象之间的关系，支持关系同步
-- **数据映射界面**：ER 图形式配置数据库表列与对象属性的映射
-- **实例关系图**：力导向图可视化展示实例及其关系，支持血缘查询
-- **工作空间管理**：创建工作空间，对对象类型和关系类型进行分组管理
-- **查询界面**：支持 OntologyQuery DSL 查询，查看查询结果
-
-## 项目结构
+MyPalantir 的核心思想是**将业务概念与物理存储解耦**，通过 Ontology（本体）层建立业务语义与底层数据源的映射关系。
 
 ```
-mypalantir-gs/
-├── src/                    # Maven 标准目录结构
-│   ├── main/
-│   │   ├── java/          # Java 源代码
-│   │   │   └── com/mypalantir/
-│   │   │       ├── config/         # 配置管理（包括数据库配置、环境变量加载）
-│   │   │       ├── meta/           # 元数据模型和解析器
-│   │   │       ├── repository/     # 数据访问层（文件系统存储）
-│   │   │       ├── service/        # 业务逻辑层（包括数据库服务、映射服务、同步服务、查询服务）
-│   │   │       ├── query/          # 查询引擎（基于 Apache Calcite）
-│   │   │       └── controller/      # REST 控制器
-│   │   └── resources/     # 资源文件
-│   │       ├── application.properties
-│   │       └── static/     # Web UI 构建产物（生产模式，由 Maven 自动复制）
-│   └── test/               # 测试代码
-├── ontology/               # 元数据定义文件目录
-│   ├── schema-system.yaml  # 系统 Schema（内置对象和关系）
-│   └── schema.yaml         # 用户 Schema（业务对象和关系）
-├── web/                  # Web UI 源代码
-│   ├── src/
-│   │   ├── api/          # API 客户端
-│   │   ├── components/   # React 组件
-│   │   ├── pages/        # 页面组件
-│   │   └── WorkspaceContext.tsx  # 工作空间上下文
-│   └── dist/            # Web UI 构建产物（开发模式使用）
-├── scripts/               # 脚本文件
-├── data/                  # 实例数据目录（运行时生成）
-├── .env                   # 环境变量配置（数据库连接信息等）
-└── pom.xml                # Maven 配置文件
+业务概念层（Ontology）
+    ↓ 映射
+物理数据层（Database/File System）
 ```
 
-### Web UI 静态文件服务
+**核心优势：**
+- **语义化查询**：使用业务概念（如"车辆"、"收费站"）而非表名、列名进行查询
+- **数据源无关**：同一业务概念可以映射到不同的物理数据源（PostgreSQL、MySQL、H2、文件系统等）
+- **关系抽象**：通过 LinkType 抽象对象间的关系，支持多种物理实现模式
+- **统一接口**：提供统一的查询 DSL，屏蔽底层数据源的差异
 
-项目支持两种模式：
+### 设计原则
 
-1. **开发模式**：使用外部路径 `./web/dist`
-   - Web UI 构建后，Spring Boot 直接从 `web/dist` 目录提供静态文件
-   - 适合开发环境，支持热重载
+1. **概念优先**：查询和操作都基于 Ontology 中定义的概念，而非物理表结构
+2. **映射灵活**：支持多种数据源映射模式，适应不同的数据库设计
+3. **查询优化**：基于 Apache Calcite 的查询优化器，自动生成高效的 SQL
+4. **类型安全**：完整的 Schema 验证机制，确保数据模型的一致性
 
-2. **生产模式**：使用 classpath 资源 `classpath:/static`
-   - Maven 构建时自动将 `web/dist` 复制到 `target/classes/static/`
-   - 打包到 JAR 文件中，适合生产部署
-   - 修改 `application.properties` 中的 `web.static.path` 为 `classpath:/static`
+## 系统架构
 
-## 技术栈
+### 整体架构
 
-### 后端
-- **Java 17**
-- **Spring Boot 3.2.0**
-- **Apache Calcite 1.35.0** (查询执行引擎)
-- **Jackson** (JSON/YAML 处理，包含 Java 8 时间支持)
-- **SnakeYAML** (YAML 解析)
-- **MySQL Connector** (数据库连接)
-- **dotenv-java** (环境变量加载)
-- **H2 Database** (本地测试数据库，用于 Calcite 测试)
-- **Maven** (构建工具)
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     应用层 (Application Layer)                │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐        │
+│  │  Web UI      │  │  REST API    │  │  Query DSL   │        │
+│  │  (React)     │  │  (Spring)     │  │  (JSON)      │        │
+│  └──────────────┘  └──────────────┘  └──────────────┘        │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│                    Ontology 层 (Ontology Layer)              │
+│  ┌──────────────────────────────────────────────────────┐    │
+│  │  Schema Definition (YAML)                          │    │
+│  │  - ObjectType (对象类型)                            │    │
+│  │  - LinkType (关系类型)                              │    │
+│  │  - Property (属性定义)                              │    │
+│  │  - DataSourceMapping (数据源映射)                   │    │
+│  └──────────────────────────────────────────────────────┘    │
+│                            ↓                                 │
+│  ┌──────────────────────────────────────────────────────┐    │
+│  │  Query Engine (查询引擎)                             │    │
+│  │  - OntologyQuery DSL → RelNode → SQL                │    │
+│  │  - Apache Calcite 优化器                             │    │
+│  │  - 自动 JOIN 优化                                    │    │
+│  └──────────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│                   数据源层 (Data Source Layer)                │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐        │
+│  │  JDBC        │  │  File System  │  │  (Future)    │        │
+│  │  (Database)  │  │  (JSON)      │  │  API/Stream  │        │
+│  └──────────────┘  └──────────────┘  └──────────────┘        │
+└─────────────────────────────────────────────────────────────┘
+```
 
-### 前端
-- **React 18** + **TypeScript**
-- **Vite** (构建工具)
-- **Tailwind CSS** (样式框架)
-- **React Router** (路由)
-- **Axios** (HTTP 客户端)
-- **Heroicons** (图标库)
-- **ForceGraph2D** (关系图可视化)
+### 查询引擎架构
 
-## 前置要求
+查询引擎是系统的核心，实现了从 Ontology 查询 DSL 到物理 SQL 的完整转换流程：
 
-- **Java 17+**
-- **Maven 3.6+**
-- **Node.js 18+** 和 **npm**（用于构建 Web UI）
-- **MySQL 8+**（可选，用于数据库集成功能）
+```
+OntologyQuery (JSON/YAML)
+    ↓ [QueryParser]
+OntologyQuery (Java Object)
+    ↓ [RelNodeBuilder]
+Calcite RelNode (关系代数树)
+    ↓ [Calcite Optimizer]
+Optimized RelNode
+    ↓ [OntologyRelToSqlConverter]
+SQL (物理数据库查询)
+    ↓ [JDBC Execution]
+QueryResult (结果集)
+```
+
+#### 关键组件
+
+1. **OntologyQuery DSL**
+   - GraphQL 风格的查询语言
+   - 支持 `object`、`select`、`filter`、`links`、`group_by`、`metrics` 等
+   - 完全基于 Ontology 概念，不涉及物理表名、列名
+
+2. **RelNodeBuilder**
+   - 将 OntologyQuery 转换为 Calcite RelNode（关系代数树）
+   - 处理 JOIN、Filter、Project、Aggregate、Sort、Limit 等操作
+   - 自动处理 LinkType 的 JOIN 逻辑
+
+3. **OntologySchemaFactory**
+   - 将 Ontology Schema 转换为 Calcite Schema
+   - 为每个 ObjectType 和 LinkType 创建 Calcite Table
+   - 处理属性名到列名的映射
+
+4. **JdbcOntologyTable**
+   - Calcite Table 实现，负责从 JDBC 数据源读取数据
+   - 处理 Ontology 属性名与数据库列名的映射
+   - 支持类型转换（如 TIMESTAMP → Long）
+
+5. **OntologyRelToSqlConverter**
+   - 自定义 SQL 转换器
+   - 将 Calcite 生成的 SQL 中的 Ontology 名称映射为数据库物理名称
+   - 处理表名、列名的引用
+
+### LinkType 映射模式
+
+系统支持两种 LinkType 映射模式，适应不同的数据库设计：
+
+#### 1. 外键模式 (Foreign Key Mode)
+
+**适用场景**：关系信息存储在目标表中（通过外键）
+
+**示例**：收费站 → 收费记录
+- 收费记录表（`toll_records`）包含 `station_id` 外键
+- LinkType 的 `table` 与目标表的 `table` 相同
+- JOIN 逻辑：`source_table JOIN target_table`（1 次 JOIN）
+
+**配置示例**：
+```yaml
+link_types:
+  - name: 拥有收费记录
+    source_type: 收费站
+    target_type: 收费记录
+    data_source:
+      table: toll_records  # 与目标表相同
+      source_id_column: station_id
+      target_id_column: record_id
+      # link_mode: foreign_key  # 可显式指定，或自动检测
+```
+
+#### 2. 关系表模式 (Relation Table Mode)
+
+**适用场景**：使用独立的中间表存储关系（多对多或需要关系属性）
+
+**示例**：车辆 → 通行介质
+- 独立的中间表（`vehicle_media`）存储关系
+- LinkType 的 `table` 是独立的中间表
+- JOIN 逻辑：`source_table JOIN link_table JOIN target_table`（2 次 JOIN）
+
+**配置示例**：
+```yaml
+link_types:
+  - name: 持有
+    source_type: 车辆
+    target_type: 通行介质
+    data_source:
+      table: vehicle_media  # 独立的中间表
+      source_id_column: vehicle_id
+      target_id_column: media_id
+      link_mode: relation_table  # 显式指定
+      field_mapping:
+        绑定时间: bind_time
+        绑定状态: bind_status
+    properties:
+      - name: 绑定时间
+        data_type: datetime
+      - name: 绑定状态
+        data_type: string
+```
+
+**自动检测机制**：
+- 如果 `link_type.table == target_type.table` → 外键模式
+- 否则 → 关系表模式
+- 可通过 `link_mode` 显式指定
+
+### 查询处理流程
+
+#### 1. 查询解析阶段
+
+```json
+{
+  "object": "收费站",
+  "links": [{"name": "拥有收费记录"}],
+  "filter": [
+    ["=", "省份", "江苏"],
+    ["between", "拥有收费记录.收费时间", "2024-01-01", "2024-01-31"]
+  ],
+  "group_by": ["名称"],
+  "metrics": [["sum", "拥有收费记录.金额", "总金额"]]
+}
+```
+
+**处理步骤**：
+1. `QueryParser` 解析 JSON 为 `OntologyQuery` 对象
+2. 验证对象类型、关系类型是否存在
+3. 解析字段路径（如 `拥有收费记录.收费时间`）
+
+#### 2. RelNode 构建阶段
+
+**操作顺序**：
+1. **TableScan**：扫描根对象表
+2. **JOIN**：根据 LinkType 映射模式构建 JOIN
+   - 外键模式：`source JOIN target`
+   - 关系表模式：`source JOIN link_table JOIN target`
+3. **Filter**：应用过滤条件（支持字段路径）
+4. **Aggregate**：处理分组和聚合（如果有）
+5. **Project**：选择输出字段
+6. **Sort**：排序（如果有）
+7. **Limit**：限制结果数量
+
+#### 3. SQL 生成阶段
+
+**转换过程**：
+1. Calcite 优化器优化 RelNode
+2. `OntologyRelToSqlConverter` 转换为 SQL
+3. 映射 Ontology 名称 → 数据库名称：
+   - 对象类型名 → 表名
+   - 属性名 → 列名（通过 `field_mapping`）
+4. 生成最终 SQL 并执行
+
+**生成的 SQL 示例**：
+```sql
+SELECT "收费站"."名称", SUM(CAST("收费记录"."金额" AS DOUBLE)) AS "总金额"
+FROM "收费站"
+LEFT JOIN "收费记录" ON "收费站"."id" = "收费记录"."station_id"
+WHERE "收费站"."省份" = '江苏' 
+  AND ("收费记录"."收费时间" >= TIMESTAMP '2024-01-01 00:00:00' 
+   AND "收费记录"."收费时间" <= TIMESTAMP '2024-01-31 00:00:00')
+GROUP BY "收费站"."名称"
+```
+
+## 技术架构
+
+### 技术栈
+
+**后端**：
+- **Java 17**：现代 Java 特性
+- **Spring Boot 3.2.0**：应用框架
+- **Apache Calcite 1.37.0**：查询优化引擎
+- **Jackson**：JSON/YAML 处理
+- **H2 Database**：本地测试数据库
+
+**前端**：
+- **React 18 + TypeScript**：现代化 UI 框架
+- **Vite**：快速构建工具
+- **Tailwind CSS**：实用优先的 CSS 框架
+- **React Router**：单页应用路由
+
+### 核心模块
+
+```
+src/main/java/com/mypalantir/
+├── meta/              # Ontology 元数据层
+│   ├── OntologySchema.java    # Schema 定义
+│   ├── ObjectType.java        # 对象类型
+│   ├── LinkType.java          # 关系类型
+│   ├── DataSourceMapping.java # 数据源映射
+│   ├── Parser.java            # YAML 解析器
+│   ├── Validator.java         # Schema 验证器
+│   └── Loader.java            # Schema 加载器
+│
+├── query/             # 查询引擎层
+│   ├── OntologyQuery.java              # 查询 DSL 定义
+│   ├── QueryParser.java                # 查询解析器
+│   ├── RelNodeBuilder.java             # RelNode 构建器
+│   ├── QueryExecutor.java              # 查询执行器
+│   ├── OntologyRelToSqlConverter.java  # SQL 转换器
+│   ├── FieldPathResolver.java          # 字段路径解析器
+│   └── schema/
+│       ├── OntologySchemaFactory.java  # Calcite Schema 工厂
+│       ├── JdbcOntologyTable.java      # JDBC Table 实现
+│       └── OntologyTable.java          # Table 基类
+│
+├── service/           # 业务逻辑层
+│   ├── QueryService.java      # 查询服务
+│   ├── SchemaService.java     # Schema 服务
+│   └── DataValidator.java     # 数据验证服务
+│
+├── controller/        # REST API 层
+│   ├── QueryController.java   # 查询 API
+│   └── SchemaController.java  # Schema API
+│
+└── config/            # 配置层
+    └── WebConfig.java          # Web 配置
+```
+
+### 数据流
+
+```
+用户查询 (JSON)
+    ↓
+QueryController
+    ↓
+QueryService
+    ↓
+QueryParser → OntologyQuery
+    ↓
+QueryExecutor
+    ├→ RelNodeBuilder → RelNode
+    ├→ OntologySchemaFactory → Calcite Schema
+    └→ OntologyRelToSqlConverter → SQL
+    ↓
+JDBC Execution
+    ↓
+QueryResult → JSON Response
+```
 
 ## 快速开始
 
-### 1. 克隆项目
+### 前置要求
+
+- **Java 17+**
+- **Maven 3.6+**
+- **Node.js 18+**（用于构建 Web UI）
+
+### 安装与运行
 
 ```bash
-git clone <repository-url>
-cd mypalantir-gs
-```
+# 1. 克隆项目
+git clone https://github.com/caochun/mypalantir.git
+cd mypalantir
 
-### 2. 安装依赖
-
-**后端：**
-```bash
+# 2. 构建后端
 mvn clean install
+
+# 3. 构建前端
+cd web && npm install && npm run build && cd ..
+
+# 4. 运行服务
+mvn spring-boot:run
 ```
 
-**Web UI：**
-```bash
-cd web
-npm install
-cd ..
-```
+访问 http://localhost:8080 查看 Web UI。
 
-### 3. 构建 Web UI
-
-```bash
-cd web
-npm run build
-cd ..
-```
-
-### 4. 配置
-
-#### 环境变量配置（数据库连接）
-
-在项目根目录创建 `.env` 文件（可选，如果不需要数据库集成功能可跳过）：
-
-```env
-DB_HOST=your_host
-DB_PORT=3306
-DB_NAME=your_database
-DB_USER=your_username
-DB_PASSWORD=your_password
-DB_TYPE=mysql
-```
-
-> **注意**：`.env` 文件包含敏感信息，不应提交到版本控制系统。项目已配置 `.gitignore` 忽略此文件。
-
-#### 应用配置
+### 配置
 
 编辑 `src/main/resources/application.properties`：
 
-**开发模式（推荐）：**
 ```properties
 server.port=8080
 schema.file.path=./ontology/schema.yaml
@@ -178,425 +344,60 @@ data.root.path=./data
 web.static.path=./web/dist
 ```
 
-**生产模式（打包到 JAR）：**
-```properties
-server.port=8080
-schema.file.path=./ontology/schema.yaml
-schema.system.file.path=./ontology/schema-system.yaml
-data.root.path=./data
-web.static.path=classpath:/static
-```
+## 查询示例
 
-> **注意**：生产模式下，Web UI 构建产物会在 Maven 构建时自动复制到 `target/classes/static/`，并打包到 JAR 文件中。
-
-### 5. 运行服务
-
-**方式一：使用启动脚本（推荐）**
-```bash
-./scripts/start.sh
-```
-
-**方式二：使用 Maven**
-```bash
-mvn spring-boot:run
-```
-
-**方式三：生产模式（打包到 JAR）**
-```bash
-# 构建 Web UI
-cd web && npm run build && cd ..
-
-# 修改配置为生产模式（可选，默认使用开发模式）
-# 编辑 src/main/resources/application.properties
-# 设置 web.static.path=classpath:/static
-
-# 构建并运行
-mvn clean package
-java -jar target/mypalantir-server-1.0.0.jar
-```
-
-服务启动后：
-- **Web 界面**：http://localhost:8080
-- **API 端点**：http://localhost:8080/api/v1
-- **健康检查**：http://localhost:8080/health
-
-> **注意**：Spring Boot 会自动提供 Web UI 静态文件，并支持 SPA 路由回退（所有非 API 请求返回 `index.html`）。
-
-### 6. 创建测试数据（可选）
-
-项目提供了测试数据创建脚本，可以快速创建示例数据：
-
-**使用 Python 脚本：**
-```bash
-python3 scripts/create_test_data.py
-```
-
-**使用 Bash 脚本：**
-```bash
-bash scripts/create_test_data.sh
-```
-
-这些脚本会创建完整的测试数据，包括：
-- 路段业主、收费公路、收费站等基础设施
-- 车辆、通行介质等业务对象
-- 交易流水、通行路径等业务数据
-- 各种关系连接
-
-## 开发模式
-
-开发时建议前后端分离运行，便于热重载：
-
-**终端 1 - 后端：**
-```bash
-mvn spring-boot:run
-```
-
-**终端 2 - Web UI：**
-```bash
-cd web
-npm run dev
-```
-
-Web UI 开发服务器在 `http://localhost:5173`，会自动代理 API 请求到后端。
-
-> **提示**：开发模式下，前端修改会实时热重载，后端修改需要重启 Spring Boot 应用。
-
-## API 端点
-
-### Schema API
-- `GET /api/v1/schema/object-types` - 列出所有对象类型
-- `GET /api/v1/schema/object-types/{name}` - 获取对象类型详情
-- `GET /api/v1/schema/object-types/{name}/properties` - 获取对象类型属性
-- `GET /api/v1/schema/object-types/{name}/outgoing-links` - 获取出边关系
-- `GET /api/v1/schema/object-types/{name}/incoming-links` - 获取入边关系
-- `GET /api/v1/schema/link-types` - 列出所有关系类型
-- `GET /api/v1/schema/link-types/{name}` - 获取关系类型详情
-
-### Instance API
-- `POST /api/v1/instances/{objectType}` - 创建实例
-- `GET /api/v1/instances/{objectType}` - 列出实例（支持多条件过滤）
-- `GET /api/v1/instances/{objectType}?mappingId={mappingId}` - 从映射数据源查询实例
-- `GET /api/v1/instances/{objectType}/{id}` - 获取实例详情
-- `PUT /api/v1/instances/{objectType}/{id}` - 更新实例
-- `DELETE /api/v1/instances/{objectType}/{id}` - 删除实例
-- `POST /api/v1/instances/{objectType}/batch` - 批量获取单个对象类型的实例
-- `POST /api/v1/instances/batch` - 批量获取多个对象类型的实例
-- `POST /api/v1/instances/{objectType}/sync-from-mapping/{mappingId}` - 从映射数据源同步抽取数据
-
-### Link API
-- `POST /api/v1/links/{linkType}` - 创建关系
-- `GET /api/v1/links/{linkType}` - 列出关系
-- `GET /api/v1/links/{linkType}/{id}` - 获取关系详情
-- `PUT /api/v1/links/{linkType}/{id}` - 更新关系
-- `DELETE /api/v1/links/{linkType}/{id}` - 删除关系
-- `POST /api/v1/links/{linkType}/sync` - 根据属性映射规则同步关系
-
-### Instance Link API
-- `GET /api/v1/instances/{objectType}/{id}/links/{linkType}` - 查询实例的关系
-- `GET /api/v1/instances/{objectType}/{id}/connected/{linkType}` - 查询关联的实例
-
-### Database API
-- `GET /api/v1/database/default-id` - 获取默认数据源 ID
-- `GET /api/v1/database/{databaseId}/tables` - 获取数据源的所有表
-- `GET /api/v1/database/{databaseId}/tables/{tableName}/columns` - 获取表的列信息
-- `GET /api/v1/database/{databaseId}/tables/{tableName}` - 获取表详细信息
-- `POST /api/v1/database/sync-tables?databaseId={databaseId}` - 同步表结构和列信息
-
-### Mapping API
-- `POST /api/v1/mappings` - 创建映射关系
-- `GET /api/v1/mappings/{mappingId}` - 获取映射详情
-- `PUT /api/v1/mappings/{mappingId}` - 更新映射
-- `DELETE /api/v1/mappings/{mappingId}` - 删除映射
-- `GET /api/v1/mappings/by-object-type/{objectType}` - 根据对象类型查询映射
-- `GET /api/v1/mappings/by-table/{tableId}` - 根据表查询映射
-
-### Query API
-- `POST /api/v1/query` - 执行 OntologyQuery 查询（支持 `from`、`select`、`where`、`links`、`orderBy`、`limit` 等）
-
-### Workspace API
-- `GET /api/v1/workspaces` - 列出所有工作空间
-- `GET /api/v1/workspaces/{id}` - 获取工作空间详情
-- `POST /api/v1/workspaces` - 创建工作空间
-- `PUT /api/v1/workspaces/{id}` - 更新工作空间
-- `DELETE /api/v1/workspaces/{id}` - 删除工作空间
-
-## 开发
-
-### 构建
-
-```bash
-mvn clean package
-```
-
-### 运行测试
-
-```bash
-mvn test
-```
-
-### 脚本工具
-
-项目提供了多个便捷脚本：
-
-- **`scripts/start.sh`** - 启动服务（自动检查并构建 Web UI）
-- **`scripts/create_test_data.sh`** - 创建测试数据（Bash 版本）
-- **`scripts/create_test_data.py`** - 创建测试数据（Python 版本）
-- **`scripts/test_api.sh`** - API 功能测试
-- **`scripts/quick_test.sh`** - 快速功能验证
-
-## 查询架构
-
-项目实现了基于 Apache Calcite 的查询引擎，支持通过 Ontology 概念查询外部数据库。
-
-### 核心流程
-
-```
-OntologyQuery (DSL) 
-  ↓
-QueryParser (解析 JSON/YAML)
-  ↓
-RelNodeBuilder (构建 Calcite RelNode)
-  ↓
-OntologySchemaFactory (创建 Calcite Schema)
-  ↓
-JdbcOntologyTable (映射到 JDBC 数据源)
-  ↓
-OntologyRelToSqlConverter (转换为 SQL，映射 Ontology 名称 → 数据库名称)
-  ↓
-QueryExecutor (执行查询，返回结果)
-```
-
-### 关键组件
-
-- **OntologyQuery**: GraphQL 风格的查询 DSL，支持 `from`、`select`、`where`、`links`、`orderBy`、`limit` 等
-- **RelNodeBuilder**: 将 OntologyQuery 直接构建为 Calcite RelNode（TableScan、Filter、Project、Join、Sort、Limit）
-- **OntologySchemaFactory**: 将 Ontology Schema 转换为 Calcite Schema，为每个配置了 `data_source` 的 ObjectType 和 LinkType 创建 Table
-- **JdbcOntologyTable**: Calcite Table 实现，负责从 JDBC 数据源读取数据，处理属性名到列名的映射
-- **OntologyRelToSqlConverter**: 自定义 SQL 转换器，在生成 SQL 时将 Ontology 概念名称映射为数据库物理名称
-- **QueryExecutor**: 查询执行器，协调整个查询流程
-
-### 数据源映射
-
-- **ObjectType**: 通过 `data_source` 配置映射到数据库表和列
-- **LinkType**: 通过中间表（如 `vehicle_media`）实现一对多关系，使用 `source_id_column` 和 `target_id_column` 建立关联
-- **Direction 验证**: 有向关系（directed）只能从源类型查询到目标类型
-
-### 查询示例
+### 基础查询
 
 ```json
 {
-  "from": "车辆",
-  "select": ["车牌号", "车辆类型"],
-  "where": {"车牌号": "苏A12345"},
-  "links": [{
-    "name": "持有",
-    "select": ["介质编号", "介质类型"]
-  }],
-  "orderBy": [{"field": "车牌号", "direction": "ASC"}],
+  "object": "车辆",
+  "select": ["车牌号", "车辆类型", "车主姓名"],
+  "filter": [["=", "车辆类型", "小型客车"]],
   "limit": 10
 }
 ```
 
-## 项目架构
+### 关联查询
 
-### 目录结构说明
-
-```
-mypalantir-gs/
-├── src/main/java/com/mypalantir/
-│   ├── config/          # 配置类
-│   │   ├── Config.java           # 应用配置
-│   │   ├── EnvConfig.java        # 环境变量加载（.env 文件）
-│   │   ├── DatabaseConfig.java   # 数据库连接配置
-│   │   ├── CorsConfig.java       # CORS 配置
-│   │   ├── JacksonConfig.java    # Jackson JSON 配置
-│   │   └── WebConfig.java        # Web MVC 配置（静态资源、SPA 路由）
-│   ├── controller/      # REST 控制器
-│   │   ├── SchemaController.java      # Schema 查询 API
-│   │   ├── InstanceController.java    # 实例 CRUD API
-│   │   ├── LinkController.java       # 关系 CRUD API
-│   │   ├── InstanceLinkController.java # 实例关系查询 API
-│   │   ├── DatabaseController.java    # 数据库操作 API
-│   │   ├── MappingController.java     # 映射管理 API
-│   │   └── QueryController.java       # 查询 API
-│   ├── meta/            # 元数据模型
-│   │   ├── OntologySchema.java   # Schema 根对象
-│   │   ├── ObjectType.java       # 对象类型
-│   │   ├── LinkType.java        # 关系类型（支持属性映射）
-│   │   ├── Property.java        # 属性定义
-│   │   ├── Parser.java          # YAML 解析器
-│   │   ├── Validator.java       # Schema 验证器
-│   │   └── Loader.java          # Schema 加载器（支持多 Schema 合并）
-│   ├── repository/      # 数据访问层
-│   │   ├── PathManager.java     # 路径管理
-│   │   ├── InstanceStorage.java # 实例存储
-│   │   └── LinkStorage.java     # 关系存储
-│   ├── service/         # 业务逻辑层
-│   │   ├── SchemaService.java   # Schema 服务
-│   │   ├── InstanceService.java # 实例服务
-│   │   ├── LinkService.java    # 关系服务
-│   │   └── DataValidator.java  # 数据验证服务
-│   └── MyPalantirApplication.java # Spring Boot 主类
-├── ontology/            # 元数据定义
-│   ├── schema-system.yaml  # 系统 Schema（workspace, database, table, column, mapping）
-│   └── schema.yaml      # 用户 Schema（业务对象和关系）
-├── web/                 # Web UI 源代码
-│   ├── src/
-│   │   ├── api/        # API 客户端
-│   │   ├── components/ # React 组件
-│   │   │   ├── Layout.tsx           # 主布局（包含侧边栏和工作空间选择器）
-│   │   │   ├── InstanceForm.tsx     # 实例表单
-│   │   │   ├── DataMappingDialog.tsx # 数据映射对话框
-│   │   │   └── WorkspaceDialog.tsx  # 工作空间对话框
-│   │   ├── pages/      # 页面组件
-│   │   │   ├── SchemaBrowser.tsx    # Schema 浏览器（图形化展示）
-│   │   │   ├── InstanceList.tsx     # 实例列表（支持多条件过滤）
-│   │   │   ├── InstanceDetail.tsx   # 实例详情
-│   │   │   ├── LinkList.tsx        # 关系列表（支持关系同步）
-│   │   │   ├── GraphView.tsx       # 实例关系图
-│   │   │   └── SchemaGraphView.tsx # Schema 关系图
-│   │   └── WorkspaceContext.tsx    # 工作空间上下文
-│   └── dist/            # 构建产物
-├── scripts/             # 脚本文件
-├── data/                # 实例数据（运行时生成）
-└── pom.xml              # Maven 配置
+```json
+{
+  "object": "车辆",
+  "select": ["车牌号"],
+  "links": [{
+    "name": "持有",
+    "select": ["介质编号", "介质类型", "绑定时间"]
+  }]
+}
 ```
 
-### 核心组件
+### 聚合查询
 
-1. **Meta（元数据）层**：负责加载和验证 YAML Schema 定义，支持系统 Schema 和用户 Schema 合并
-2. **Repository（存储）层**：文件系统存储实现，使用 JSON 格式
-3. **Query（查询）层**：基于 Apache Calcite 的查询执行引擎，支持 OntologyQuery DSL 查询语言
-4. **Service（服务）层**：业务逻辑，包括数据验证、数据库集成、数据映射、数据同步、关系同步和查询服务
-5. **Controller（控制器）层**：RESTful API 端点
-
-## 数据模型
-
-### Schema 架构
-
-项目使用双 Schema 架构：
-
-1. **系统 Schema** (`ontology/schema-system.yaml`)：包含系统内置对象和关系
-   - 对象类型：`workspace`（工作空间）、`database`（数据源）、`table`（数据表）、`column`（数据列）、`mapping`（映射关系）
-   - 关系类型：`database_has_table`、`table_has_column`、`mapping_links_table`
-
-2. **用户 Schema** (`ontology/schema.yaml`)：包含业务对象和关系
-   - 业务对象：如 `EntryTransaction`、`ExitTransaction`、`Path` 等
-   - 业务关系：如 `entry_to_path`、`exit_to_path`、`path_has_details` 等
-
-系统启动时会自动加载并合并两个 Schema，系统 Schema 优先（同名对象/关系会被系统版本覆盖）。
-
-### Schema 定义
-
-Schema 定义包括：
-- **对象类型（Object Types）**：定义业务对象及其属性
-- **关系类型（Link Types）**：定义对象之间的关系，支持属性映射（`property_mappings`）
-- **属性（Properties）**：包含数据类型、约束、验证规则
-
-### 关系属性映射
-
-关系类型支持 `property_mappings`，用于定义源对象和目标对象之间的属性匹配规则：
-
-```yaml
-link_types:
-  - name: entry_to_path
-    display_name: 入口交易关联路径
-    source_type: EntryTransaction
-    target_type: Path
-    property_mappings:
-      pass_id: pass_id
-      vlp: plate_num
-      vlpc: plate_color
+```json
+{
+  "object": "收费站",
+  "links": [{"name": "拥有收费记录"}],
+  "filter": [
+    ["=", "省份", "江苏"],
+    ["between", "拥有收费记录.收费时间", "2024-01-01", "2024-01-31"]
+  ],
+  "group_by": ["名称"],
+  "metrics": [["sum", "拥有收费记录.金额", "总金额"]]
+}
 ```
 
-这表示：当 `EntryTransaction.pass_id == Path.pass_id` 且 `EntryTransaction.vlp == Path.plate_num` 且 `EntryTransaction.vlpc == Path.plate_color` 时，可以建立关系。
+## 项目结构
 
-## 使用指南
-
-### 工作空间管理
-
-1. **创建工作空间**：在左侧导航栏点击工作空间下拉菜单，选择"创建工作空间"
-2. **添加对象和关系**：在创建工作空间时，勾选需要包含的对象类型和关系类型
-3. **切换工作空间**：在左侧导航栏顶部选择工作空间，界面会自动过滤显示
-4. **系统工作空间**：系统内置工作空间包含系统对象和关系，不可编辑
-
-### 数据库集成
-
-1. **配置数据源**：
-   - 在 Instances 页面选择 `database` 对象类型
-   - 创建新的数据源实例，填写数据库连接信息
-
-2. **同步表结构**：
-   - 在 `database` 对象类型的 Instances 页面
-   - 点击"同步表信息"按钮
-   - 系统会自动从数据库同步表（table）和列（column）信息，并创建相应的关系
-
-3. **建立数据映射**：
-   - 在业务对象类型（非系统对象）的 Instances 页面
-   - 点击"关联数据源"按钮
-   - 选择数据源和表
-   - 在 ER 图界面中手动连接表列和对象属性
-   - 保存映射关系
-
-4. **同步抽取数据**：
-   - 在业务对象类型的 Instances 页面
-   - 点击"同步抽取"按钮
-   - 选择已建立的映射关系
-   - 系统会根据映射关系从数据库抽取数据并创建实例
-
-### 关系同步
-
-1. **定义属性映射**：在 Schema 中为关系类型定义 `property_mappings`
-2. **同步关系**：
-   - 在 Links 页面选择关系类型
-   - 点击"同步关系"按钮
-   - 系统会根据属性映射规则自动创建关系
-
-### 多条件检索
-
-在 Instances 页面：
-1. 点击"Filter"按钮打开过滤面板
-2. 添加过滤条件（属性名和值）
-3. 系统会根据所有条件进行 AND 查询
-
-### 查询引擎使用
-
-1. **执行查询**：
-   - 使用 `POST /api/v1/query` 接口
-   - 传入 OntologyQuery JSON 格式的查询请求
-
-2. **查询语法**：
-   ```json
-   {
-     "from": "object_type_name",
-     "select": ["property1", "property2"],
-     "where": {
-       "property1": "value1"
-     },
-     "links": [
-       {
-         "name": "link_type_name",
-         "select": ["property1"]
-       }
-     ],
-     "orderBy": [{"field": "property1", "direction": "ASC"}],
-     "limit": 100
-   }
-   ```
-
-3. **查询结果**：
-   - 返回符合查询条件的实例列表
-   - 包含主对象和链接对象的属性
-
-### 血缘查询
-
-在 Instance Graph 界面：
-1. 选择查询模式：
-   - **直接关系**：只显示直接连接的节点
-   - **正向血缘**：从当前节点向后递归查询所有下游节点
-   - **反向血缘**：从当前节点向前递归查询所有上游节点
-   - **全链血缘**：从当前节点前后递归查询所有相关节点
-2. 系统会自动加载并显示相关节点和关系
+```
+mypalantir/
+├── ontology/              # Ontology 定义
+│   └── schema.yaml        # Schema 定义文件
+├── src/main/java/         # Java 源代码
+├── web/                   # React 前端
+│   ├── src/               # 源代码
+│   └── dist/              # 构建产物
+├── scripts/               # 工具脚本
+└── data/                  # 数据目录（运行时生成）
+```
 
 ## 许可证
 

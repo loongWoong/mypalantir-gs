@@ -78,10 +78,25 @@ public class OntologySchemaFactory {
             }
         }
         
-        // 为每个有 data_source 的 LinkType 创建中间表
+        // 为每个有 data_source 的 LinkType 创建中间表（仅限关系表模式）
         if (loader.getSchema() != null && loader.getSchema().getLinkTypes() != null) {
             for (LinkType linkType : loader.getSchema().getLinkTypes()) {
                 if (linkType.getDataSource() != null && linkType.getDataSource().isConfigured()) {
+                    // 获取目标 ObjectType 以判断映射模式
+                    ObjectType targetObjectType = null;
+                    try {
+                        targetObjectType = loader.getObjectType(linkType.getTargetType());
+                    } catch (Loader.NotFoundException e) {
+                        // 如果目标类型不存在，跳过
+                        continue;
+                    }
+                    
+                    // 外键模式：不需要创建中间表（目标表已存在）
+                    if (linkType.getDataSource().isForeignKeyMode(targetObjectType)) {
+                        continue;
+                    }
+                    
+                    // 关系表模式：创建中间表
                     // 使用表名作为 Schema 中的名称（而不是 link type 名称）
                     // 这样在 JOIN 时可以通过表名访问
                     String tableName = linkType.getDataSource().getTable();

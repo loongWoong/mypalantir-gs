@@ -93,7 +93,7 @@ public class InstanceService {
 
     public com.mypalantir.repository.InstanceStorage.ListResult listInstances(String objectType, int offset, int limit, Map<String, Object> filters) throws Loader.NotFoundException, IOException {
         ObjectType objectTypeDef = loader.getObjectType(objectType);
-        
+
         // 检查是否有数据源映射
         if (objectTypeDef.getDataSource() != null && objectTypeDef.getDataSource().isConfigured()) {
             // 使用查询 API 从数据库获取数据

@@ -60,6 +60,7 @@ export interface DataSourceMapping {
   id_column: string;
   source_id_column?: string;  // 用于 LinkType：源对象ID列
   target_id_column?: string;  // 用于 LinkType：目标对象ID列
+  link_mode?: string;  // LinkType 映射模式："foreign_key" 或 "relation_table"，null 表示自动检测
   field_mapping: Record<string, string>;
   configured?: boolean;  // 后端可能返回的配置状态字段
 }
@@ -337,11 +338,26 @@ export const mappingApi = {
 };
 
 // Query API
+export type FilterExpression = 
+  | ['=' | '>' | '<' | '>=' | '<=' | 'LIKE', string, any]  // 简单条件
+  | ['between', string, any, any]  // 范围条件
+  | ['and' | 'or', ...FilterExpression[]];  // 逻辑组合
+
+export interface Metric {
+  function: 'sum' | 'avg' | 'count' | 'min' | 'max';
+  field: string;  // 支持路径，如 "hasTollRecords.amount"
+  alias?: string;
+}
+
 export interface QueryRequest {
-  from: string;
+  object?: string;  // 新增：替代 from
+  from?: string;    // 保留：向后兼容
   select?: string[];
-  where?: Record<string, any>;
+  filter?: FilterExpression[];  // 新增：表达式过滤
+  where?: Record<string, any>;  // 保留：向后兼容
   links?: LinkQuery[];
+  group_by?: string[];  // 新增：分组
+  metrics?: Metric[];   // 新增：聚合指标
   orderBy?: OrderBy[];
   limit?: number;
   offset?: number;
@@ -349,8 +365,10 @@ export interface QueryRequest {
 
 export interface LinkQuery {
   name: string;
+  object?: string;  // 新增：明确指定目标对象类型
   select?: string[];
-  where?: Record<string, any>;
+  filter?: FilterExpression[];  // 新增：关联级别的过滤
+  where?: Record<string, any>;  // 保留：向后兼容
   links?: LinkQuery[];
 }
 

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import type { ObjectType, LinkType, QueryRequest, QueryResult } from '../api/client';
+import type { ObjectType, LinkType, QueryRequest, QueryResult, FilterExpression, Metric } from '../api/client';
 import { schemaApi, queryApi } from '../api/client';
 import { useWorkspace } from '../WorkspaceContext';
 import { 
@@ -11,11 +11,18 @@ import {
   TrashIcon
 } from '@heroicons/react/24/outline';
 
+interface FieldInfo {
+  path: string;
+  label: string;
+  type: string;
+}
+
 export default function QueryBuilder() {
   const { selectedWorkspace } = useWorkspace();
   const [objectTypes, setObjectTypes] = useState<ObjectType[]>([]);
   const [linkTypes, setLinkTypes] = useState<LinkType[]>([]);
   const [selectedObjectType, setSelectedObjectType] = useState<ObjectType | null>(null);
+  const [queryMode, setQueryMode] = useState<'simple' | 'aggregate'>('simple');
   const [query, setQuery] = useState<QueryRequest>({
     from: '',
     select: [],
@@ -25,6 +32,7 @@ export default function QueryBuilder() {
     limit: 20,
     offset: 0
   });
+  const [filterExpressions, setFilterExpressions] = useState<FilterExpression[]>([]);
   const [results, setResults] = useState<QueryResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [showJson, setShowJson] = useState(false);
@@ -42,24 +50,25 @@ export default function QueryBuilder() {
     : objectTypes;
 
   useEffect(() => {
-    if (query.from) {
-      const ot = filteredObjectTypes.find(o => o.name === query.from);
+if (query.from || query.object) {      const objectName = query.object || query.from;      const ot = filteredObjectTypes.find(o => o.name === objectName);
       setSelectedObjectType(ot || null);
     } else {
       setSelectedObjectType(null);
     }
-  }, [query.from, filteredObjectTypes]);
+  }, [query.from, query.object, filteredObjectTypes]);
 
   useEffect(() => {
-    // 更新 query.where 基于 whereConditions
-    const where: Record<string, any> = {};
-    whereConditions.forEach(cond => {
-      if (cond.field && cond.value) {
-        where[cond.field] = cond.value;
-      }
-    });
-    setQuery(prev => ({ ...prev, where }));
-  }, [whereConditions]);
+    // 更新 query.where 基于 whereConditions（仅用于简单模式）
+    if (queryMode === 'simple') {
+      const where: Record<string, any> = {};
+      whereConditions.forEach(cond => {
+        if (cond.field && cond.value) {
+          where[cond.field] = cond.value;
+        }
+      });
+      setQuery(prev => ({ ...prev, where }));
+    }
+  }, [whereConditions, queryMode]);
 
   const loadSchema = async () => {
     try {
@@ -74,20 +83,99 @@ export default function QueryBuilder() {
     }
   };
 
+  // 获取可用字段（包括根对象和关联对象的属性）
+  const getAvailableFields = (): FieldInfo[] => {
+    const fields: FieldInfo[] = [];
+    
+    // 根对象的属�?
+    selectedObjectType?.properties.forEach(prop => {
+      fields.push({ path: prop.name, label: prop.name, type: prop.data_type });
+    });
+    
+    // 关联对象的属�?
+    query.links?.forEach(link => {
+      const targetType = getLinkTargetType(link.name);
+      targetType?.properties.forEach(prop => {
+        fields.push({ 
+          path: `${link.name}.${prop.name}`, 
+          label: `${link.name}.${prop.name}`, 
+          type: prop.data_type 
+        });
+      });
+    });
+    
+    return fields;
+  };
+
   const executeQuery = async () => {
-    if (!query.from) {
+    const objectName = query.object || query.from;
+    if (!objectName) {
       setError('请选择对象类型');
       return;
     }
-    if (!query.select || query.select.length === 0) {
-      setError('请至少选择一个属性');
-      return;
+    
+    if (queryMode === 'simple') {
+      if (!query.select || query.select.length === 0) {
+        setError('请至少选择一个属�?);
+        return;
+      }
+    } else {
+      // 聚合查询需�?group_by �?metrics
+      if ((!query.group_by || query.group_by.length === 0) && 
+          (!query.metrics || query.metrics.length === 0)) {
+        setError('聚合查询需要至少一个分组属性或聚合指标');
+        return;
+      }
     }
 
     setLoading(true);
     setError(null);
     try {
-      const result = await queryApi.execute(query);
+      // 构建查询对象
+      const queryPayload: any = {
+        object: objectName,
+        links: query.links?.map(link => {
+          const targetType = getLinkTargetType(link.name);
+          return {
+            name: link.name,
+            object: targetType?.name,
+            select: link.select
+          };
+        }),
+      };
+
+      if (queryMode === 'aggregate') {
+        // 聚合查询
+        queryPayload.group_by = query.group_by || [];
+        // �?Metric 对象转换为数组格式：["sum", "field", "alias"]
+        queryPayload.metrics = query.metrics?.map((metric: Metric) => {
+          const arr: any[] = [metric.function, metric.field];
+          if (metric.alias) {
+            arr.push(metric.alias);
+          }
+          return arr;
+        }) || [];
+      } else {
+        // 普通查�?
+        queryPayload.select = query.select || [];
+      }
+
+      // 过滤条件
+      if (filterExpressions.length > 0) {
+        queryPayload.filter = filterExpressions;
+      } else if (Object.keys(query.where || {}).length > 0) {
+        // 向后兼容旧的 where 格式
+        queryPayload.where = query.where;
+      }
+
+      // 排序和分�?
+      if (query.orderBy && query.orderBy.length > 0) {
+        queryPayload.orderBy = query.orderBy;
+      }
+      queryPayload.limit = query.limit;
+      queryPayload.offset = query.offset;
+
+      const result = await queryApi.execute(queryPayload);
       setResults(result);
     } catch (err: any) {
       setError(err.response?.data?.message || err.message || '查询执行失败');
@@ -111,12 +199,26 @@ export default function QueryBuilder() {
     setWhereConditions(updated);
   };
 
+  // 过滤表达式相关函�?
+  const addFilterExpression = () => {
+    setFilterExpressions([...filterExpressions, ['=', '', ''] as FilterExpression]);
+  };
+
+  const removeFilterExpression = (index: number) => {
+    setFilterExpressions(filterExpressions.filter((_, i) => i !== index));
+  };
+
+  const updateFilterExpression = (index: number, expr: FilterExpression) => {
+    const updated = [...filterExpressions];
+    updated[index] = expr;
+    setFilterExpressions(updated);
+  };
+
   const addLink = () => {
-    const availableLinks = linkTypes.filter(lt => 
-      lt.source_type === query.from || lt.target_type === query.from
-    );
+    const objectName = query.object || query.from || '';
+    const availableLinks = getAvailableLinks(objectName);
     if (availableLinks.length === 0) {
-      setError('当前对象类型没有可用的关联类型');
+      setError('当前对象类型没有可用的关联类�?);
       return;
     }
     setQuery(prev => ({
@@ -171,8 +273,56 @@ export default function QueryBuilder() {
     });
   };
 
+  // 聚合指标相关函数
+  const addMetric = () => {
+    setQuery(prev => ({
+      ...prev,
+      metrics: [...(prev.metrics || []), { function: 'sum', field: '', alias: '' }]
+    }));
+  };
+
+  const removeMetric = (index: number) => {
+    setQuery(prev => ({
+      ...prev,
+      metrics: (prev.metrics || []).filter((_, i) => i !== index)
+    }));
+  };
+
+  const updateMetric = (index: number, func: string, field: string, alias: string) => {
+    setQuery(prev => {
+      const metrics = [...(prev.metrics || [])];
+      metrics[index] = { 
+        function: func as 'sum' | 'avg' | 'count' | 'min' | 'max', 
+        field, 
+        alias: alias || undefined 
+      };
+      return { ...prev, metrics };
+    });
+  };
+
   const copyQueryJson = () => {
-    navigator.clipboard.writeText(JSON.stringify(query, null, 2));
+    const queryPayload: any = {
+      object: query.object || query.from,
+      links: query.links,
+      filter: filterExpressions.length > 0 ? filterExpressions : undefined,
+      where: Object.keys(query.where || {}).length > 0 ? query.where : undefined,
+      group_by: query.group_by,
+      select: query.select,
+      orderBy: query.orderBy,
+      limit: query.limit,
+      offset: query.offset
+    };
+    // �?Metric 对象转换为数组格式用�?JSON 预览
+    if (query.metrics && query.metrics.length > 0) {
+      queryPayload.metrics = query.metrics.map((metric: Metric) => {
+        const arr: any[] = [metric.function, metric.field];
+        if (metric.alias) {
+          arr.push(metric.alias);
+        }
+        return arr;
+      });
+    }
+    navigator.clipboard.writeText(JSON.stringify(queryPayload, null, 2));
   };
 
   const exportResults = () => {
@@ -189,37 +339,42 @@ export default function QueryBuilder() {
 
   const getAvailableLinks = (objectTypeName: string) => {
     return linkTypes.filter(lt => {
-      // 如果是 directed（有向），只有当 objectTypeName 是 source_type 时才能作为关联查询
+      // 如果�?directed（有向），只有当 objectTypeName �?source_type 时才能作为关联查�?
       if (lt.direction === 'directed') {
         return lt.source_type === objectTypeName;
       }
-      // 如果是 undirected（无向），objectTypeName 可以是 source_type 或 target_type
+      // 如果�?undirected（无向），objectTypeName 可以�?source_type �?target_type
       return lt.source_type === objectTypeName || lt.target_type === objectTypeName;
     });
   };
 
   const getLinkTargetType = (linkTypeName: string) => {
     const linkType = linkTypes.find(lt => lt.name === linkTypeName);
-    if (!linkType || !query.from) return null;
+    const objectName = query.object || query.from;
+    if (!linkType || !objectName) return null;
     
-    // 如果是 directed（有向），只能从 source 到 target
+    // 如果�?directed（有向），只能从 source �?target
     if (linkType.direction === 'directed') {
-      if (linkType.source_type === query.from) {
+      if (linkType.source_type === objectName) {
         return objectTypes.find(ot => ot.name === linkType.target_type);
       }
       // directed link 不能反向查询
       return null;
     }
     
-    // 如果是 undirected（无向），可以从 source 到 target，也可以从 target 到 source
-    if (linkType.source_type === query.from) {
+    // 如果�?undirected（无向），可以从 source �?target，也可以�?target �?source
+    if (linkType.source_type === objectName) {
       return objectTypes.find(ot => ot.name === linkType.target_type);
     }
-    if (linkType.target_type === query.from) {
+    if (linkType.target_type === objectName) {
       return objectTypes.find(ot => ot.name === linkType.source_type);
     }
     
     return null;
+  };
+
+  const isNumericType = (type: string): boolean => {
+    return ['number', 'integer', 'float', 'double', 'decimal', 'bigint'].includes(type.toLowerCase());
   };
 
   return (
@@ -227,7 +382,42 @@ export default function QueryBuilder() {
       {/* 左侧：查询构建器 */}
       <div className="w-1/2 border-r border-gray-200 overflow-y-auto p-6">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-bold text-gray-900">查询构建器</h2>
+          <h2 className="text-xl font-bold text-gray-900">查询构建�?/h2>
+        </div>
+
+        {/* 查询模式切换 */}
+        <div className="mb-6">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            查询模式
+          </label>
+          <div className="flex gap-4">
+            <label className="flex items-center cursor-pointer">
+              <input
+                type="radio"
+                value="simple"
+                checked={queryMode === 'simple'}
+                onChange={() => {
+                  setQueryMode('simple');
+                  setQuery(prev => ({ ...prev, group_by: undefined, metrics: undefined }));
+                }}
+                className="mr-2"
+              />
+              <span className="text-sm">普通查�?/span>
+            </label>
+            <label className="flex items-center cursor-pointer">
+              <input
+                type="radio"
+                value="aggregate"
+                checked={queryMode === 'aggregate'}
+                onChange={() => {
+                  setQueryMode('aggregate');
+                  setQuery(prev => ({ ...prev, select: [] }));
+                }}
+                className="mr-2"
+              />
+              <span className="text-sm">聚合查询</span>
+            </label>
+          </div>
         </div>
 
         {/* 对象类型选择 */}
@@ -236,10 +426,11 @@ export default function QueryBuilder() {
             对象类型 <span className="text-red-500">*</span>
           </label>
           <select
-            value={query.from}
+            value={query.object || query.from}
             onChange={(e) => {
-              setQuery({ ...query, from: e.target.value, select: [] });
+              setQuery({ ...query, object: e.target.value, from: e.target.value, select: [] });
               setWhereConditions([]);
+              setFilterExpressions([]);
             }}
             className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
@@ -250,11 +441,11 @@ export default function QueryBuilder() {
           </select>
         </div>
 
-        {/* 属性选择 */}
-        {selectedObjectType && (
+        {/* 属性选择（仅普通查询模式） */}
+        {queryMode === 'simple' && selectedObjectType && (
           <div className="mb-6">
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              选择属性 <span className="text-red-500">*</span>
+              选择属�?<span className="text-red-500">*</span>
             </label>
             <div className="space-y-2 border border-gray-300 rounded-lg p-3 max-h-48 overflow-y-auto bg-white">
               {selectedObjectType.properties.map(prop => (
@@ -279,66 +470,13 @@ export default function QueryBuilder() {
           </div>
         )}
 
-        {/* WHERE 条件 */}
-        <div className="mb-6">
-          <div className="flex items-center justify-between mb-2">
-            <label className="block text-sm font-medium text-gray-700">查询条件</label>
-            <button
-              onClick={addWhereCondition}
-              className="text-sm text-blue-600 hover:text-blue-800 flex items-center"
-            >
-              <PlusIcon className="w-4 h-4 mr-1" />
-              添加条件
-            </button>
-          </div>
-          <div className="space-y-2">
-            {whereConditions.map((cond, index) => (
-              <div key={index} className="flex gap-2 items-center">
-                <select
-                  value={cond.field}
-                  onChange={(e) => updateWhereCondition(index, e.target.value, cond.operator, cond.value)}
-                  className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm"
-                >
-                  <option value="">选择属性...</option>
-                  {selectedObjectType?.properties.map(prop => (
-                    <option key={prop.name} value={prop.name}>{prop.name}</option>
-                  ))}
-                </select>
-                <select
-                  value={cond.operator}
-                  onChange={(e) => updateWhereCondition(index, cond.field, e.target.value, cond.value)}
-                  className="border border-gray-300 rounded px-2 py-1 text-sm"
-                >
-                  <option value="=">=</option>
-                  <option value=">">&gt;</option>
-                  <option value="<">&lt;</option>
-                  <option value="LIKE">LIKE</option>
-                </select>
-                <input
-                  type="text"
-                  value={cond.value}
-                  onChange={(e) => updateWhereCondition(index, cond.field, cond.operator, e.target.value)}
-                  placeholder="值"
-                  className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm"
-                />
-                <button
-                  onClick={() => removeWhereCondition(index)}
-                  className="text-red-600 hover:text-red-800"
-                >
-                  <TrashIcon className="w-4 h-4" />
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-
         {/* 关联查询 */}
         <div className="mb-6">
           <div className="flex items-center justify-between mb-2">
             <label className="block text-sm font-medium text-gray-700">关联查询</label>
             <button
               onClick={addLink}
-              disabled={!query.from}
+              disabled={!query.object && !query.from}
               className="text-sm text-blue-600 hover:text-blue-800 flex items-center disabled:text-gray-400"
             >
               <PlusIcon className="w-4 h-4 mr-1" />
@@ -356,7 +494,6 @@ export default function QueryBuilder() {
                       onChange={(e) => {
                         setQuery(prev => {
                           const links = [...(prev.links || [])];
-                          // 当关联类型改变时，清空已选择的属性
                           links[linkIndex] = { ...links[linkIndex], name: e.target.value, select: [] };
                           return { ...prev, links };
                         });
@@ -364,7 +501,7 @@ export default function QueryBuilder() {
                       className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm mr-2"
                     >
                       <option value="">选择关联类型...</option>
-                      {getAvailableLinks(query.from).map(lt => (
+                      {getAvailableLinks(query.object || query.from || '').map(lt => (
                         <option key={lt.name} value={lt.name}>{lt.name}</option>
                       ))}
                     </select>
@@ -375,9 +512,9 @@ export default function QueryBuilder() {
                       <TrashIcon className="w-4 h-4" />
                     </button>
                   </div>
-                  {targetType && (
+                  {targetType && queryMode === 'simple' && (
                     <div className="mt-2 space-y-1">
-                      <label className="text-xs text-gray-600">选择属性:</label>
+                      <label className="text-xs text-gray-600">选择属�?</label>
                       <div className="space-y-1 max-h-32 overflow-y-auto">
                         {targetType.properties.map(prop => (
                           <label key={prop.name} className="flex items-center cursor-pointer hover:bg-white p-1 rounded">
@@ -399,7 +536,248 @@ export default function QueryBuilder() {
           </div>
         </div>
 
-        {/* 排序和分页 */}
+        {/* 查询条件 */}
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-2">
+            <label className="block text-sm font-medium text-gray-700">查询条件</label>
+            {queryMode === 'simple' ? (
+              <button
+                onClick={addWhereCondition}
+                className="text-sm text-blue-600 hover:text-blue-800 flex items-center"
+              >
+                <PlusIcon className="w-4 h-4 mr-1" />
+                添加条件
+              </button>
+            ) : (
+              <button
+                onClick={addFilterExpression}
+                className="text-sm text-blue-600 hover:text-blue-800 flex items-center"
+              >
+                <PlusIcon className="w-4 h-4 mr-1" />
+                添加条件
+              </button>
+            )}
+          </div>
+          
+          {queryMode === 'simple' ? (
+            // 简单模式的过滤条件
+            <div className="space-y-2">
+              {whereConditions.map((cond, index) => (
+                <div key={index} className="flex gap-2 items-center">
+                  <select
+                    value={cond.field}
+                    onChange={(e) => updateWhereCondition(index, e.target.value, cond.operator, cond.value)}
+                    className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm"
+                  >
+                    <option value="">选择属�?..</option>
+                    {selectedObjectType?.properties.map(prop => (
+                      <option key={prop.name} value={prop.name}>{prop.name}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={cond.operator}
+                    onChange={(e) => updateWhereCondition(index, cond.field, e.target.value, cond.value)}
+                    className="border border-gray-300 rounded px-2 py-1 text-sm"
+                  >
+                    <option value="=">=</option>
+                    <option value=">">&gt;</option>
+                    <option value="<">&lt;</option>
+                    <option value=">=">&gt;=</option>
+                    <option value="<=">&lt;=</option>
+                    <option value="LIKE">LIKE</option>
+                  </select>
+                  <input
+                    type="text"
+                    value={cond.value}
+                    onChange={(e) => updateWhereCondition(index, cond.field, cond.operator, e.target.value)}
+                    placeholder="�?
+                    className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm"
+                  />
+                  <button
+                    onClick={() => removeWhereCondition(index)}
+                    className="text-red-600 hover:text-red-800"
+                  >
+                    <TrashIcon className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            // 聚合模式的过滤表达式
+            <div className="space-y-2">
+              {filterExpressions.map((expr, index) => {
+                const operator = expr[0];
+                const fieldPath = expr[1] as string;
+                const value1 = expr[2];
+                const value2 = expr.length > 3 ? expr[3] : undefined;
+                
+                return (
+                  <div key={index} className="flex gap-2 items-center border border-gray-300 rounded p-2 bg-white">
+                    <select
+                      value={operator}
+                      onChange={(e) => {
+                        const newOp = e.target.value;
+                        if (newOp === 'between') {
+                          updateFilterExpression(index, [newOp as any, fieldPath, value1 || '', value2 || ''] as FilterExpression);
+                        } else {
+                          updateFilterExpression(index, [newOp as any, fieldPath, value1 || ''] as FilterExpression);
+                        }
+                      }}
+                      className="border border-gray-300 rounded px-2 py-1 text-sm"
+                    >
+                      <option value="=">=</option>
+                      <option value=">">&gt;</option>
+                      <option value="<">&lt;</option>
+                      <option value=">=">&gt;=</option>
+                      <option value="<=">&lt;=</option>
+                      <option value="between">BETWEEN</option>
+                      <option value="LIKE">LIKE</option>
+                    </select>
+                    <select
+                      value={fieldPath}
+                      onChange={(e) => {
+                        if (operator === 'between') {
+                          updateFilterExpression(index, [operator as any, e.target.value, value1 || '', value2 || ''] as FilterExpression);
+                        } else {
+                          updateFilterExpression(index, [operator as any, e.target.value, value1 || ''] as FilterExpression);
+                        }
+                      }}
+                      className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm"
+                    >
+                      <option value="">选择属�?..</option>
+                      {getAvailableFields().map(field => (
+                        <option key={field.path} value={field.path}>{field.label}</option>
+                      ))}
+                    </select>
+                    {operator === 'between' ? (
+                      <>
+                        <input
+                          type="text"
+                          value={value1 || ''}
+                          onChange={(e) => updateFilterExpression(index, [operator as any, fieldPath, e.target.value, value2 || ''] as FilterExpression)}
+                          placeholder="起始�?
+                          className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm"
+                        />
+                        <span className="text-sm text-gray-500">�?/span>
+                        <input
+                          type="text"
+                          value={value2 || ''}
+                          onChange={(e) => updateFilterExpression(index, [operator as any, fieldPath, value1 || '', e.target.value] as FilterExpression)}
+                          placeholder="结束�?
+                          className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm"
+                        />
+                      </>
+                    ) : (
+                      <input
+                        type="text"
+                        value={value1 || ''}
+                        onChange={(e) => updateFilterExpression(index, [operator as any, fieldPath, e.target.value] as FilterExpression)}
+                        placeholder="�?
+                        className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm"
+                      />
+                    )}
+                    <button
+                      onClick={() => removeFilterExpression(index)}
+                      className="text-red-600 hover:text-red-800"
+                    >
+                      <TrashIcon className="w-4 h-4" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* 分组功能（仅聚合查询模式�?*/}
+        {queryMode === 'aggregate' && (
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              分组属�?
+            </label>
+            <div className="space-y-2 border border-gray-300 rounded-lg p-3 max-h-48 overflow-y-auto bg-white">
+              {getAvailableFields().map(field => (
+                <label key={field.path} className="flex items-center cursor-pointer hover:bg-gray-50 p-1 rounded">
+                  <input
+                    type="checkbox"
+                    checked={query.group_by?.includes(field.path) || false}
+                    onChange={(e) => {
+                      const groupBy = query.group_by || [];
+                      if (e.target.checked) {
+                        setQuery({ ...query, group_by: [...groupBy, field.path] });
+                      } else {
+                        setQuery({ ...query, group_by: groupBy.filter(g => g !== field.path) });
+                      }
+                    }}
+                    className="mr-2"
+                  />
+                  <span className="text-sm text-gray-900">{field.label}</span>
+                  <span className="text-xs text-gray-500 ml-2">({field.type})</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* 聚合指标（仅聚合查询模式�?*/}
+        {queryMode === 'aggregate' && (
+          <div className="mb-6">
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-sm font-medium text-gray-700">聚合指标</label>
+              <button
+                onClick={addMetric}
+                className="text-sm text-blue-600 hover:text-blue-800 flex items-center"
+              >
+                <PlusIcon className="w-4 h-4 mr-1" />
+                添加指标
+              </button>
+            </div>
+            <div className="space-y-2">
+              {query.metrics?.map((metric, index) => (
+                <div key={index} className="flex gap-2 items-center border border-gray-300 rounded p-2 bg-white">
+                  <select
+                    value={metric.function}
+                    onChange={(e) => updateMetric(index, e.target.value, metric.field, metric.alias || '')}
+                    className="border border-gray-300 rounded px-2 py-1 text-sm"
+                  >
+                    <option value="sum">SUM</option>
+                    <option value="avg">AVG</option>
+                    <option value="count">COUNT</option>
+                    <option value="min">MIN</option>
+                    <option value="max">MAX</option>
+                  </select>
+                  <select
+                    value={metric.field}
+                    onChange={(e) => updateMetric(index, metric.function, e.target.value, metric.alias || '')}
+                    className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm"
+                  >
+                    <option value="">选择属�?..</option>
+                    {getAvailableFields()
+                      .filter(f => metric.function === 'count' || isNumericType(f.type))
+                      .map(field => (
+                        <option key={field.path} value={field.path}>{field.label}</option>
+                      ))}
+                  </select>
+                  <input
+                    type="text"
+                    placeholder="别名（可选）"
+                    value={metric.alias || ''}
+                    onChange={(e) => updateMetric(index, metric.function, metric.field, e.target.value)}
+                    className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm"
+                  />
+                  <button
+                    onClick={() => removeMetric(index)}
+                    className="text-red-600 hover:text-red-800"
+                  >
+                    <TrashIcon className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* 排序和分�?*/}
         <div className="mb-6">
           <label className="block text-sm font-medium text-gray-700 mb-2">排序</label>
           <div className="space-y-2">
@@ -410,9 +788,9 @@ export default function QueryBuilder() {
                   onChange={(e) => updateOrderBy(index, e.target.value, order.direction)}
                   className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm"
                 >
-                  <option value="">选择属性...</option>
-                  {selectedObjectType?.properties.map(prop => (
-                    <option key={prop.name} value={prop.name}>{prop.name}</option>
+                  <option value="">选择属�?..</option>
+                  {getAvailableFields().map(field => (
+                    <option key={field.path} value={field.path}>{field.label}</option>
                   ))}
                 </select>
                 <select
@@ -453,7 +831,7 @@ export default function QueryBuilder() {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">偏移量</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">偏移�?/label>
             <input
               type="number"
               value={query.offset || 0}
@@ -488,11 +866,44 @@ export default function QueryBuilder() {
             <textarea
               className="w-full font-mono text-xs p-2 border border-gray-300 rounded"
               rows={10}
-              value={JSON.stringify(query, null, 2)}
+              value={JSON.stringify({
+                object: query.object || query.from,
+                links: query.links,
+                filter: filterExpressions.length > 0 ? filterExpressions : undefined,
+                where: Object.keys(query.where || {}).length > 0 ? query.where : undefined,
+                group_by: query.group_by,
+                metrics: query.metrics?.map((metric: Metric) => {
+                  const arr: any[] = [metric.function, metric.field];
+                  if (metric.alias) {
+                    arr.push(metric.alias);
+                  }
+                  return arr;
+                }),
+                select: query.select,
+                orderBy: query.orderBy,
+                limit: query.limit,
+                offset: query.offset
+              }, null, 2)}
               onChange={(e) => {
                 try {
                   const parsed = JSON.parse(e.target.value);
+                  // 如果 metrics 是数组格式，转换为对象格�?
+                  if (parsed.metrics && Array.isArray(parsed.metrics)) {
+                    parsed.metrics = parsed.metrics.map((m: any) => {
+                      if (Array.isArray(m)) {
+                        return {
+                          function: m[0],
+                          field: m[1],
+                          alias: m.length > 2 ? m[2] : undefined
+                        };
+                      }
+                      return m;
+                    });
+                  }
                   setQuery(parsed);
+                  if (parsed.filter) {
+                    setFilterExpressions(parsed.filter);
+                  }
                 } catch (err) {
                   // 忽略无效 JSON
                 }
@@ -511,13 +922,15 @@ export default function QueryBuilder() {
         {/* 执行按钮 */}
         <button
           onClick={executeQuery}
-          disabled={loading || !query.from || !query.select || query.select.length === 0}
+          disabled={loading || !query.object && !query.from || 
+            (queryMode === 'simple' && (!query.select || query.select.length === 0)) ||
+            (queryMode === 'aggregate' && (!query.group_by || query.group_by.length === 0) && (!query.metrics || query.metrics.length === 0))}
           className="w-full flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
         >
           {loading ? (
             <>
               <ArrowPathIcon className="w-5 h-5 animate-spin mr-2" />
-              执行中...
+              执行�?..
             </>
           ) : (
             <>
@@ -528,7 +941,7 @@ export default function QueryBuilder() {
         </button>
       </div>
 
-      {/* 右侧：查询结果 */}
+      {/* 右侧：查询结�?*/}
       <div className="w-1/2 overflow-y-auto p-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold text-gray-900">查询结果</h2>
@@ -554,7 +967,7 @@ export default function QueryBuilder() {
         {results ? (
           <div>
             <div className="mb-4 text-sm text-gray-600">
-              共 {results.rowCount} 条结果
+              �?{results.rowCount} 条结�?
             </div>
             {viewMode === 'table' ? (
               <div className="overflow-x-auto">
@@ -566,7 +979,7 @@ export default function QueryBuilder() {
                           key={col}
                           className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
                         >
-                          {col}
+                          {col.startsWith('$f') ? `聚合结果 ${col}` : col}
                         </th>
                       ))}
                     </tr>
@@ -603,4 +1016,3 @@ export default function QueryBuilder() {
     </div>
   );
 }
-

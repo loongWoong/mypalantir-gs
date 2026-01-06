@@ -19,6 +19,7 @@ export default function SchemaBrowser() {
   const [selectedObjectType, setSelectedObjectType] = useState<ObjectType | null>(null);
   const [selectedLinkType, setSelectedLinkType] = useState<LinkType | null>(null);
   const [activeTab, setActiveTab] = useState<'properties' | 'datasource'>('properties');
+  const [linkTypeActiveTab, setLinkTypeActiveTab] = useState<'properties' | 'datasource'>('properties');
   const [loading, setLoading] = useState(true);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string; metadata?: Record<string, string> } | null>(null);
@@ -80,6 +81,12 @@ export default function SchemaBrowser() {
     setMappingData([]);
   }, [selectedObjectType?.name]);
 
+  // 当选择的关系类型改变时，重置 Tab
+  useEffect(() => {
+    setLinkTypeActiveTab('properties');
+    setTestResult(null);
+  }, [selectedLinkType?.name]);
+
   // 当切换到 Data Source 页签时，加载 mapping 信息
   useEffect(() => {
     if (activeTab === 'datasource' && selectedObjectType) {
@@ -130,6 +137,16 @@ export default function SchemaBrowser() {
       setMappingData([]);
     } finally {
       setMappingLoading(false);
+    }
+  };
+
+  // 获取数据源配置
+  const getDataSourceConfig = async (connectionId: string) => {
+    try {
+      return await schemaApi.getDataSource(connectionId);
+    } catch (error) {
+      console.error(`Failed to load data source config ${connectionId}:`, error);
+      return null;
     }
   };
 
@@ -225,6 +242,36 @@ export default function SchemaBrowser() {
               )}
             </div>
 
+            {/* Tab 切换 */}
+            <div className="border-b border-gray-200 mb-4">
+              <nav className="flex space-x-4">
+                <button
+                  onClick={() => setLinkTypeActiveTab('properties')}
+                  className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                    linkTypeActiveTab === 'properties'
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  Properties
+                </button>
+                <button
+                  onClick={() => setLinkTypeActiveTab('datasource')}
+                  className={`py-2 px-1 border-b-2 font-medium text-sm flex items-center ${
+                    linkTypeActiveTab === 'datasource'
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  <ServerIcon className="w-4 h-4 mr-1" />
+                  Data Source
+                </button>
+              </nav>
+            </div>
+
+            {/* Tab 内容 */}
+            {linkTypeActiveTab === 'properties' ? (
+              <>
             {/* 图形化展示属性映射关系 */}
             {selectedLinkType.property_mappings && Object.keys(selectedLinkType.property_mappings).length > 0 && (
               <div className="mb-6">
@@ -438,6 +485,170 @@ export default function SchemaBrowser() {
                 <InformationCircleIcon className="w-8 h-8 mx-auto mb-2" />
                 <p className="text-sm">该关系类型未定义属性映射规则</p>
                 <p className="text-xs text-yellow-500 mt-1">无法自动同步关系</p>
+              </div>
+            )}
+              </>
+            ) : (
+              <div className="mb-4">
+                {selectedLinkType.data_source ? (
+                  <div className="space-y-4">
+                    {/* 数据源配置信息 */}
+                    <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="font-semibold text-gray-900 flex items-center">
+                          <ServerIcon className="w-5 h-5 mr-2 text-blue-600" />
+                          Data Source Configuration
+                        </h4>
+                        <button
+                          onClick={async () => {
+                            const dsConfig = await getDataSourceConfig(selectedLinkType.data_source!.connection_id);
+                            if (dsConfig) {
+                              handleTestConnection(selectedLinkType.data_source!.connection_id);
+                            }
+                          }}
+                          disabled={testing}
+                          className={`flex items-center px-3 py-1 text-sm rounded-lg font-medium transition-colors ${
+                            testing
+                              ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                              : 'bg-green-600 text-white hover:bg-green-700'
+                          }`}
+                        >
+                          {testing ? (
+                            <>
+                              <ArrowPathIcon className="w-4 h-4 mr-1 animate-spin" />
+                              Testing...
+                            </>
+                          ) : (
+                            <>
+                              <CheckCircleIcon className="w-4 h-4 mr-1" />
+                              Test Connection
+                            </>
+                          )}
+                        </button>
+                      </div>
+                      
+                      <div className="space-y-2 text-sm">
+                        <div>
+                          <span className="text-gray-600">Connection ID:</span>{' '}
+                          <span className="font-medium">{selectedLinkType.data_source.connection_id}</span>
+                        </div>
+                        <div>
+                          <span className="text-gray-600">Table:</span>{' '}
+                          <span className="font-medium">{selectedLinkType.data_source.table}</span>
+                        </div>
+                        <div>
+                          <span className="text-gray-600">ID Column:</span>{' '}
+                          <span className="font-medium">{selectedLinkType.data_source.id_column}</span>
+                        </div>
+                      </div>
+
+                      {/* 数据源详细信息 */}
+                      {(() => {
+                        const dsConfig = getDataSourceConfig(selectedObjectType.data_source.connection_id);
+                        if (dsConfig) {
+                          return (
+                            <div className="mt-4 pt-4 border-t border-blue-200">
+                              <div className="text-xs font-semibold text-gray-700 mb-2">Connection Details:</div>
+                              <div className="space-y-1 text-xs">
+                                <div>
+                                  <span className="text-gray-600">Type:</span>{' '}
+                                  <span className="font-medium">{dsConfig.type}</span>
+                                </div>
+                                <div>
+                                  <span className="text-gray-600">Host:</span>{' '}
+                                  <span className="font-medium">{dsConfig.host}</span>
+                                </div>
+                                {dsConfig.port > 0 && (
+                                  <div>
+                                    <span className="text-gray-600">Primary Key Column:</span>{' '}
+                                    <span className="font-medium">{mapping.primary_key_column}</span>
+                                  </div>
+                                )}
+                                <div>
+                                  <span className="text-gray-600">Database:</span>{' '}
+                                  <span className="font-medium">{dsConfig.database}</span>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        }
+                        return null;
+                      })()}
+                    </div>
+
+                    {/* 字段映射 */}
+                    {selectedLinkType.data_source.field_mapping && Object.keys(selectedLinkType.data_source.field_mapping).length > 0 && (
+                      <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                        <h4 className="font-semibold text-gray-900 mb-3">Field Mapping</h4>
+                        <div className="space-y-2">
+                          {Object.entries(selectedLinkType.data_source.field_mapping).map(([propertyName, columnName]) => (
+                            <div key={propertyName} className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
+                              <span className="text-sm font-medium text-gray-900">{propertyName}</span>
+                              <span className="text-sm text-gray-500">→</span>
+                              <code className="text-xs px-2 py-1 bg-gray-100 text-gray-700 rounded">{String(columnName)}</code>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 测试结果 */}
+                    {testResult && (
+                      <div className={`p-4 rounded-lg border ${
+                        testResult.success
+                          ? 'bg-green-50 border-green-200'
+                          : 'bg-red-50 border-red-200'
+                      }`}>
+                        <div className="flex items-start">
+                          {testResult.success ? (
+                            <CheckCircleIcon className="w-5 h-5 text-green-600 mr-2 mt-0.5" />
+                          ) : (
+                            <XCircleIcon className="w-5 h-5 text-red-600 mr-2 mt-0.5" />
+                          )}
+                          <div className="flex-1">
+                            <div className={`font-medium ${
+                              testResult.success ? 'text-green-800' : 'text-red-800'
+                            }`}>
+                              {testResult.success ? 'Connection Successful' : 'Connection Failed'}
+                            </div>
+                            <div className={`text-sm mt-1 ${
+                              testResult.success ? 'text-green-700' : 'text-red-700'
+                            }`}>
+                              {testResult.message}
+                            </div>
+                            {testResult.success && testResult.metadata && Object.keys(testResult.metadata).length > 0 && (
+                              <div className="mt-3 pt-3 border-t border-green-200">
+                                <div className="text-xs font-semibold text-green-800 mb-2">Database Information:</div>
+                                <div className="space-y-1">
+                                  {Object.entries(testResult.metadata).map(([key, value]) => (
+                                    <div key={key} className="text-xs text-green-700">
+                                      <span className="font-medium">{key}:</span> {value}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="font-semibold text-gray-900 mb-1 flex items-center">
+                          <InformationCircleIcon className="w-5 h-5 mr-2 text-gray-400" />
+                          No Data Source Mapping Configured
+                        </h4>
+                        <p className="text-sm text-gray-500">This link type has no mapping configuration</p>
+                      </div>
+                    </div>
+                    <div className="mt-3 text-xs text-gray-500">
+                      <p>To configure a data source mapping, go to the Instances page and set up a mapping for this link type.</p>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -686,6 +897,7 @@ export default function SchemaBrowser() {
               </div>
             )}
           </div>
+        ) : selectedObjectType ? (
         ) : (
           <div className="text-center py-8 text-gray-500">
             <InformationCircleIcon className="w-12 h-12 mx-auto mb-2 text-gray-400" />
@@ -741,7 +953,16 @@ export default function SchemaBrowser() {
                 )}
               </div>
               <div className="text-sm text-gray-500 mt-1">
-                {lt.source_type} → {lt.target_type}
+                {lt.direction === 'undirected' ? (
+                  <>
+                    {lt.source_type} ↔ {lt.target_type}
+                    <span className="text-xs text-gray-400 ml-1">(双向)</span>
+                  </>
+                ) : (
+                  <>
+                    {lt.source_type} → {lt.target_type}
+                  </>
+                )}
               </div>
               {lt.description && (
                 <div className="text-xs text-gray-400 mt-1">{lt.description}</div>

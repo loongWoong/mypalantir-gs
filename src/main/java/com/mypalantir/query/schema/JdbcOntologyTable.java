@@ -87,7 +87,7 @@ public class JdbcOntologyTable extends OntologyTable implements ScannableTable {
     /**
      * 将 Property 的 data_type 映射到 SQL 类型
      */
-    private SqlTypeName mapPropertyTypeToSqlType(String dataType) {
+    SqlTypeName mapPropertyTypeToSqlType(String dataType) {
         if (dataType == null) {
             return SqlTypeName.VARCHAR;
         }
@@ -216,6 +216,8 @@ public class JdbcOntologyTable extends OntologyTable implements ScannableTable {
     /**
      * 构建行数据
      * 注意：返回的数组顺序必须与 buildRowType() 中定义的字段顺序完全一致
+     * 
+     * 重要：对于 TIMESTAMP 类型，Calcite 期望 Long（时间戳毫秒数），而不是 java.sql.Timestamp
      */
     private Object[] buildRow(ResultSet rs) throws Exception {
         List<Object> row = new ArrayList<>();
@@ -227,21 +229,49 @@ public class JdbcOntologyTable extends OntologyTable implements ScannableTable {
         if (objectType.getProperties() != null) {
             for (Property prop : objectType.getProperties()) {
                 String columnName = mapping.getColumnName(prop.getName());
+                Object value = null;
+                
                 if (columnName != null) {
                     // 使用属性名作为别名从 ResultSet 中获取值
-                    Object value = rs.getObject(prop.getName());
-                    row.add(value);
+                    value = rs.getObject(prop.getName());
                 } else {
                     // 如果没有映射，可能是外键列（如 vehicle_id, media_id）
                     // 尝试直接使用属性名作为列名
                     try {
-                        Object value = rs.getObject(prop.getName());
-                        row.add(value);
+                        value = rs.getObject(prop.getName());
                     } catch (Exception e) {
                         // 如果获取失败，返回 null
-                        row.add(null);
+                        value = null;
                     }
                 }
+                
+                // 根据属性类型转换值
+                // 对于 TIMESTAMP 类型，Calcite 期望 Long（时间戳毫秒数）
+                if (value != null && ("datetime".equalsIgnoreCase(prop.getDataType()) || 
+                                     "timestamp".equalsIgnoreCase(prop.getDataType()))) {
+                    if (value instanceof java.sql.Timestamp) {
+                        // 转换为 Long（时间戳毫秒数）
+                        value = ((java.sql.Timestamp) value).getTime();
+                    } else if (value instanceof java.sql.Date) {
+                        // 转换为 Long（时间戳毫秒数）
+                        value = ((java.sql.Date) value).getTime();
+                    }
+                }
+                
+                // 对于数值类型，如果 schema 中定义为 float/double，但数据库返回的是 BigDecimal，
+                // 需要转换为 Double，避免 Calcite 聚合时类型转换错误
+                // 注意：Calcite 对于 DOUBLE/FLOAT 类型期望 Double，而不是 BigDecimal
+                if (value != null && (value instanceof java.math.BigDecimal)) {
+                    String dataType = prop.getDataType();
+                    // 如果属性类型是 float 或 double，转换为 Double
+                    // 这很重要，因为 Calcite 在执行聚合时，如果字段类型是 DOUBLE，期望的是 Double，而不是 BigDecimal
+                    if ("float".equalsIgnoreCase(dataType) || "double".equalsIgnoreCase(dataType)) {
+                        // 转换为 Double
+                        value = ((java.math.BigDecimal) value).doubleValue();
+                    }
+                }
+                
+                row.add(value);
             }
         }
         

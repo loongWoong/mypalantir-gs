@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useRef } from 'react';
 import ForceGraph2D from 'react-force-graph-2d';
 import type { ObjectType, LinkType } from '../api/client';
 import { schemaApi } from '../api/client';
@@ -147,9 +147,11 @@ export default function SchemaGraphView() {
     setSelectedLink(null);
   }, []);
 
-  const handleLinkClick = useCallback((link: SchemaLink) => {
-    setSelectedLink(link);
+  const handleLinkClick = useCallback((link: any, event: MouseEvent) => {
+    const l = link as SchemaLink;
+    setSelectedLink(l);
     setSelectedNode(null);
+    event.stopPropagation(); // 阻止事件冒泡
   }, []);
 
   const handleBackgroundClick = useCallback(() => {
@@ -292,13 +294,19 @@ export default function SchemaGraphView() {
             return `${l.name}\n${l.description || ''}\n${l.cardinality} (${l.direction})`;
           }}
           linkDirectionalArrowLength={0}
+          linkDirectionalArrowRelPos={1}
+          linkDirectionalArrowLength={0}
           linkColor={() => '#94a3b8'}
           linkWidth={1}
+          linkCurvature={0.1}
+          linkDirectionalParticles={0}
+          linkDirectionalArrowColor={() => 'transparent'}
           onNodeDrag={handleNodeDrag}
           onNodeDragEnd={handleNodeDragEnd}
           onNodeClick={handleNodeClick}
           onLinkClick={handleLinkClick}
           onBackgroundClick={handleBackgroundClick}
+          linkCanvasObjectMode={() => 'after'} // 在默认绘制之后绘制，确保点击检测正常工作
           // 降低物理引擎的强度，使拖动后的位置更容易保持
           d3AlphaDecay={0.0228}
           d3VelocityDecay={0.4}
@@ -335,61 +343,99 @@ export default function SchemaGraphView() {
             const source = link.source;
             const target = link.target;
             
-            // 获取节点位置和大小
-            const sourceX = source.x || 0;
-            const sourceY = source.y || 0;
-            const targetX = target.x || 0;
-            const targetY = target.y || 0;
-            const sourceRadius = source.__size || 10;
-            const targetRadius = target.__size || 10;
-            
-            // 计算方向向量
-            const dx = targetX - sourceX;
-            const dy = targetY - sourceY;
-            const linkLength = Math.sqrt(dx * dx + dy * dy);
-            
-            if (linkLength === 0) return; // 避免除零错误
-            
-            // 单位向量
-            const unitX = dx / linkLength;
-            const unitY = dy / linkLength;
-            
-            // 计算连接到节点边缘的起点和终点
-            const startX = sourceX + unitX * sourceRadius;
-            const startY = sourceY + unitY * sourceRadius;
-            const endX = targetX - unitX * targetRadius;
-            const endY = targetY - unitY * targetRadius;
-            
-            // 绘制关系线（减小线宽）
-            ctx.beginPath();
-            ctx.moveTo(startX, startY);
-            ctx.lineTo(endX, endY);
-            ctx.strokeStyle = '#94a3b8';
-            ctx.lineWidth = 1;
-            ctx.stroke();
-            
-            // 绘制箭头（在目标节点边缘）
-            const arrowLength = 4;
-            const arrowAngle = Math.atan2(dy, dx);
-            
-            ctx.beginPath();
-            ctx.moveTo(endX, endY);
-            ctx.lineTo(
-              endX - arrowLength * Math.cos(arrowAngle - Math.PI / 6),
-              endY - arrowLength * Math.sin(arrowAngle - Math.PI / 6)
-            );
-            ctx.lineTo(
-              endX - arrowLength * Math.cos(arrowAngle + Math.PI / 6),
-              endY - arrowLength * Math.sin(arrowAngle + Math.PI / 6)
-            );
-            ctx.closePath();
-            ctx.fillStyle = '#94a3b8';
-            ctx.fill();
+            // 显式绘制虚线，确保可见
+            if (source && target && source.x !== undefined && source.y !== undefined && 
+                target.x !== undefined && target.y !== undefined) {
+              const dx = target.x - source.x;
+              const dy = target.y - source.y;
+              const length = Math.sqrt(dx * dx + dy * dy);
+              
+              if (length > 0) {
+                // 计算箭头位置（在线的末端，但不要完全贴到节点）
+                const nodeRadius = (source.__size || 10) + 2; // 节点半径 + 一点间距
+                const arrowDistance = length - nodeRadius; // 箭头距离起点的距离
+                
+                // 单位向量
+                const unitX = dx / length;
+                const unitY = dy / length;
+                
+                // 线条终点（箭头起点）
+                const lineEndX = source.x + unitX * arrowDistance;
+                const lineEndY = source.y + unitY * arrowDistance;
+                
+                // 绘制虚线
+                ctx.beginPath();
+                ctx.moveTo(source.x, source.y);
+                ctx.lineTo(lineEndX, lineEndY);
+                ctx.strokeStyle = '#94a3b8'; // 灰色
+                ctx.lineWidth = Math.max(1 / globalScale, 0.8); // 更细的线条
+                ctx.setLineDash([4, 4]); // 虚线样式：4像素实线，4像素空白
+                ctx.stroke();
+                ctx.setLineDash([]); // 重置为实线，避免影响其他绘制
+                
+                // 绘制箭头
+                const arrowSize = 4 / globalScale;
+                const arrowAngle = Math.atan2(dy, dx);
+                
+                if (l.direction === 'undirected') {
+                  // 双向箭头：在两端都绘制箭头
+                  // 目标端箭头
+                  ctx.beginPath();
+                  ctx.moveTo(lineEndX, lineEndY);
+                  ctx.lineTo(
+                    lineEndX - arrowSize * Math.cos(arrowAngle - Math.PI / 6),
+                    lineEndY - arrowSize * Math.sin(arrowAngle - Math.PI / 6)
+                  );
+                  ctx.moveTo(lineEndX, lineEndY);
+                  ctx.lineTo(
+                    lineEndX - arrowSize * Math.cos(arrowAngle + Math.PI / 6),
+                    lineEndY - arrowSize * Math.sin(arrowAngle + Math.PI / 6)
+                  );
+                  ctx.strokeStyle = '#94a3b8';
+                  ctx.lineWidth = Math.max(1 / globalScale, 0.8);
+                  ctx.stroke();
+                  
+                  // 源端箭头
+                  const lineStartX = source.x + unitX * nodeRadius;
+                  const lineStartY = source.y + unitY * nodeRadius;
+                  ctx.beginPath();
+                  ctx.moveTo(lineStartX, lineStartY);
+                  ctx.lineTo(
+                    lineStartX + arrowSize * Math.cos(arrowAngle - Math.PI / 6),
+                    lineStartY + arrowSize * Math.sin(arrowAngle - Math.PI / 6)
+                  );
+                  ctx.moveTo(lineStartX, lineStartY);
+                  ctx.lineTo(
+                    lineStartX + arrowSize * Math.cos(arrowAngle + Math.PI / 6),
+                    lineStartY + arrowSize * Math.sin(arrowAngle + Math.PI / 6)
+                  );
+                  ctx.strokeStyle = '#94a3b8';
+                  ctx.lineWidth = Math.max(1 / globalScale, 0.8);
+                  ctx.stroke();
+                } else {
+                  // 单向箭头：只在目标端绘制
+                  ctx.beginPath();
+                  ctx.moveTo(lineEndX, lineEndY);
+                  ctx.lineTo(
+                    lineEndX - arrowSize * Math.cos(arrowAngle - Math.PI / 6),
+                    lineEndY - arrowSize * Math.sin(arrowAngle - Math.PI / 6)
+                  );
+                  ctx.moveTo(lineEndX, lineEndY);
+                  ctx.lineTo(
+                    lineEndX - arrowSize * Math.cos(arrowAngle + Math.PI / 6),
+                    lineEndY - arrowSize * Math.sin(arrowAngle + Math.PI / 6)
+                  );
+                  ctx.strokeStyle = '#94a3b8';
+                  ctx.lineWidth = Math.max(1 / globalScale, 0.8);
+                  ctx.stroke();
+                }
+              }
+            }
             
             // 绘制关系标签（与节点标签使用相同的显示阈值和字体大小）
             if (globalScale > 0.4) {
-              const midX = (startX + endX) / 2;
-              const midY = (startY + endY) / 2;
+              const midX = ((link.source.x || 0) + (link.target.x || 0)) / 2;
+              const midY = ((link.source.y || 0) + (link.target.y || 0)) / 2;
               
               // 使用 display_name，如果没有则使用 name
               const label = l.data.display_name || l.name;
@@ -410,6 +456,13 @@ export default function SchemaGraphView() {
           }}
           cooldownTicks={100}
           onEngineStop={() => {
+            // 配置力导向图的参数，增加节点间距离
+            if (fgRef.current) {
+              fgRef.current.d3Force('charge')?.strength(-300);
+              fgRef.current.d3Force('link')?.distance(150);
+              fgRef.current.d3Force('link')?.strength(0.5);
+            }
+            
             // 图布局完成后自动放大显示（只执行一次，不会缩小回去）
             if (fgRef.current && containerRef.current && graphData.nodes.length > 0 && !hasAutoZoomed.current) {
               hasAutoZoomed.current = true;
@@ -595,24 +648,46 @@ export default function SchemaGraphView() {
                 {/* 关系信息 */}
                 <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
                   <h4 className="text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wide">关系信息</h4>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <div className="text-xs font-semibold text-gray-500 mb-1">源类型</div>
-                      <div className="text-base font-medium text-gray-900">{selectedLink.data.source_type}</div>
+                  {selectedLink.direction === 'undirected' ? (
+                    <div className="space-y-3">
+                      <div>
+                        <div className="text-xs font-semibold text-gray-500 mb-1">对象类型</div>
+                        <div className="text-base font-medium text-gray-900">
+                          {selectedLink.data.source_type} ↔ {selectedLink.data.target_type}
+                          <span className="text-xs text-gray-500 ml-2">(双向关系)</span>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <div className="text-xs font-semibold text-gray-500 mb-1">基数</div>
+                          <div className="text-base font-medium text-gray-900">{selectedLink.cardinality}</div>
+                        </div>
+                        <div>
+                          <div className="text-xs font-semibold text-gray-500 mb-1">方向</div>
+                          <div className="text-base font-medium text-gray-900">无向 (Undirected)</div>
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <div className="text-xs font-semibold text-gray-500 mb-1">目标类型</div>
-                      <div className="text-base font-medium text-gray-900">{selectedLink.data.target_type}</div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <div className="text-xs font-semibold text-gray-500 mb-1">源类型</div>
+                        <div className="text-base font-medium text-gray-900">{selectedLink.data.source_type}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs font-semibold text-gray-500 mb-1">目标类型</div>
+                        <div className="text-base font-medium text-gray-900">{selectedLink.data.target_type}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs font-semibold text-gray-500 mb-1">基数</div>
+                        <div className="text-base font-medium text-gray-900">{selectedLink.cardinality}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs font-semibold text-gray-500 mb-1">方向</div>
+                        <div className="text-base font-medium text-gray-900">有向 (Directed)</div>
+                      </div>
                     </div>
-                    <div>
-                      <div className="text-xs font-semibold text-gray-500 mb-1">基数</div>
-                      <div className="text-base font-medium text-gray-900">{selectedLink.cardinality}</div>
-                    </div>
-                    <div>
-                      <div className="text-xs font-semibold text-gray-500 mb-1">方向</div>
-                      <div className="text-base font-medium text-gray-900">{selectedLink.direction}</div>
-                    </div>
-                  </div>
+                  )}
                 </div>
 
                 {/* 关系属性 */}

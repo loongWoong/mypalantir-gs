@@ -42,11 +42,19 @@ public class QueryParser {
     public OntologyQuery parseMap(Map<String, Object> map) {
         OntologyQuery query = new OntologyQuery();
         
-        if (map.containsKey("from")) {
+        // 支持 from 和 object 两种方式（向后兼容）
+        if (map.containsKey("object")) {
+            query.setObject((String) map.get("object"));
+        } else if (map.containsKey("from")) {
             query.setFrom((String) map.get("from"));
         }
         
-        if (map.containsKey("where")) {
+        // 支持 where 和 filter 两种方式（向后兼容）
+        if (map.containsKey("filter")) {
+            @SuppressWarnings("unchecked")
+            List<Object> filter = (List<Object>) map.get("filter");
+            query.setFilter(filter);
+        } else if (map.containsKey("where")) {
             @SuppressWarnings("unchecked")
             Map<String, Object> where = (Map<String, Object>) map.get("where");
             query.setWhere(where);
@@ -64,6 +72,18 @@ public class QueryParser {
             query.setLinks(parseLinkQueries(links));
         }
         
+        if (map.containsKey("group_by")) {
+            @SuppressWarnings("unchecked")
+            List<String> groupBy = (List<String>) map.get("group_by");
+            query.setGroupBy(groupBy);
+        }
+        
+        if (map.containsKey("metrics")) {
+            @SuppressWarnings("unchecked")
+            List<Object> metrics = (List<Object>) map.get("metrics");
+            query.setMetrics(metrics);
+        }
+        
         if (map.containsKey("limit")) {
             Object limit = map.get("limit");
             if (limit instanceof Number) {
@@ -78,9 +98,10 @@ public class QueryParser {
             }
         }
         
-        if (map.containsKey("orderBy")) {
+        if (map.containsKey("orderBy") || map.containsKey("order_by")) {
             @SuppressWarnings("unchecked")
-            List<Map<String, Object>> orderByList = (List<Map<String, Object>>) map.get("orderBy");
+            List<Map<String, Object>> orderByList = (List<Map<String, Object>>) 
+                map.getOrDefault("orderBy", map.get("order_by"));
             query.setOrderBy(parseOrderBy(orderByList));
         }
         
@@ -94,6 +115,10 @@ public class QueryParser {
             
             if (linkMap.containsKey("name")) {
                 linkQuery.setName((String) linkMap.get("name"));
+            }
+            
+            if (linkMap.containsKey("object")) {
+                linkQuery.setObject((String) linkMap.get("object"));
             }
             
             if (linkMap.containsKey("select")) {
