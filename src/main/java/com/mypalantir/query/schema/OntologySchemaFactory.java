@@ -179,6 +179,9 @@ public class OntologySchemaFactory {
 
     /**
      * 为 ObjectType 创建 Table（基于映射关系）
+     * 
+     * 重要：即使数据库连接失败，也会创建表对象（使用延迟连接）
+     * 这样 RelNode 构建时能够找到表，连接问题会在实际执行查询时暴露
      */
     private OntologyTable createTableFromMapping(ObjectType objectType) {
         try {
@@ -191,8 +194,15 @@ public class OntologySchemaFactory {
                     Connection connection = dataSourceConnections.get(mapping.getConnectionId());
                     if (connection != null) {
                         return new JdbcOntologyTable(objectType, mapping, connection);
+                    } else {
+                        System.err.println("[OntologySchemaFactory] Warning: No connection found for data source " + 
+                                         mapping.getConnectionId() + " for object type " + objectType.getName() + 
+                                         ". Table will be created but queries may fail.");
+                        // 即使没有连接，也创建表（使用延迟连接）
+                        return new JdbcOntologyTable(objectType, mapping, null);
                     }
                 }
+                System.err.println("[OntologySchemaFactory] No mapping found for object type: " + objectType.getName());
                 return null;
             }
             
@@ -200,6 +210,7 @@ public class OntologySchemaFactory {
             Map<String, Object> mappingData = mappings.get(0);
             String tableId = (String) mappingData.get("table_id");
             if (tableId == null) {
+                System.err.println("[OntologySchemaFactory] table_id is null in mapping for object type: " + objectType.getName());
                 return null;
             }
             
@@ -209,13 +220,20 @@ public class OntologySchemaFactory {
             String databaseId = (String) table.get("database_id");
             
             if (tableName == null || databaseId == null) {
+                System.err.println("[OntologySchemaFactory] Missing table name or database_id for object type: " + 
+                                 objectType.getName() + ", tableId: " + tableId);
                 return null;
             }
             
-            // 获取数据库连接
+            // 获取数据库连接（可能失败，但不阻止表创建）
             Connection connection = getDatabaseConnection(databaseId);
             if (connection == null) {
-                return null;
+                System.err.println("[OntologySchemaFactory] Warning: Failed to get database connection for " + 
+                                 "databaseId: " + databaseId + ", object type: " + objectType.getName() + 
+                                 ", table: " + tableName + 
+                                 ". Table will be created but queries may fail.");
+                // 即使连接失败，也创建表（使用延迟连接）
+                // 这样 RelNode 构建时能够找到表，连接问题会在实际执行查询时暴露
             }
             
             // 构建 DataSourceMapping 对象
@@ -240,9 +258,16 @@ public class OntologySchemaFactory {
             // connection_id 可以设置为 databaseId，用于标识连接
             dataSourceMapping.setConnectionId(databaseId);
             
+            System.out.println("[OntologySchemaFactory] Created table for object type: " + objectType.getName() + 
+                             " -> database table: " + tableName + 
+                             ", databaseId: " + databaseId + 
+                             ", connection: " + (connection != null ? "OK" : "FAILED"));
+            
             return new JdbcOntologyTable(objectType, dataSourceMapping, connection);
         } catch (Exception e) {
-            System.err.println("Failed to create table from mapping for " + objectType.getName() + ": " + e.getMessage());
+            System.err.println("[OntologySchemaFactory] Failed to create table from mapping for " + 
+                             objectType.getName() + ": " + e.getMessage());
+            e.printStackTrace();
             return null;
         }
     }

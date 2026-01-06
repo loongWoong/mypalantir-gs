@@ -151,13 +151,35 @@ public class JdbcOntologyTable extends OntologyTable implements ScannableTable {
 
     /**
      * 实现 ScannableTable 接口，扫描表数据
+     * 
+     * 注意：如果 connection 为 null（延迟连接），会在执行查询时失败
+     * 这通常发生在数据库连接失败时，但表对象仍然被创建以支持 RelNode 构建
      */
     @Override
     public Enumerable<Object[]> scan(DataContext root) {
+        // 检查连接是否可用
+        if (connection == null) {
+            String databaseId = mapping != null ? mapping.getConnectionId() : "unknown";
+            String tableName = mapping != null ? mapping.getTable() : "unknown";
+            String objectTypeName = objectType != null ? objectType.getName() : "unknown";
+            throw new RuntimeException(
+                "Database connection is not available for object type '" + objectTypeName + 
+                "'. " +
+                "Table mapping: " + objectTypeName + " -> " + tableName + 
+                ", databaseId: " + databaseId + 
+                ". Please check the database connection configuration."
+            );
+        }
+        
         try {
             // 构建 SQL 查询
             // 注意：这里使用数据库表名和列名，然后通过 AS 别名映射回 Ontology 属性名
+            // 表名和列名都来自 mapping，确保使用映射后的真实数据库表名和列名
             String sql = buildSelectSql();
+            
+            System.out.println("[JdbcOntologyTable] Scanning table: " + objectType.getName() + 
+                             " -> " + mapping.getTable() + 
+                             ", SQL: " + sql);
             
             // 执行查询
             List<Object[]> rows = new ArrayList<>();
@@ -172,7 +194,13 @@ public class JdbcOntologyTable extends OntologyTable implements ScannableTable {
             
             return Linq4j.asEnumerable(rows);
         } catch (Exception e) {
-            throw new RuntimeException("Failed to scan table: " + e.getMessage(), e);
+            String objectTypeName = objectType != null ? objectType.getName() : "unknown";
+            String tableName = mapping != null ? mapping.getTable() : "unknown";
+            throw new RuntimeException(
+                "Failed to scan table for object type '" + objectTypeName + 
+                "' (mapped to database table '" + tableName + "'): " + e.getMessage(), 
+                e
+            );
         }
     }
 

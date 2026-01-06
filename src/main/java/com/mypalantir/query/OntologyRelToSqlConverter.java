@@ -45,6 +45,7 @@ public class OntologyRelToSqlConverter extends RelToSqlConverter {
     
     /**
      * 重写 visit 方法，在访问 TableScan 时缓存映射信息
+     * 优先从 JdbcOntologyTable 获取 mapping 信息（因为 JdbcOntologyTable 已经根据 mapping 创建）
      */
     @Override
     public Result visit(RelNode e) {
@@ -61,20 +62,36 @@ public class OntologyRelToSqlConverter extends RelToSqlConverter {
                     ObjectType objectType = ontologyTable.getObjectType();
                     String objectTypeName = objectType.getName();
                     
-                    // 获取 DataSourceMapping（优先从映射关系获取）
-                    DataSourceMapping mapping = getDataSourceMappingFromMapping(objectType);
+                    // 优先从 JdbcOntologyTable 获取 mapping（因为 JdbcOntologyTable 已经根据 mapping 创建）
+                    // 这样可以直接使用已经映射好的数据源、表名、列名信息
+                    DataSourceMapping mapping = null;
+                    if (ontologyTable instanceof JdbcOntologyTable) {
+                        mapping = ((JdbcOntologyTable) ontologyTable).getMapping();
+                        System.out.println("[OntologyRelToSqlConverter] Got mapping from JdbcOntologyTable for: " + objectTypeName);
+                    }
+                    
+                    // 如果 JdbcOntologyTable 没有 mapping，尝试从映射关系获取
                     if (mapping == null || !mapping.isConfigured()) {
-                        // 如果没有映射关系，尝试从 JdbcOntologyTable 或 schema 中获取
-                        if (ontologyTable instanceof JdbcOntologyTable) {
-                            mapping = ((JdbcOntologyTable) ontologyTable).getMapping();
-                        } else {
-                            mapping = objectType.getDataSource();
-                        }
+                        mapping = getDataSourceMappingFromMapping(objectType);
+                        System.out.println("[OntologyRelToSqlConverter] Got mapping from mappingService for: " + objectTypeName);
+                    }
+                    
+                    // 如果还是没有，使用 schema 中定义的 data_source（向后兼容）
+                    if (mapping == null || !mapping.isConfigured()) {
+                        mapping = objectType.getDataSource();
+                        System.out.println("[OntologyRelToSqlConverter] Using schema data_source for: " + objectTypeName);
                     }
                     
                     if (mapping != null && mapping.isConfigured()) {
                         // 缓存映射信息，供后续使用
                         objectTypeMappingCache.put(objectTypeName, mapping);
+                        System.out.println("[OntologyRelToSqlConverter] Cached mapping for: " + objectTypeName + 
+                                         " -> table: " + mapping.getTable() + 
+                                         ", idColumn: " + mapping.getIdColumn() + 
+                                         ", fieldMapping size: " + 
+                                         (mapping.getFieldMapping() != null ? mapping.getFieldMapping().size() : 0));
+                    } else {
+                        System.err.println("[OntologyRelToSqlConverter] No valid mapping found for: " + objectTypeName);
                     }
                 }
             }
@@ -94,6 +111,12 @@ public class OntologyRelToSqlConverter extends RelToSqlConverter {
     
     /**
      * 获取替换后的 SQL（支持 JOIN 查询）
+     * 
+     * 处理流程：
+     * 1. Calcite 将 RelNode 转换为 SQL（使用 Ontology 概念：对象类型名称、属性名称）
+     * 2. 根据 mapping 映射关系，将 Ontology 名称替换为数据库实际表名和列名
+     * 3. 优先使用缓存的 mapping 信息（从 JdbcOntologyTable 获取，因为 JdbcOntologyTable 已经根据 mapping 创建）
+     * 
      * @param result RelToSqlConverter 的结果
      * @param query 原始查询（用于处理 JOIN 中的多个表）
      */
@@ -101,16 +124,19 @@ public class OntologyRelToSqlConverter extends RelToSqlConverter {
         SqlNode sqlNode = result.asStatement();
         String sql = sqlNode.toSqlString(dialect).getSql();
         
-        System.out.println("[OntologyRelToSqlConverter] Original SQL: " + sql);
+        System.out.println("[OntologyRelToSqlConverter] Original SQL (using Ontology names): " + sql);
         System.out.println("[OntologyRelToSqlConverter] Cache size: " + objectTypeMappingCache.size());
         
-        // 替换所有缓存的表名和列名（主表）
+        // 第一步：替换所有缓存的表名和列名（主表）
         // 根据 mapping 的映射关系，将对象类型名称替换为映射表名，将属性名替换为映射列名
+        // 注意：缓存的 mapping 信息来自 JdbcOntologyTable，已经包含了正确的数据源、表名、列名映射
         for (Map.Entry<String, DataSourceMapping> entry : objectTypeMappingCache.entrySet()) {
             String objectTypeName = entry.getKey();
             DataSourceMapping mapping = entry.getValue();
             
-            System.out.println("[OntologyRelToSqlConverter] Processing cached mapping for: " + objectTypeName + " -> " + mapping.getTable());
+            System.out.println("[OntologyRelToSqlConverter] Processing cached mapping for: " + objectTypeName + 
+                             " -> table: " + mapping.getTable() + 
+                             ", idColumn: " + mapping.getIdColumn());
             
             // 替换表名和列名（需要 ObjectType 信息）
             try {
@@ -121,28 +147,32 @@ public class OntologyRelToSqlConverter extends RelToSqlConverter {
             }
         }
         
-        // 如果缓存为空，但查询不为空，直接从 mapping 获取映射关系并替换
+        // 第二步：如果缓存为空，但查询不为空，直接从 mapping 获取映射关系并替换
+        // 这种情况可能发生在某些边缘情况下，但通常不应该发生（因为 visit() 方法应该已经缓存了 mapping）
         if (objectTypeMappingCache.isEmpty() && query != null && query.getFrom() != null) {
             System.out.println("[OntologyRelToSqlConverter] Cache is empty, getting mapping for: " + query.getFrom());
             try {
                 ObjectType objectType = loader.getObjectType(query.getFrom());
+                // 优先从映射关系获取（因为这是最新的映射信息）
                 DataSourceMapping mapping = getDataSourceMappingFromMapping(objectType);
-                if (mapping == null) {
+                if (mapping == null || !mapping.isConfigured()) {
                     System.out.println("[OntologyRelToSqlConverter] No mapping found, using schema data_source");
                     mapping = objectType.getDataSource();
                 }
                 
                 // 对于 SQL 替换，我们只需要表名和字段映射，不需要 connectionId
                 // 所以检查表名和字段映射是否存在，而不是 isConfigured()
-                if (mapping != null && mapping.getTable() != null && !mapping.getTable().isEmpty() 
-                    && mapping.getFieldMapping() != null && !mapping.getFieldMapping().isEmpty()) {
-                    System.out.println("[OntologyRelToSqlConverter] Using mapping: " + mapping.getTable() + ", fieldMapping: " + mapping.getFieldMapping());
+                if (mapping != null && mapping.getTable() != null && !mapping.getTable().isEmpty()) {
+                    System.out.println("[OntologyRelToSqlConverter] Using mapping: " + mapping.getTable() + 
+                                     ", fieldMapping size: " + 
+                                     (mapping.getFieldMapping() != null ? mapping.getFieldMapping().size() : 0));
                     // 替换表名和列名
                     sql = replaceColumnNames(sql, objectType, mapping, query.getFrom(), mapping.getTable());
                 } else {
                     System.err.println("[OntologyRelToSqlConverter] Mapping is null or missing table/fieldMapping");
                     if (mapping != null) {
-                        System.err.println("[OntologyRelToSqlConverter] Mapping details: table=" + mapping.getTable() + ", fieldMapping=" + mapping.getFieldMapping());
+                        System.err.println("[OntologyRelToSqlConverter] Mapping details: table=" + mapping.getTable() + 
+                                         ", fieldMapping=" + mapping.getFieldMapping());
                     }
                 }
             } catch (Loader.NotFoundException ex) {
@@ -153,7 +183,12 @@ public class OntologyRelToSqlConverter extends RelToSqlConverter {
             }
         }
         
-        // 处理 JOIN 查询中的表名和列名
+        // 第三步：处理 JOIN 查询中的表名和列名
+        // 对于 JOIN 查询，需要处理：
+        // 1. 源表的映射（主表）
+        // 2. 中间表的映射（关系表，如果有）
+        // 3. 目标表的映射（关联表）
+        // 注意：所有映射信息都应该优先从 mapping 关系获取，而不是从 schema 中获取
         if (query != null && query.getLinks() != null && !query.getLinks().isEmpty()) {
             for (OntologyQuery.LinkQuery linkQuery : query.getLinks()) {
                 try {
@@ -161,60 +196,59 @@ public class OntologyRelToSqlConverter extends RelToSqlConverter {
                     if (linkType.getDataSource() != null && linkType.getDataSource().isConfigured()) {
                         DataSourceMapping linkMapping = linkType.getDataSource();
                         
-                        // 1. 不替换中间表名，因为 Calcite Schema 中的表名就是 linkMapping.getTable()
+                        // 1. 中间表名不需要替换，因为 Calcite Schema 中的表名就是 linkMapping.getTable()
                         // JdbcOntologyTable.scan() 会使用正确的数据库表名来执行查询
                         String linkTableNameInSchema = linkMapping.getTable();  // 小写，如 "vehicle_media"
                         
-                        // 2. 替换中间表的列名（source_id_column, target_id_column）
-                        String linkSourceIdColumn = linkMapping.getSourceIdColumn();
-                        String linkTargetIdColumn = linkMapping.getTargetIdColumn();
+                        // 2. 中间表的列名（source_id_column, target_id_column）在 Calcite Schema 中
+                        // 就是这些列名本身（如 "vehicle_id", "media_id"），不需要替换
+                        // 因为 JdbcOntologyTable.scan() 会通过 AS 别名映射回这些列名
                         
-                        // 3. 修复 JOIN 条件中的字段名错误
-                        // 问题：Calcite 生成的 SQL 中，JOIN 条件可能使用了错误的字段名
-                        // 例如："车辆"."MEDIA_ID" 应该是 "车辆"."id"（车辆表的 id 字段）
-                        // 注意：SQL 中的字段名应该是 Ontology 概念（"id"），而不是数据库列名
+                        // 3. 替换源表的表名和列名（基于映射关系）
+                        // 优先从映射关系获取源表的映射，确保使用最新的映射信息
                         String sourceObjectTypeName = linkType.getSourceType();
                         try {
                             ObjectType sourceObjectType = loader.getObjectType(sourceObjectTypeName);
-                            // 从映射关系获取源表的映射
+                            // 优先从映射关系获取源表的映射
                             DataSourceMapping sourceMapping = getDataSourceMappingFromMapping(sourceObjectType);
                             if (sourceMapping == null || !sourceMapping.isConfigured()) {
                                 sourceMapping = sourceObjectType.getDataSource();
                             }
                             
                             if (sourceMapping != null && sourceMapping.isConfigured()) {
+                                System.out.println("[OntologyRelToSqlConverter] Replacing source table: " + 
+                                                 sourceObjectTypeName + " -> " + sourceMapping.getTable());
                                 // 替换源表的表名和列名
                                 sql = replaceColumnNames(sql, sourceObjectType, sourceMapping, 
                                                         sourceObjectTypeName, sourceMapping.getTable());
                             }
                         } catch (Loader.NotFoundException ex) {
-                            // 忽略
+                            System.err.println("[OntologyRelToSqlConverter] Source ObjectType not found: " + sourceObjectTypeName);
                         }
                         
-                        // 注意：中间表的列名（source_id_column, target_id_column）在 Calcite Schema 中
-                        // 就是这些列名本身（如 "vehicle_id", "media_id"），不需要替换
-                        // 因为 JdbcOntologyTable.scan() 会通过 AS 别名映射回这些列名
-                        
-                        // 替换目标表的表名和列名（基于映射关系）
+                        // 4. 替换目标表的表名和列名（基于映射关系）
+                        // 优先从映射关系获取目标表的映射，确保使用最新的映射信息
                         try {
                             ObjectType targetObjectType = loader.getObjectType(linkType.getTargetType());
-                            // 从映射关系获取目标表的映射
+                            // 优先从映射关系获取目标表的映射
                             DataSourceMapping targetMapping = getDataSourceMappingFromMapping(targetObjectType);
                             if (targetMapping == null || !targetMapping.isConfigured()) {
                                 targetMapping = targetObjectType.getDataSource();
                             }
                             
                             if (targetMapping != null && targetMapping.isConfigured()) {
+                                System.out.println("[OntologyRelToSqlConverter] Replacing target table: " + 
+                                                 linkType.getTargetType() + " -> " + targetMapping.getTable());
                                 // 替换目标表的表名和列名
                                 sql = replaceColumnNames(sql, targetObjectType, targetMapping, 
                                                         linkType.getTargetType(), targetMapping.getTable());
                             }
                         } catch (Loader.NotFoundException ex) {
-                            // 忽略
+                            System.err.println("[OntologyRelToSqlConverter] Target ObjectType not found: " + linkType.getTargetType());
                         }
                     }
                 } catch (Loader.NotFoundException ex) {
-                    // 忽略
+                    System.err.println("[OntologyRelToSqlConverter] LinkType not found: " + linkQuery.getName());
                 }
             }
         }
