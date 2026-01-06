@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import ForceGraph2D from 'react-force-graph-2d';
 import type { ObjectType, LinkType } from '../api/client';
 import { schemaApi } from '../api/client';
@@ -295,7 +295,6 @@ export default function SchemaGraphView() {
           }}
           linkDirectionalArrowLength={0}
           linkDirectionalArrowRelPos={1}
-          linkDirectionalArrowLength={0}
           linkColor={() => '#94a3b8'}
           linkWidth={1}
           linkCurvature={0.1}

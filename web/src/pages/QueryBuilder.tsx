@@ -50,7 +50,9 @@ export default function QueryBuilder() {
     : objectTypes;
 
   useEffect(() => {
-if (query.from || query.object) {      const objectName = query.object || query.from;      const ot = filteredObjectTypes.find(o => o.name === objectName);
+    if (query.from || query.object) {
+      const objectName = query.object || query.from;
+      const ot = filteredObjectTypes.find(o => o.name === objectName);
       setSelectedObjectType(ot || null);
     } else {
       setSelectedObjectType(null);
@@ -87,12 +89,12 @@ if (query.from || query.object) {      const objectName = query.object || query.
   const getAvailableFields = (): FieldInfo[] => {
     const fields: FieldInfo[] = [];
     
-    // 根对象的属�?
+    // 根对象的属性
     selectedObjectType?.properties.forEach(prop => {
       fields.push({ path: prop.name, label: prop.name, type: prop.data_type });
     });
     
-    // 关联对象的属�?
+    // 关联对象的属性
     query.links?.forEach(link => {
       const targetType = getLinkTargetType(link.name);
       targetType?.properties.forEach(prop => {
@@ -116,11 +118,11 @@ if (query.from || query.object) {      const objectName = query.object || query.
     
     if (queryMode === 'simple') {
       if (!query.select || query.select.length === 0) {
-        setError('请至少选择一个属�?);
+        setError('请至少选择一个属性');
         return;
       }
     } else {
-      // 聚合查询需�?group_by �?metrics
+      // 聚合查询需要 group_by 或 metrics
       if ((!query.group_by || query.group_by.length === 0) && 
           (!query.metrics || query.metrics.length === 0)) {
         setError('聚合查询需要至少一个分组属性或聚合指标');
@@ -147,7 +149,7 @@ if (query.from || query.object) {      const objectName = query.object || query.
       if (queryMode === 'aggregate') {
         // 聚合查询
         queryPayload.group_by = query.group_by || [];
-        // �?Metric 对象转换为数组格式：["sum", "field", "alias"]
+        // 将 Metric 对象转换为数组格式：["sum", "field", "alias"]
         queryPayload.metrics = query.metrics?.map((metric: Metric) => {
           const arr: any[] = [metric.function, metric.field];
           if (metric.alias) {
@@ -156,7 +158,7 @@ if (query.from || query.object) {      const objectName = query.object || query.
           return arr;
         }) || [];
       } else {
-        // 普通查�?
+        // 普通查询
         queryPayload.select = query.select || [];
       }
 
@@ -168,7 +170,7 @@ if (query.from || query.object) {      const objectName = query.object || query.
         queryPayload.where = query.where;
       }
 
-      // 排序和分�?
+      // 排序和分页
       if (query.orderBy && query.orderBy.length > 0) {
         queryPayload.orderBy = query.orderBy;
       }
@@ -199,7 +201,7 @@ if (query.from || query.object) {      const objectName = query.object || query.
     setWhereConditions(updated);
   };
 
-  // 过滤表达式相关函�?
+  // 过滤表达式相关函数
   const addFilterExpression = () => {
     setFilterExpressions([...filterExpressions, ['=', '', ''] as FilterExpression]);
   };
@@ -218,7 +220,7 @@ if (query.from || query.object) {      const objectName = query.object || query.
     const objectName = query.object || query.from || '';
     const availableLinks = getAvailableLinks(objectName);
     if (availableLinks.length === 0) {
-      setError('当前对象类型没有可用的关联类�?);
+      setError('当前对象类型没有可用的关联类型');
       return;
     }
     setQuery(prev => ({
@@ -312,7 +314,7 @@ if (query.from || query.object) {      const objectName = query.object || query.
       limit: query.limit,
       offset: query.offset
     };
-    // �?Metric 对象转换为数组格式用�?JSON 预览
+    // 将 Metric 对象转换为数组格式用于 JSON 预览
     if (query.metrics && query.metrics.length > 0) {
       queryPayload.metrics = query.metrics.map((metric: Metric) => {
         const arr: any[] = [metric.function, metric.field];
@@ -339,11 +341,11 @@ if (query.from || query.object) {      const objectName = query.object || query.
 
   const getAvailableLinks = (objectTypeName: string) => {
     return linkTypes.filter(lt => {
-      // 如果�?directed（有向），只有当 objectTypeName �?source_type 时才能作为关联查�?
+      // 如果是 directed（有向），只有当 objectTypeName 是 source_type 时才能作为关联查询
       if (lt.direction === 'directed') {
         return lt.source_type === objectTypeName;
       }
-      // 如果�?undirected（无向），objectTypeName 可以�?source_type �?target_type
+      // 如果是 undirected（无向），objectTypeName 可以是 source_type 或 target_type
       return lt.source_type === objectTypeName || lt.target_type === objectTypeName;
     });
   };
@@ -353,7 +355,7 @@ if (query.from || query.object) {      const objectName = query.object || query.
     const objectName = query.object || query.from;
     if (!linkType || !objectName) return null;
     
-    // 如果�?directed（有向），只能从 source �?target
+    // 如果是 directed（有向），只能从 source 到 target
     if (linkType.direction === 'directed') {
       if (linkType.source_type === objectName) {
         return objectTypes.find(ot => ot.name === linkType.target_type);
@@ -362,7 +364,7 @@ if (query.from || query.object) {      const objectName = query.object || query.
       return null;
     }
     
-    // 如果�?undirected（无向），可以从 source �?target，也可以�?target �?source
+    // 如果是 undirected（无向），可以从 source 到 target，也可以从 target 到 source
     if (linkType.source_type === objectName) {
       return objectTypes.find(ot => ot.name === linkType.target_type);
     }
@@ -382,7 +384,7 @@ if (query.from || query.object) {      const objectName = query.object || query.
       {/* 左侧：查询构建器 */}
       <div className="w-1/2 border-r border-gray-200 overflow-y-auto p-6">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-bold text-gray-900">查询构建�?/h2>
+          <h2 className="text-xl font-bold text-gray-900">查询构建器</h2>
         </div>
 
         {/* 查询模式切换 */}
@@ -402,7 +404,7 @@ if (query.from || query.object) {      const objectName = query.object || query.
                 }}
                 className="mr-2"
               />
-              <span className="text-sm">普通查�?/span>
+              <span className="text-sm">普通查询</span>
             </label>
             <label className="flex items-center cursor-pointer">
               <input
@@ -445,7 +447,7 @@ if (query.from || query.object) {      const objectName = query.object || query.
         {queryMode === 'simple' && selectedObjectType && (
           <div className="mb-6">
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              选择属�?<span className="text-red-500">*</span>
+              选择属性 <span className="text-red-500">*</span>
             </label>
             <div className="space-y-2 border border-gray-300 rounded-lg p-3 max-h-48 overflow-y-auto bg-white">
               {selectedObjectType.properties.map(prop => (
@@ -514,7 +516,7 @@ if (query.from || query.object) {      const objectName = query.object || query.
                   </div>
                   {targetType && queryMode === 'simple' && (
                     <div className="mt-2 space-y-1">
-                      <label className="text-xs text-gray-600">选择属�?</label>
+                      <label className="text-xs text-gray-600">选择属性:</label>
                       <div className="space-y-1 max-h-32 overflow-y-auto">
                         {targetType.properties.map(prop => (
                           <label key={prop.name} className="flex items-center cursor-pointer hover:bg-white p-1 rounded">
@@ -569,7 +571,7 @@ if (query.from || query.object) {      const objectName = query.object || query.
                     onChange={(e) => updateWhereCondition(index, e.target.value, cond.operator, cond.value)}
                     className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm"
                   >
-                    <option value="">选择属�?..</option>
+                    <option value="">选择属性...</option>
                     {selectedObjectType?.properties.map(prop => (
                       <option key={prop.name} value={prop.name}>{prop.name}</option>
                     ))}
@@ -590,7 +592,7 @@ if (query.from || query.object) {      const objectName = query.object || query.
                     type="text"
                     value={cond.value}
                     onChange={(e) => updateWhereCondition(index, cond.field, cond.operator, e.target.value)}
-                    placeholder="�?
+                    placeholder="值"
                     className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm"
                   />
                   <button
@@ -644,7 +646,7 @@ if (query.from || query.object) {      const objectName = query.object || query.
                       }}
                       className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm"
                     >
-                      <option value="">选择属�?..</option>
+                      <option value="">选择属性...</option>
                       {getAvailableFields().map(field => (
                         <option key={field.path} value={field.path}>{field.label}</option>
                       ))}
@@ -655,15 +657,15 @@ if (query.from || query.object) {      const objectName = query.object || query.
                           type="text"
                           value={value1 || ''}
                           onChange={(e) => updateFilterExpression(index, [operator as any, fieldPath, e.target.value, value2 || ''] as FilterExpression)}
-                          placeholder="起始�?
+                          placeholder="起始值"
                           className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm"
                         />
-                        <span className="text-sm text-gray-500">�?/span>
+                        <span className="text-sm text-gray-500">和</span>
                         <input
                           type="text"
                           value={value2 || ''}
                           onChange={(e) => updateFilterExpression(index, [operator as any, fieldPath, value1 || '', e.target.value] as FilterExpression)}
-                          placeholder="结束�?
+                          placeholder="结束值"
                           className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm"
                         />
                       </>
@@ -672,7 +674,7 @@ if (query.from || query.object) {      const objectName = query.object || query.
                         type="text"
                         value={value1 || ''}
                         onChange={(e) => updateFilterExpression(index, [operator as any, fieldPath, e.target.value] as FilterExpression)}
-                        placeholder="�?
+                        placeholder="值"
                         className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm"
                       />
                     )}
@@ -689,11 +691,11 @@ if (query.from || query.object) {      const objectName = query.object || query.
           )}
         </div>
 
-        {/* 分组功能（仅聚合查询模式�?*/}
+        {/* 分组功能（仅聚合查询模式） */}
         {queryMode === 'aggregate' && (
           <div className="mb-6">
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              分组属�?
+              分组属性
             </label>
             <div className="space-y-2 border border-gray-300 rounded-lg p-3 max-h-48 overflow-y-auto bg-white">
               {getAvailableFields().map(field => (
@@ -719,7 +721,7 @@ if (query.from || query.object) {      const objectName = query.object || query.
           </div>
         )}
 
-        {/* 聚合指标（仅聚合查询模式�?*/}
+        {/* 聚合指标（仅聚合查询模式） */}
         {queryMode === 'aggregate' && (
           <div className="mb-6">
             <div className="flex items-center justify-between mb-2">
@@ -751,7 +753,7 @@ if (query.from || query.object) {      const objectName = query.object || query.
                     onChange={(e) => updateMetric(index, metric.function, e.target.value, metric.alias || '')}
                     className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm"
                   >
-                    <option value="">选择属�?..</option>
+                    <option value="">选择属性...</option>
                     {getAvailableFields()
                       .filter(f => metric.function === 'count' || isNumericType(f.type))
                       .map(field => (
@@ -777,7 +779,7 @@ if (query.from || query.object) {      const objectName = query.object || query.
           </div>
         )}
 
-        {/* 排序和分�?*/}
+        {/* 排序和分页 */}
         <div className="mb-6">
           <label className="block text-sm font-medium text-gray-700 mb-2">排序</label>
           <div className="space-y-2">
@@ -788,7 +790,7 @@ if (query.from || query.object) {      const objectName = query.object || query.
                   onChange={(e) => updateOrderBy(index, e.target.value, order.direction)}
                   className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm"
                 >
-                  <option value="">选择属�?..</option>
+                  <option value="">选择属性...</option>
                   {getAvailableFields().map(field => (
                     <option key={field.path} value={field.path}>{field.label}</option>
                   ))}
@@ -831,7 +833,7 @@ if (query.from || query.object) {      const objectName = query.object || query.
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">偏移�?/label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">偏移量</label>
             <input
               type="number"
               value={query.offset || 0}
@@ -887,7 +889,7 @@ if (query.from || query.object) {      const objectName = query.object || query.
               onChange={(e) => {
                 try {
                   const parsed = JSON.parse(e.target.value);
-                  // 如果 metrics 是数组格式，转换为对象格�?
+                  // 如果 metrics 是数组格式，转换为对象格式
                   if (parsed.metrics && Array.isArray(parsed.metrics)) {
                     parsed.metrics = parsed.metrics.map((m: any) => {
                       if (Array.isArray(m)) {
@@ -930,7 +932,7 @@ if (query.from || query.object) {      const objectName = query.object || query.
           {loading ? (
             <>
               <ArrowPathIcon className="w-5 h-5 animate-spin mr-2" />
-              执行�?..
+              执行中...
             </>
           ) : (
             <>
@@ -941,7 +943,7 @@ if (query.from || query.object) {      const objectName = query.object || query.
         </button>
       </div>
 
-      {/* 右侧：查询结�?*/}
+      {/* 右侧：查询结果 */}
       <div className="w-1/2 overflow-y-auto p-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold text-gray-900">查询结果</h2>
@@ -967,7 +969,7 @@ if (query.from || query.object) {      const objectName = query.object || query.
         {results ? (
           <div>
             <div className="mb-4 text-sm text-gray-600">
-              �?{results.rowCount} 条结�?
+              共 {results.rowCount} 条结果
             </div>
             {viewMode === 'table' ? (
               <div className="overflow-x-auto">

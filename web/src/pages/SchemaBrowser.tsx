@@ -542,38 +542,7 @@ export default function SchemaBrowser() {
                         </div>
                       </div>
 
-                      {/* 数据源详细信息 */}
-                      {(() => {
-                        const dsConfig = getDataSourceConfig(selectedObjectType.data_source.connection_id);
-                        if (dsConfig) {
-                          return (
-                            <div className="mt-4 pt-4 border-t border-blue-200">
-                              <div className="text-xs font-semibold text-gray-700 mb-2">Connection Details:</div>
-                              <div className="space-y-1 text-xs">
-                                <div>
-                                  <span className="text-gray-600">Type:</span>{' '}
-                                  <span className="font-medium">{dsConfig.type}</span>
-                                </div>
-                                <div>
-                                  <span className="text-gray-600">Host:</span>{' '}
-                                  <span className="font-medium">{dsConfig.host}</span>
-                                </div>
-                                {dsConfig.port > 0 && (
-                                  <div>
-                                    <span className="text-gray-600">Primary Key Column:</span>{' '}
-                                    <span className="font-medium">{mapping.primary_key_column}</span>
-                                  </div>
-                                )}
-                                <div>
-                                  <span className="text-gray-600">Database:</span>{' '}
-                                  <span className="font-medium">{dsConfig.database}</span>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        }
-                        return null;
-                      })()}
+                      {/* 数据源详细信息 - 暂时不显示，需要异步加载 */}
                     </div>
 
                     {/* 字段映射 */}
@@ -897,7 +866,6 @@ export default function SchemaBrowser() {
               </div>
             )}
           </div>
-        ) : selectedObjectType ? (
         ) : (
           <div className="text-center py-8 text-gray-500">
             <InformationCircleIcon className="w-12 h-12 mx-auto mb-2 text-gray-400" />
