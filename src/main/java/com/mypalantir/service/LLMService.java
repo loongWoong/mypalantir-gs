@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.client.RestClientException;
 
+import jakarta.annotation.PostConstruct;
 import java.util.*;
 
 /**
@@ -45,6 +46,30 @@ public class LLMService {
     public LLMService() {
         this.restTemplate = new RestTemplate();
         this.objectMapper = new ObjectMapper();
+    }
+    
+    /**
+     * 初始化时检查配置
+     */
+    @PostConstruct
+    public void checkConfiguration() {
+        logger.info("=== LLM Service Configuration ===");
+        
+        if (apiKey == null || apiKey.isEmpty()) {
+            logger.error("✗ LLM API Key is NOT configured!");
+            logger.error("  Please set LLM_API_KEY in .env file or llm.api.key in application.properties");
+            logger.warn("  Natural Language Query feature will not work without API key");
+        } else {
+            String maskedKey = apiKey.substring(0, Math.min(10, apiKey.length())) + "***";
+            logger.info("✓ LLM API Key: {} (masked)", maskedKey);
+        }
+        
+        logger.info("✓ LLM API URL: {}", apiUrl);
+        logger.info("✓ LLM Model: {}", model);
+        logger.info("✓ Temperature: {}", temperature);
+        logger.info("✓ Max Retries: {}", maxRetries);
+        logger.info("✓ Timeout: {}ms", timeout);
+        logger.info("=== End of LLM Configuration ===");
     }
     
     /**
@@ -151,8 +176,26 @@ public class LLMService {
             }
             
             String result = content.asText();
-            logger.info("LLM response received successfully, content length: {} characters", result.length());
-            logger.debug("LLM response content: {}", result.length() > 500 ? result.substring(0, 500) + "..." : result);
+            logger.info("=== LLM API Response ===");
+            logger.info("Response received successfully");
+            logger.info("Content length: {} characters", result.length());
+            logger.info("Content preview (first 1000 chars): {}", 
+                result.length() > 1000 ? result.substring(0, 1000) + "..." : result);
+            
+            // 检查响应是否可能有问题
+            if (result == null || result.trim().isEmpty()) {
+                logger.error("LLM returned empty content");
+                throw new LLMException("LLM API returned empty content");
+            }
+            if (result.trim().length() < 10) {
+                logger.warn("LLM returned suspiciously short content: '{}'", result);
+                logger.warn("This might indicate an issue with the LLM service or API key");
+            }
+            
+            // 检查是否包含错误标记
+            if (result.toLowerCase().contains("error") && result.length() < 100) {
+                logger.warn("Response might contain error: '{}'", result);
+            }
             
             return result;
             
