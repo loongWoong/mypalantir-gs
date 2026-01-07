@@ -348,11 +348,15 @@ public class Neo4jLinkStorage implements ILinkStorage {
         String cypher = "MATCH (n {id: $id}) RETURN labels(n) AS labels";
         var result = session.run(cypher, Values.parameters("id", nodeId));
         
-        if (!result.hasNext()) {
+        // 使用 list() 获取所有结果，避免 single() 在多条记录时报错
+        var records = result.list();
+        
+        if (records.isEmpty()) {
             throw new IOException("Node with id '" + nodeId + "' not found");
         }
         
-        var labels = result.single().get("labels").asList();
+        // 如果有多个节点具有相同ID，取第一个
+        var labels = records.get(0).get("labels").asList();
         if (labels.isEmpty()) {
             throw new IOException("Node with id '" + nodeId + "' has no label");
         }

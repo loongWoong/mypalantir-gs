@@ -46,6 +46,16 @@ public class MetricQuery {
         this.useCache = useCache;
     }
 
+    @Override
+    public String toString() {
+        return "MetricQuery{" +
+                "metricId='" + metricId + '\'' +
+                ", timeRange=" + (timeRange != null ? (timeRange.getStart() + " to " + timeRange.getEnd()) : "null") +
+                ", dimensions=" + dimensions +
+                ", useCache=" + useCache +
+                '}';
+    }
+
     public static class TimeRange {
         private String start;
         private String end;

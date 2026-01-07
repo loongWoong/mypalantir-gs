@@ -520,7 +520,13 @@ object_types:
         data_type: string
         required: true
         description: "交易流水号"
-      
+
+      - name: pass_id
+        display_name: 通行标识ID
+        data_type: string
+        required: false
+        description: "通行标识ID"
+
       - name: modify_flag
         display_name: 修改标志
         data_type: integer

@@ -60,6 +60,14 @@ export type MetricQuery = {
   };
   dimensions?: Record<string, any>;
   cache?: boolean;
+  // 复合指标中的派生指标查询条件
+  derived_metric_conditions?: Record<string, {
+    time_range?: {
+      start: string;
+      end: string;
+    };
+    dimensions?: Record<string, any>;
+  }>;
 };
 
 // 指标结果

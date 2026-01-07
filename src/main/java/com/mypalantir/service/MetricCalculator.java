@@ -62,29 +62,37 @@ public class MetricCalculator {
      * 计算派生指标
      */
     private MetricResult calculateDerivedMetric(MetricDefinition metricDefinition, MetricQuery query) throws Exception {
+        System.out.println("[calculateDerivedMetric] Calculating derived metric: " + metricDefinition.getId());
+        System.out.println("[calculateDerivedMetric] Metric name: " + metricDefinition.getName());
+        System.out.println("[calculateDerivedMetric] Query: " + query);
+            
         // 获取原子指标
         AtomicMetric atomicMetric = atomicMetricService.getAtomicMetric(metricDefinition.getAtomicMetricId());
-
-        // 构建OntologyQuery
+        System.out.println("[calculateDerivedMetric] Atomic metric: " + atomicMetric.getName());
+    
+        // 构建 OntologyQuery
         OntologyQuery ontologyQuery = buildOntologyQuery(metricDefinition, atomicMetric, query);
-
+    
         // 执行查询
         Map<String, Object> queryMap = ontologyQueryToMap(ontologyQuery);
+        System.out.println("[calculateDerivedMetric] Executing query for object: " + ontologyQuery.getFrom());
         QueryExecutor.QueryResult queryResult = queryService.executeQuery(queryMap);
-
-        // 转换为MetricResult
+        System.out.println("[calculateDerivedMetric] Query returned " + queryResult.getRows().size() + " rows");
+    
+        // 转换为 MetricResult
         MetricResult result = convertToMetricResult(queryResult, metricDefinition, atomicMetric);
-
+    
         // 处理时间粒度转换
         if (metricDefinition.getTimeGranularity() != null) {
             result = applyTimeGranularity(result, metricDefinition);
         }
-
+    
         // 计算对比指标（同比、环比）
         if (metricDefinition.getComparisonType() != null && !metricDefinition.getComparisonType().isEmpty()) {
             result = addComparisons(result, metricDefinition, query);
         }
-
+            
+        System.out.println("[calculateDerivedMetric] Calculation completed successfully");
         return result;
     }
 
@@ -100,12 +108,24 @@ public class MetricCalculator {
                 MetricResult result;
                 try {
                     MetricDefinition baseMetric = metricService.getMetricDefinition(id);
-                    result = calculateMetric(baseMetric, query);
+                    // 对于派生指标，需要传递时间范围和维度参数
+                    MetricQuery baseQuery = new MetricQuery();
+                    baseQuery.setMetricId(id);
+                    baseQuery.setTimeRange(query.getTimeRange());
+                    baseQuery.setDimensions(query.getDimensions());
+                    baseQuery.setUseCache(query.isUseCache());
+                    result = calculateMetric(baseMetric, baseQuery);
                 } catch (IOException e) {
                     // 如果不是指标定义，尝试获取原子指标
                     try {
                         AtomicMetric atomicMetric = atomicMetricService.getAtomicMetric(id);
-                        result = calculateAtomicMetric(atomicMetric, query);
+                        // 原子指标也需要传递查询参数
+                        MetricQuery baseQuery = new MetricQuery();
+                        baseQuery.setMetricId(id);
+                        baseQuery.setTimeRange(query.getTimeRange());
+                        baseQuery.setDimensions(query.getDimensions());
+                        baseQuery.setUseCache(query.isUseCache());
+                        result = calculateAtomicMetric(atomicMetric, baseQuery);
                     } catch (IOException ex) {
                         throw new RuntimeException("无法获取基础指标: " + id + " (既不是指标定义也不是原子指标)", ex);
                     }
@@ -115,8 +135,11 @@ public class MetricCalculator {
                 // 重新抛出 RuntimeException
                 throw e;
             } catch (Exception e) {
-                // 将其他检查异常包装为 RuntimeException
-                throw new RuntimeException("无法计算基础指标: " + id, e);
+                // 将其他检查异常包装为 RuntimeException，并添加更详细的错误信息
+                System.err.println("[calculateCompositeMetric] Failed to calculate base metric: " + id);
+                System.err.println("[calculateCompositeMetric] Query: " + query);
+                e.printStackTrace();
+                throw new RuntimeException("无法计算基础指标: " + id + ", 错误: " + e.getMessage(), e);
             }
         }
 
@@ -342,6 +365,30 @@ public class MetricCalculator {
     }
 
     /**
+     * 从Map中获取值，忽略键的大小写
+     */
+    private Object getValueIgnoreCase(Map<String, Object> map, String key) {
+        if (map == null || key == null) {
+            return null;
+        }
+        
+        // 首先尝试精确匹配
+        Object value = map.get(key);
+        if (value != null) {
+            return value;
+        }
+        
+        // 如果精确匹配失败，尝试忽略大小写匹配
+        for (Map.Entry<String, Object> entry : map.entrySet()) {
+            if (key.equalsIgnoreCase(entry.getKey())) {
+                return entry.getValue();
+            }
+        }
+        
+        return null;
+    }
+
+    /**
      * 获取时间分组字段
      */
     private String getTimeGroupField(String timeDimension, String granularity) {
@@ -413,20 +460,20 @@ public class MetricCalculator {
         for (Map<String, Object> row : queryResult.getRows()) {
             MetricResult.MetricDataPoint point = new MetricResult.MetricDataPoint();
             
-            // 提取时间值
+            // 提取时间值（不区分大小写）
             if (metricDefinition.getTimeDimension() != null) {
                 String timeField = getTimeGroupField(metricDefinition.getTimeDimension(), metricDefinition.getTimeGranularity());
-                Object timeValue = row.get(timeField);
+                Object timeValue = getValueIgnoreCase(row, timeField);
                 if (timeValue != null) {
                     point.setTimeValue(timeValue.toString());
                 }
             }
 
-            // 提取维度值
+            // 提取维度值（不区分大小写）
             Map<String, Object> dimensionValues = new HashMap<>();
             if (metricDefinition.getDimensions() != null) {
                 for (String dim : metricDefinition.getDimensions()) {
-                    Object value = row.get(dim);
+                    Object value = getValueIgnoreCase(row, dim);
                     if (value != null) {
                         dimensionValues.put(dim, value);
                     }
@@ -434,10 +481,11 @@ public class MetricCalculator {
             }
             point.setDimensionValues(dimensionValues);
 
-            // 提取指标值（取第一个聚合结果）
+            // 提取指标值（取最后一个聚合结果列）
             if (!queryResult.getColumns().isEmpty()) {
-                String firstColumn = queryResult.getColumns().get(0);
-                Object metricValue = row.get(firstColumn);
+                // 聚合结果通常是最后一列
+                String lastColumn = queryResult.getColumns().get(queryResult.getColumns().size() - 1);
+                Object metricValue = getValueIgnoreCase(row, lastColumn);
                 if (metricValue instanceof Number) {
                     point.setMetricValue((Number) metricValue);
                 }
@@ -1005,6 +1053,10 @@ public class MetricCalculator {
         }
         if (query.getWhere() != null) {
             map.put("where", query.getWhere());
+        }
+        // 添加 filter 字段转换（新格式表达式数组）
+        if (query.getFilter() != null && !query.getFilter().isEmpty()) {
+            map.put("filter", query.getFilter());
         }
         if (query.getGroupBy() != null) {
             map.put("group_by", query.getGroupBy());

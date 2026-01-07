@@ -861,7 +861,7 @@ public class RelNodeBuilder {
                 }
                 break;
             case DATE:
-                // DATE 类型：使用 java.sql.Date
+                // DATE 类型：Calcite 的 makeLiteral 期望 Integer（表示距离 UNIX 纪元 1970-01-01 的天数）
                 if (value instanceof String) {
                     String dateStr = ((String) value).trim();
                     // 如果字符串为空，返回 NULL
@@ -869,13 +869,26 @@ public class RelNodeBuilder {
                         return rexBuilder.makeNullLiteral(type);
                     }
                     try {
-                        java.sql.Date date = java.sql.Date.valueOf(dateStr);
-                        return rexBuilder.makeLiteral(date, type, false);
-                    } catch (IllegalArgumentException e) {
+                        // 使用 LocalDate 避免时区问题
+                        java.time.LocalDate localDate = java.time.LocalDate.parse(dateStr);
+                        // 计算距离 1970-01-01 的天数
+                        int daysSinceEpoch = (int) localDate.toEpochDay();
+                        return rexBuilder.makeLiteral(daysSinceEpoch, type, false);
+                    } catch (java.time.format.DateTimeParseException e) {
                         throw new IllegalArgumentException("Invalid date format: " + dateStr + ". Expected format: YYYY-MM-DD");
                     }
                 } else if (value instanceof java.sql.Date) {
-                    return rexBuilder.makeLiteral((java.sql.Date) value, type, false);
+                    // 转换为 LocalDate 再计算天数，避免时区问题
+                    java.time.LocalDate localDate = ((java.sql.Date) value).toLocalDate();
+                    int daysSinceEpoch = (int) localDate.toEpochDay();
+                    return rexBuilder.makeLiteral(daysSinceEpoch, type, false);
+                } else if (value instanceof java.time.LocalDate) {
+                    // 如果已经是 LocalDate，直接计算天数
+                    int daysSinceEpoch = (int) ((java.time.LocalDate) value).toEpochDay();
+                    return rexBuilder.makeLiteral(daysSinceEpoch, type, false);
+                } else if (value instanceof Number) {
+                    // 如果已经是数字（天数），直接使用
+                    return rexBuilder.makeLiteral(((Number) value).intValue(), type, false);
                 } else {
                     String valueStr = value.toString().trim();
                     // 如果字符串为空，返回 NULL
@@ -883,9 +896,12 @@ public class RelNodeBuilder {
                         return rexBuilder.makeNullLiteral(type);
                     }
                     try {
-                        java.sql.Date date = java.sql.Date.valueOf(valueStr);
-                        return rexBuilder.makeLiteral(date, type, false);
-                    } catch (IllegalArgumentException e) {
+                        // 使用 LocalDate 避免时区问题
+                        java.time.LocalDate localDate = java.time.LocalDate.parse(valueStr);
+                        // 计算距离 1970-01-01 的天数
+                        int daysSinceEpoch = (int) localDate.toEpochDay();
+                        return rexBuilder.makeLiteral(daysSinceEpoch, type, false);
+                    } catch (java.time.format.DateTimeParseException e) {
                         throw new IllegalArgumentException("Cannot convert '" + value + "' to DATE");
                     }
                 }

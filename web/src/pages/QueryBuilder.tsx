@@ -32,6 +32,12 @@ export default function QueryBuilder() {
   const [metricTimeRange, setMetricTimeRange] = useState<{ start: string; end: string }>({ start: '', end: '' });
   const [metricDimensions, setMetricDimensions] = useState<Record<string, any>>({});
   const [metricResult, setMetricResult] = useState<MetricResult | null>(null);
+  // 复合指标中的派生指标及其查询条件
+  const [derivedMetricsInComposite, setDerivedMetricsInComposite] = useState<MetricDefinition[]>([]);
+  const [derivedMetricConditions, setDerivedMetricConditions] = useState<Record<string, {
+    time_range?: { start: string; end: string };
+    dimensions?: Record<string, any>;
+  }>>({});
   const [query, setQuery] = useState<QueryRequest>({
     from: '',
     select: [],
@@ -113,6 +119,87 @@ export default function QueryBuilder() {
     }
   }, [whereConditions, queryMode]);
 
+  // 当选择复合指标时，加载其包含的派生指标
+  useEffect(() => {
+    const loadDerivedMetricsInComposite = async () => {
+      if (!selectedMetricId) {
+        setDerivedMetricsInComposite([]);
+        setDerivedMetricConditions({});
+        return;
+      }
+
+      const selectedMetric = metricDefinitions.find(m => m.id === selectedMetricId);
+      if (!selectedMetric || selectedMetric.metric_type !== 'composite') {
+        setDerivedMetricsInComposite([]);
+        setDerivedMetricConditions({});
+        return;
+      }
+
+      // 获取复合指标的基础指标ID列表
+      const baseMetricIds = selectedMetric.base_metric_ids || [];
+      if (baseMetricIds.length === 0) {
+        setDerivedMetricsInComposite([]);
+        setDerivedMetricConditions({});
+        return;
+      }
+
+      try {
+        // 加载所有基础指标的详细信息
+        const baseMetricsDetails = await Promise.all(
+          baseMetricIds.map(async (id) => {
+            try {
+              // 先尝试从原子指标中查找
+              const atomicMetric = atomicMetrics.find(m => m.id === id);
+              if (atomicMetric) {
+                return { type: 'atomic' as const, metric: atomicMetric };
+              }
+              // 再从指标定义中查找
+              const metricDef = metricDefinitions.find(m => m.id === id);
+              if (metricDef) {
+                return { type: 'definition' as const, metric: metricDef };
+              }
+              // 如果本地没有，尝试从服务器获取
+              const definition = await metricApi.getMetricDefinition(id);
+              return { type: 'definition' as const, metric: normalizeMetricDefinition(definition) };
+            } catch (err) {
+              console.error(`Failed to load base metric ${id}:`, err);
+              return null;
+            }
+          })
+        );
+
+        // 筛选出派生指标
+        const derivedMetrics = baseMetricsDetails
+          .filter(detail => detail && detail.type === 'definition' && 
+                           (detail.metric as MetricDefinition).metric_type === 'derived')
+          .map(detail => detail!.metric as MetricDefinition);
+
+        setDerivedMetricsInComposite(derivedMetrics);
+
+        // 初始化派生指标的查询条件
+        const initialConditions: Record<string, {
+          time_range?: { start: string; end: string };
+          dimensions?: Record<string, any>;
+        }> = {};
+        
+        derivedMetrics.forEach(dm => {
+          initialConditions[dm.id] = {
+            time_range: { start: '', end: '' },
+            dimensions: {}
+          };
+        });
+        
+        setDerivedMetricConditions(initialConditions);
+      } catch (error) {
+        console.error('Failed to load base metrics:', error);
+        setDerivedMetricsInComposite([]);
+        setDerivedMetricConditions({});
+      }
+    };
+
+    loadDerivedMetricsInComposite();
+  }, [selectedMetricId, metricDefinitions, atomicMetrics]);
+
   const loadSchema = async () => {
     try {
       const [objectTypesData, linkTypesData] = await Promise.all([
@@ -183,6 +270,55 @@ export default function QueryBuilder() {
           });
           if (Object.keys(filteredDimensions).length > 0) {
             metricQuery.dimensions = filteredDimensions;
+          }
+        }
+
+        // 添加复合指标中的派生指标查询条件
+        const selectedMetric = metricDefinitions.find(m => m.id === selectedMetricId);
+        if (selectedMetric && selectedMetric.metric_type === 'composite' && derivedMetricsInComposite.length > 0) {
+          const derivedConditions: Record<string, {
+            time_range?: { start: string; end: string };
+            dimensions?: Record<string, any>;
+          }> = {};
+
+          derivedMetricsInComposite.forEach(dm => {
+            const conditions = derivedMetricConditions[dm.id];
+            if (conditions) {
+              const metricCondition: {
+                time_range?: { start: string; end: string };
+                dimensions?: Record<string, any>;
+              } = {};
+
+              // 添加时间范围
+              if (conditions.time_range && conditions.time_range.start && conditions.time_range.end) {
+                metricCondition.time_range = {
+                  start: conditions.time_range.start,
+                  end: conditions.time_range.end
+                };
+              }
+
+              // 添加维度
+              if (conditions.dimensions && Object.keys(conditions.dimensions).length > 0) {
+                const filteredDims: Record<string, any> = {};
+                Object.entries(conditions.dimensions).forEach(([key, value]) => {
+                  if (value && typeof value === 'string' && value.trim() !== '') {
+                    filteredDims[key] = value;
+                  }
+                });
+                if (Object.keys(filteredDims).length > 0) {
+                  metricCondition.dimensions = filteredDims;
+                }
+              }
+
+              // 只有当有有效条件时才添加
+              if (metricCondition.time_range || metricCondition.dimensions) {
+                derivedConditions[dm.id] = metricCondition;
+              }
+            }
+          });
+
+          if (Object.keys(derivedConditions).length > 0) {
+            metricQuery.derived_metric_conditions = derivedConditions;
           }
         }
 
@@ -667,13 +803,183 @@ export default function QueryBuilder() {
               if (!selectedMetric) {
                 selectedMetric = metricDefinitions.find(m => m.id === selectedMetricId);
               }
+              
+              // 判断是否为复合指标
+              const isCompositeMetric = selectedMetric && 'metric_type' in selectedMetric && selectedMetric.metric_type === 'composite';
+              
               return selectedMetric ? (
                 <>
+                  {/* 复合指标说明 */}
+                  {isCompositeMetric && (
+                    <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+                      <div className="flex items-start">
+                        <svg className="w-5 h-5 text-blue-600 mr-2 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                        </svg>
+                        <div className="flex-1">
+                          <h4 className="text-sm font-medium text-blue-900 mb-1">复合指标查询说明</h4>
+                          <p className="text-xs text-blue-800">
+                            复合指标基于多个基础指标计算。下方设置的<strong>时间范围</strong>和<strong>维度筛选</strong>条件将传递给所有基础指标（包括派生指标）。
+                            如果基础指标为派生指标，它将使用这些参数结合自身的<strong>过滤条件</strong>来计算。
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* 复合指标中的派生指标查询条件输入 */}
+                  {isCompositeMetric && derivedMetricsInComposite.length > 0 && (
+                    <div className="mb-6 bg-purple-50 border border-purple-200 rounded-lg p-4">
+                      <h4 className="text-sm font-semibold text-purple-900 mb-4 flex items-center">
+                        <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clipRule="evenodd" />
+                        </svg>
+                        派生指标查询条件
+                        <span className="ml-2 text-xs font-normal text-purple-700">
+                          (检测到 {derivedMetricsInComposite.length} 个派生指标)
+                        </span>
+                      </h4>
+                      
+                      <p className="text-xs text-purple-700 mb-4">
+                        ℹ️ 请为每个派生指标设置其所需的查询条件（时间范围和维度筛选）。每个派生指标还将自动应用其固有的过滤条件。
+                      </p>
+                      
+                      <div className="space-y-6">
+                        {derivedMetricsInComposite.map((derivedMetric, index) => (
+                          <div key={derivedMetric.id} className="bg-white border border-purple-200 rounded-lg p-4">
+                            {/* 派生指标基本信息 */}
+                            <div className="mb-4 pb-3 border-b border-purple-100">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center">
+                                  <span className="bg-purple-600 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center mr-2">
+                                    {index + 1}
+                                  </span>
+                                  <div>
+                                    <h5 className="text-sm font-semibold text-gray-900">
+                                      {derivedMetric.display_name || derivedMetric.name}
+                                    </h5>
+                                    {derivedMetric.description && (
+                                      <p className="text-xs text-gray-500 mt-0.5">{derivedMetric.description}</p>
+                                    )}
+                                  </div>
+                                </div>
+                                <span className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded">
+                                  派生指标
+                                </span>
+                              </div>
+                              
+                              {/* 显示固有过滤条件 */}
+                              {derivedMetric.filter_conditions && Object.keys(derivedMetric.filter_conditions).length > 0 && (
+                                <div className="mt-3 bg-gray-50 rounded p-2">
+                                  <p className="text-xs font-medium text-gray-700 mb-1">固有过滤条件：</p>
+                                  <div className="flex flex-wrap gap-2">
+                                    {Object.entries(derivedMetric.filter_conditions).map(([field, value]) => (
+                                      <span key={field} className="text-xs bg-gray-200 text-gray-700 px-2 py-0.5 rounded">
+                                        {field} = {String(value)}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                            
+                            {/* 时间范围输入 */}
+                            {derivedMetric.time_dimension && (
+                              <div className="mb-4">
+                                <label className="block text-xs font-medium text-gray-700 mb-2">
+                                  时间范围 <span className="text-gray-500">(字段: {derivedMetric.time_dimension})</span>
+                                </label>
+                                <div className="grid grid-cols-2 gap-3">
+                                  <div>
+                                    <label className="block text-xs text-gray-600 mb-1">开始时间</label>
+                                    <input
+                                      type="date"
+                                      value={derivedMetricConditions[derivedMetric.id]?.time_range?.start || ''}
+                                      onChange={(e) => {
+                                        setDerivedMetricConditions({
+                                          ...derivedMetricConditions,
+                                          [derivedMetric.id]: {
+                                            ...derivedMetricConditions[derivedMetric.id],
+                                            time_range: {
+                                              ...derivedMetricConditions[derivedMetric.id]?.time_range,
+                                              start: e.target.value,
+                                              end: derivedMetricConditions[derivedMetric.id]?.time_range?.end || ''
+                                            }
+                                          }
+                                        });
+                                      }}
+                                      className="w-full border border-gray-300 rounded px-2 py-1.5 text-xs"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="block text-xs text-gray-600 mb-1">结束时间</label>
+                                    <input
+                                      type="date"
+                                      value={derivedMetricConditions[derivedMetric.id]?.time_range?.end || ''}
+                                      onChange={(e) => {
+                                        setDerivedMetricConditions({
+                                          ...derivedMetricConditions,
+                                          [derivedMetric.id]: {
+                                            ...derivedMetricConditions[derivedMetric.id],
+                                            time_range: {
+                                              ...derivedMetricConditions[derivedMetric.id]?.time_range,
+                                              start: derivedMetricConditions[derivedMetric.id]?.time_range?.start || '',
+                                              end: e.target.value
+                                            }
+                                          }
+                                        });
+                                      }}
+                                      className="w-full border border-gray-300 rounded px-2 py-1.5 text-xs"
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                            
+                            {/* 维度筛选输入 */}
+                            {derivedMetric.dimensions && derivedMetric.dimensions.length > 0 && (
+                              <div>
+                                <label className="block text-xs font-medium text-gray-700 mb-2">
+                                  维度筛选
+                                </label>
+                                <div className="space-y-2">
+                                  {derivedMetric.dimensions.map(dim => (
+                                    <div key={dim} className="flex items-center gap-2">
+                                      <label className="text-xs text-gray-700 w-28">{dim}:</label>
+                                      <input
+                                        type="text"
+                                        value={derivedMetricConditions[derivedMetric.id]?.dimensions?.[dim] || ''}
+                                        onChange={(e) => {
+                                          setDerivedMetricConditions({
+                                            ...derivedMetricConditions,
+                                            [derivedMetric.id]: {
+                                              ...derivedMetricConditions[derivedMetric.id],
+                                              dimensions: {
+                                                ...derivedMetricConditions[derivedMetric.id]?.dimensions,
+                                                [dim]: e.target.value
+                                              }
+                                            }
+                                          });
+                                        }}
+                                        placeholder="输入维度值..."
+                                        className="flex-1 border border-gray-300 rounded px-2 py-1 text-xs"
+                                      />
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
                   {/* 时间范围（仅派生和复合指标） */}
                   {'time_dimension' in selectedMetric && selectedMetric.time_dimension && (
                     <div className="mb-6">
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        时间范围
+                        时间范围 {isCompositeMetric && <span className="text-xs text-gray-500">(用于所有基础指标)</span>}
                       </label>
                       <div className="grid grid-cols-2 gap-4">
                         <div>
@@ -695,6 +1001,11 @@ export default function QueryBuilder() {
                           />
                         </div>
                       </div>
+                      {isCompositeMetric && (
+                        <p className="text-xs text-blue-600 mt-2">
+                          ℹ️ 该时间范围将应用于所有基础指标的计算
+                        </p>
+                      )}
                     </div>
                   )}
 
@@ -702,7 +1013,7 @@ export default function QueryBuilder() {
                   {'dimensions' in selectedMetric && selectedMetric.dimensions && selectedMetric.dimensions.length > 0 && (
                     <div className="mb-6">
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        维度筛选
+                        维度筛选 {isCompositeMetric && <span className="text-xs text-gray-500">(用于所有基础指标)</span>}
                       </label>
                       <div className="space-y-2 border border-gray-300 rounded-lg p-3 bg-white">
                         {selectedMetric.dimensions.map(dim => (
@@ -718,6 +1029,11 @@ export default function QueryBuilder() {
                           </div>
                         ))}
                       </div>
+                      {isCompositeMetric && (
+                        <p className="text-xs text-blue-600 mt-2">
+                          ℹ️ 这些维度筛选条件将应用于所有基础指标的计算
+                        </p>
+                      )}
                     </div>
                   )}
                 </>
