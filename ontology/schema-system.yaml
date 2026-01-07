@@ -190,6 +190,158 @@ object_types:
         required: false
         description: "用于生成实例ID的主键列名"
 
+  - name: AtomicMetric
+    display_name: 原子指标
+    description: "最小的可度量单元，由业务过程+统计方式组成，不可再分"
+    properties:
+      - name: id
+        display_name: 原子指标ID
+        data_type: string
+        required: true
+      
+      - name: name
+        display_name: 原子指标名称
+        data_type: string
+        required: true
+        description: "业务过程+统计方式，如：交易金额、播放次数"
+      
+      - name: display_name
+        display_name: 显示名称
+        data_type: string
+        required: false
+      
+      - name: description
+        display_name: 描述
+        data_type: string
+        required: false
+      
+      - name: business_process
+        display_name: 业务过程
+        data_type: string
+        required: true
+        description: "业务过程对应的对象类型，如：EntryTransaction"
+      
+      - name: aggregation_function
+        display_name: 统计方式
+        data_type: string
+        required: true
+        description: "聚合函数，可选值: SUM, AVG, COUNT, MAX, MIN, DISTINCT_COUNT"
+      
+      - name: aggregation_field
+        display_name: 度量字段
+        data_type: string
+        required: false
+        description: "用于聚合的字段名（COUNT时可为空）"
+      
+      - name: unit
+        display_name: 单位
+        data_type: string
+        required: false
+        description: "原子指标单位（如: 元、个、次）"
+      
+      - name: status
+        display_name: 状态
+        data_type: string
+        required: true
+        description: "可选值: active, inactive, deprecated"
+
+  - name: MetricDefinition
+    display_name: 指标定义
+    description: "业务指标的定义，包括派生指标和复合指标"
+    properties:
+      - name: id
+        display_name: 指标ID
+        data_type: string
+        required: true
+      
+      - name: name
+        display_name: 指标名称
+        data_type: string
+        required: true
+        description: "自动生成：时间周期+原子指标名称"
+      
+      - name: display_name
+        display_name: 显示名称
+        data_type: string
+        required: false
+      
+      - name: description
+        display_name: 描述
+        data_type: string
+        required: false
+      
+      - name: metric_type
+        display_name: 指标类型
+        data_type: string
+        required: true
+        description: "可选值: derived（派生指标）, composite（复合指标）"
+      
+      - name: atomic_metric_id
+        display_name: 原子指标ID
+        data_type: string
+        required: false
+        description: "引用的原子指标ID（派生指标必须）"
+      
+      - name: business_scope
+        display_name: 业务范围
+        data_type: json
+        required: false
+        description: "业务范围配置，确定统计的业务范围。单模型或多模型配置"
+      
+      - name: time_dimension
+        display_name: 时间维度
+        data_type: string
+        required: false
+        description: "时间维度字段名（如: l_date, create_time）"
+      
+      - name: time_granularity
+        display_name: 时间粒度
+        data_type: string
+        required: false
+        description: "时间统计粒度，可选值: day, week, month, quarter, year"
+      
+      - name: dimensions
+        display_name: 维度
+        data_type: json
+        required: false
+        description: "观察视角（维度字段列表），用于多维度分析，不参与指标命名。JSON格式: [\"field1\", \"field2\"]"
+      
+      - name: filter_conditions
+        display_name: 条件限定
+        data_type: json
+        required: false
+        description: "条件限定（过滤条件），用于灵活剪裁数据，不参与指标命名。JSON格式: {\"field\": \"value\"}"
+      
+      - name: comparison_type
+        display_name: 对比类型
+        data_type: json
+        required: false
+        description: "对比指标类型列表，可选值: YoY (同比), MoM (环比), WoW (环比周), QoQ (环比季度)"
+      
+      - name: derived_formula
+        display_name: 衍生公式
+        data_type: string
+        required: false
+        description: "衍生指标的计算公式（如: {metric1} / {metric2}）"
+      
+      - name: base_metric_ids
+        display_name: 基础指标ID列表
+        data_type: json
+        required: false
+        description: "衍生指标依赖的基础指标ID列表，JSON格式: [\"metric_id1\", \"metric_id2\"]"
+      
+      - name: unit
+        display_name: 单位
+        data_type: string
+        required: false
+        description: "指标单位（如: 元、个、次）"
+      
+      - name: status
+        display_name: 状态
+        data_type: string
+        required: true
+        description: "可选值: active, inactive, deprecated"
+
 link_types:
   - name: database_has_table
     display_name: 数据源包含表
@@ -217,4 +369,40 @@ link_types:
     source_type: mapping
     target_type: table
     cardinality: many-to-one
+    direction: directed
+
+  - name: derived_uses_atomic
+    display_name: 派生指标引用原子指标
+    description: "派生指标基于原子指标构建"
+    source_type: MetricDefinition
+    target_type: AtomicMetric
+    cardinality: many-to-one
+    direction: directed
+    property_mappings:
+      atomic_metric_id: id
+  
+  - name: composite_depends_on
+    display_name: 复合指标依赖
+    description: "复合指标依赖的基础指标（派生指标或复合指标）"
+    source_type: MetricDefinition
+    target_type: MetricDefinition
+    cardinality: many-to-many
+    direction: directed
+    property_mappings:
+      base_metric_ids: id
+
+  - name: atomic_metric_belongs_to_workspace
+    display_name: 原子指标归属工作空间
+    description: "原子指标归属于一个或多个工作空间（模型）"
+    source_type: AtomicMetric
+    target_type: workspace
+    cardinality: many-to-many
+    direction: directed
+
+  - name: metric_definition_belongs_to_workspace
+    display_name: 业务指标归属工作空间
+    description: "业务指标（派生指标或复合指标）归属于一个或多个工作空间（模型）"
+    source_type: MetricDefinition
+    target_type: workspace
+    cardinality: many-to-many
     direction: directed

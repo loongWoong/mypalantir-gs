@@ -124,6 +124,9 @@ public class Neo4jInstanceStorage implements IInstanceStorage {
             throw new IOException("Neo4j driver is not initialized");
         }
 
+        // 验证连接（带重试机制）
+        verifyAndRetryConnection();
+
         try (Session session = neo4jDriver.session()) {
             String label = normalizeLabel(objectType);
             String cypher = "MATCH (n:" + label + " {id: $id}) RETURN n";
@@ -160,6 +163,9 @@ public class Neo4jInstanceStorage implements IInstanceStorage {
         if (neo4jDriver == null) {
             throw new IOException("Neo4j driver is not initialized");
         }
+
+        // 验证连接（带重试机制）
+        verifyAndRetryConnection();
 
         try (Session session = neo4jDriver.session()) {
             String label = normalizeLabel(objectType);
@@ -200,6 +206,9 @@ public class Neo4jInstanceStorage implements IInstanceStorage {
             throw new IOException("Neo4j driver is not initialized");
         }
 
+        // 验证连接（带重试机制）
+        verifyAndRetryConnection();
+
         try (Session session = neo4jDriver.session()) {
             String label = normalizeLabel(objectType);
             
@@ -235,30 +244,106 @@ public class Neo4jInstanceStorage implements IInstanceStorage {
             throw new IOException("Neo4j driver is not initialized");
         }
 
-        try (Session session = neo4jDriver.session()) {
-            String label = normalizeLabel(objectType);
-            
-            // 先获取总数
-            String countCypher = "MATCH (n:" + label + ") RETURN count(n) AS total";
-            long total = session.run(countCypher).single().get("total").asLong();
-            
-            // 获取分页数据
-            String cypher = "MATCH (n:" + label + ") RETURN n ORDER BY n.created_at DESC SKIP $offset LIMIT $limit";
-            var result = session.run(cypher, Values.parameters("offset", offset, "limit", limit));
-            
-            List<Map<String, Object>> instances = new ArrayList<>();
-            while (result.hasNext()) {
-                var record = result.next();
-                var node = record.get("n").asNode();
-                Map<String, Object> instance = new HashMap<>();
-                node.asMap().forEach((key, value) -> {
-                    instance.put(key, convertValue(value));
-                });
-                instances.add(instance);
+        // #region agent log
+        try {
+            java.io.FileWriter fw = new java.io.FileWriter("c:\\Users\\leon\\Downloads\\mypalantir-gs\\.cursor\\debug.log", true);
+            fw.write(java.util.Map.of("id","log_" + System.currentTimeMillis(),"timestamp",System.currentTimeMillis(),"location","Neo4jInstanceStorage.java:233","message","listInstances entry","data",java.util.Map.of("objectType",objectType,"offset",offset,"limit",limit,"driverNull",neo4jDriver == null),"sessionId","debug-session","runId","run1","hypothesisId","A").toString() + "\n");
+            fw.close();
+        } catch (Exception ignored) {}
+        // #endregion
+
+        try {
+            // #region agent log
+            try {
+                java.io.FileWriter fw = new java.io.FileWriter("c:\\Users\\leon\\Downloads\\mypalantir-gs\\.cursor\\debug.log", true);
+                fw.write(java.util.Map.of("id","log_" + System.currentTimeMillis(),"timestamp",System.currentTimeMillis(),"location","Neo4jInstanceStorage.java:240","message","Before session creation","data",java.util.Map.of("driverClass",neo4jDriver.getClass().getName()),"sessionId","debug-session","runId","run1","hypothesisId","B").toString() + "\n");
+                fw.close();
+            } catch (Exception ignored) {}
+            // #endregion
+
+            // 验证连接（带重试机制）
+            // #region agent log
+            try {
+                verifyAndRetryConnection();
+                java.io.FileWriter fw = new java.io.FileWriter("c:\\Users\\leon\\Downloads\\mypalantir-gs\\.cursor\\debug.log", true);
+                fw.write(java.util.Map.of("id","log_" + System.currentTimeMillis(),"timestamp",System.currentTimeMillis(),"location","Neo4jInstanceStorage.java:245","message","Connectivity verified","data",java.util.Map.of(),"sessionId","debug-session","runId","run1","hypothesisId","C").toString() + "\n");
+                fw.close();
+            } catch (Exception e) {
+                try {
+                    java.io.FileWriter fw = new java.io.FileWriter("c:\\Users\\leon\\Downloads\\mypalantir-gs\\.cursor\\debug.log", true);
+                    fw.write(java.util.Map.of("id","log_" + System.currentTimeMillis(),"timestamp",System.currentTimeMillis(),"location","Neo4jInstanceStorage.java:250","message","Connectivity verification failed","data",java.util.Map.of("error",e.getClass().getName(),"message",e.getMessage()),"sessionId","debug-session","runId","run1","hypothesisId","C").toString() + "\n");
+                    fw.close();
+                } catch (Exception ignored) {}
+                throw e; // 重新抛出异常
             }
-            
-            return new InstanceStorage.ListResult(instances, total);
+            // #endregion
+
+            try (Session session = neo4jDriver.session()) {
+                // #region agent log
+                try {
+                    java.io.FileWriter fw = new java.io.FileWriter("c:\\Users\\leon\\Downloads\\mypalantir-gs\\.cursor\\debug.log", true);
+                    fw.write(java.util.Map.of("id","log_" + System.currentTimeMillis(),"timestamp",System.currentTimeMillis(),"location","Neo4jInstanceStorage.java:254","message","Session created","data",java.util.Map.of("sessionClass",session.getClass().getName()),"sessionId","debug-session","runId","run1","hypothesisId","D").toString() + "\n");
+                    fw.close();
+                } catch (Exception ignored) {}
+                // #endregion
+
+                String label = normalizeLabel(objectType);
+                
+                // 先获取总数
+                String countCypher = "MATCH (n:" + label + ") RETURN count(n) AS total";
+                
+                // #region agent log
+                try {
+                    java.io.FileWriter fw = new java.io.FileWriter("c:\\Users\\leon\\Downloads\\mypalantir-gs\\.cursor\\debug.log", true);
+                    fw.write(java.util.Map.of("id","log_" + System.currentTimeMillis(),"timestamp",System.currentTimeMillis(),"location","Neo4jInstanceStorage.java:262","message","Before count query","data",java.util.Map.of("cypher",countCypher),"sessionId","debug-session","runId","run1","hypothesisId","E").toString() + "\n");
+                    fw.close();
+                } catch (Exception ignored) {}
+                // #endregion
+
+                long total = session.run(countCypher).single().get("total").asLong();
+                
+                // #region agent log
+                try {
+                    java.io.FileWriter fw = new java.io.FileWriter("c:\\Users\\leon\\Downloads\\mypalantir-gs\\.cursor\\debug.log", true);
+                    fw.write(java.util.Map.of("id","log_" + System.currentTimeMillis(),"timestamp",System.currentTimeMillis(),"location","Neo4jInstanceStorage.java:268","message","Count query succeeded","data",java.util.Map.of("total",total),"sessionId","debug-session","runId","run1","hypothesisId","E").toString() + "\n");
+                    fw.close();
+                } catch (Exception ignored) {}
+                // #endregion
+
+                // 获取分页数据
+                String cypher = "MATCH (n:" + label + ") RETURN n ORDER BY n.created_at DESC SKIP $offset LIMIT $limit";
+                var result = session.run(cypher, Values.parameters("offset", offset, "limit", limit));
+                
+                List<Map<String, Object>> instances = new ArrayList<>();
+                while (result.hasNext()) {
+                    var record = result.next();
+                    var node = record.get("n").asNode();
+                    Map<String, Object> instance = new HashMap<>();
+                    node.asMap().forEach((key, value) -> {
+                        instance.put(key, convertValue(value));
+                    });
+                    instances.add(instance);
+                }
+                
+                // #region agent log
+                try {
+                    java.io.FileWriter fw = new java.io.FileWriter("c:\\Users\\leon\\Downloads\\mypalantir-gs\\.cursor\\debug.log", true);
+                    fw.write(java.util.Map.of("id","log_" + System.currentTimeMillis(),"timestamp",System.currentTimeMillis(),"location","Neo4jInstanceStorage.java:285","message","listInstances success","data",java.util.Map.of("instanceCount",instances.size(),"total",total),"sessionId","debug-session","runId","run1","hypothesisId","F").toString() + "\n");
+                    fw.close();
+                } catch (Exception ignored) {}
+                // #endregion
+
+                return new InstanceStorage.ListResult(instances, total);
+            }
         } catch (Exception e) {
+            // #region agent log
+            try {
+                java.io.FileWriter fw = new java.io.FileWriter("c:\\Users\\leon\\Downloads\\mypalantir-gs\\.cursor\\debug.log", true);
+                fw.write(java.util.Map.of("id","log_" + System.currentTimeMillis(),"timestamp",System.currentTimeMillis(),"location","Neo4jInstanceStorage.java:293","message","listInstances exception","data",java.util.Map.of("errorClass",e.getClass().getName(),"message",e.getMessage(),"cause",e.getCause() != null ? e.getCause().getClass().getName() : "null"),"sessionId","debug-session","runId","run1","hypothesisId","G").toString() + "\n");
+                fw.close();
+            } catch (Exception ignored) {}
+            // #endregion
+
             logger.error("Failed to list instances from Neo4j: {}", e.getMessage(), e);
             throw new IOException("Failed to list instances: " + e.getMessage(), e);
         }
@@ -349,6 +434,37 @@ public class Neo4jInstanceStorage implements IInstanceStorage {
         }
         
         return result;
+    }
+
+    /**
+     * 验证并重试连接（如果连接失败）
+     */
+    private void verifyAndRetryConnection() throws IOException {
+        if (neo4jDriver == null) {
+            throw new IOException("Neo4j driver is not initialized");
+        }
+        
+        int maxRetries = 3;
+        int retryDelayMs = 1000;
+        
+        for (int i = 0; i < maxRetries; i++) {
+            try {
+                neo4jDriver.verifyConnectivity();
+                return; // 连接成功
+            } catch (Exception e) {
+                if (i == maxRetries - 1) {
+                    logger.error("Failed to verify Neo4j connectivity after {} retries: {}", maxRetries, e.getMessage());
+                    throw new IOException("Connection to Neo4j failed: " + e.getMessage(), e);
+                }
+                logger.warn("Neo4j connectivity check failed, retrying ({}/{})...", i + 1, maxRetries);
+                try {
+                    Thread.sleep(retryDelayMs * (i + 1)); // 递增延迟
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw new IOException("Connection retry interrupted", ie);
+                }
+            }
+        }
     }
 
     /**

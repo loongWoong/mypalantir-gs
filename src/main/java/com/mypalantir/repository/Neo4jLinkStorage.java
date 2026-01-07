@@ -22,11 +22,45 @@ public class Neo4jLinkStorage implements ILinkStorage {
     @Autowired(required = false)
     private Driver neo4jDriver;
 
+    /**
+     * 验证并重试连接（如果连接失败）
+     */
+    private void verifyAndRetryConnection() throws IOException {
+        if (neo4jDriver == null) {
+            throw new IOException("Neo4j driver is not initialized");
+        }
+        
+        int maxRetries = 3;
+        int retryDelayMs = 1000;
+        
+        for (int i = 0; i < maxRetries; i++) {
+            try {
+                neo4jDriver.verifyConnectivity();
+                return; // 连接成功
+            } catch (Exception e) {
+                if (i == maxRetries - 1) {
+                    logger.error("Failed to verify Neo4j connectivity after {} retries: {}", maxRetries, e.getMessage());
+                    throw new IOException("Connection to Neo4j failed: " + e.getMessage(), e);
+                }
+                logger.warn("Neo4j connectivity check failed, retrying ({}/{})...", i + 1, maxRetries);
+                try {
+                    Thread.sleep(retryDelayMs * (i + 1)); // 递增延迟
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw new IOException("Connection retry interrupted", ie);
+                }
+            }
+        }
+    }
+
     @Override
     public String createLink(String linkType, String sourceID, String targetID, Map<String, Object> properties) throws IOException {
         if (neo4jDriver == null) {
             throw new IOException("Neo4j driver is not initialized");
         }
+
+        // 验证连接（带重试机制）
+        verifyAndRetryConnection();
 
         String id = UUID.randomUUID().toString();
         String now = Instant.now().toString();
@@ -80,6 +114,9 @@ public class Neo4jLinkStorage implements ILinkStorage {
         if (neo4jDriver == null) {
             throw new IOException("Neo4j driver is not initialized");
         }
+
+        // 验证连接（带重试机制）
+        verifyAndRetryConnection();
 
         try (Session session = neo4jDriver.session()) {
             String relType = normalizeRelType(linkType);
@@ -253,6 +290,9 @@ public class Neo4jLinkStorage implements ILinkStorage {
         if (neo4jDriver == null) {
             throw new IOException("Neo4j driver is not initialized");
         }
+
+        // 验证连接（带重试机制）
+        verifyAndRetryConnection();
 
         try (Session session = neo4jDriver.session()) {
             String relType = normalizeRelType(linkType);

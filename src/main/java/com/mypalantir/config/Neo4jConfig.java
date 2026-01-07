@@ -14,7 +14,7 @@ public class Neo4jConfig {
     private static final Logger logger = LoggerFactory.getLogger(Neo4jConfig.class);
 
     @Autowired
-    private Config config;
+    private com.mypalantir.config.Config config;
 
     @Bean
     public Driver neo4jDriver() {
@@ -37,10 +37,27 @@ public class Neo4jConfig {
         }
 
         try {
-            Driver driver = GraphDatabase.driver(uri, AuthTokens.basic(user, password));
+            // 配置连接池参数以解决长时间运行后的连接问题
+            org.neo4j.driver.Config.ConfigBuilder configBuilder = org.neo4j.driver.Config.builder()
+                    // 连接超时：30秒
+                    .withConnectionTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+                    // 最大连接池大小：50
+                    .withMaxConnectionPoolSize(50)
+                    // 连接获取超时：60秒
+                    .withConnectionAcquisitionTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+                    // 连接最大生命周期：1小时（防止连接长时间使用后失效）
+                    .withMaxConnectionLifetime(1, java.util.concurrent.TimeUnit.HOURS)
+                    // 连接活跃性检查超时：30分钟（空闲连接在重用前会被测试）
+                    .withConnectionLivenessCheckTimeout(30, java.util.concurrent.TimeUnit.MINUTES)
+                    // 启用连接健康检查日志
+                    .withLogging(org.neo4j.driver.Logging.slf4j());
+
+            Driver driver = GraphDatabase.driver(uri, AuthTokens.basic(user, password), configBuilder.build());
+            
             // 测试连接
             driver.verifyConnectivity();
             logger.info("Neo4j driver initialized successfully. URI: {}, User: {}", uri, user);
+            logger.info("Neo4j connection pool configured: maxPoolSize=50, maxLifetime=1h, idleTimeout=30m");
             
             // 执行一个简单的查询来验证连接
             try (org.neo4j.driver.Session session = driver.session()) {

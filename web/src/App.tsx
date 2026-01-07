@@ -8,6 +8,9 @@ import SchemaGraphView from './pages/SchemaGraphView';
 import GraphView from './pages/GraphView';
 import DataSourceManagement from './pages/DataSourceManagement';
 import QueryBuilder from './pages/QueryBuilder';
+import MetricBrowser from './pages/MetricBrowser';
+import MetricBuilder from './pages/MetricBuilder';
+import MetricDetail from './pages/MetricDetail';
 
 function App() {
   return (
@@ -23,6 +26,9 @@ function App() {
           <Route path="/graph/:objectType/:instanceId" element={<GraphView />} />
           <Route path="/data-sources" element={<DataSourceManagement />} />
           <Route path="/query" element={<QueryBuilder />} />
+          <Route path="/metrics" element={<MetricBrowser />} />
+          <Route path="/metrics/builder" element={<MetricBuilder />} />
+          <Route path="/metrics/:id" element={<MetricDetail />} />
         </Routes>
       </Layout>
     </BrowserRouter>

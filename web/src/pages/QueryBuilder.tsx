@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import type { ObjectType, LinkType, QueryRequest, QueryResult, FilterExpression, Metric } from '../api/client';
 import { schemaApi, queryApi } from '../api/client';
+import { metricApi } from '../api/metric';
+import type { MetricDefinition, MetricQuery, MetricResult, AtomicMetric } from '../api/metric';
 import { useWorkspace } from '../WorkspaceContext';
 import { 
   PlayIcon, 
@@ -22,7 +24,14 @@ export default function QueryBuilder() {
   const [objectTypes, setObjectTypes] = useState<ObjectType[]>([]);
   const [linkTypes, setLinkTypes] = useState<LinkType[]>([]);
   const [selectedObjectType, setSelectedObjectType] = useState<ObjectType | null>(null);
-  const [queryMode, setQueryMode] = useState<'simple' | 'aggregate'>('simple');
+  const [queryMode, setQueryMode] = useState<'simple' | 'aggregate' | 'metric'>('simple');
+  const [metricDefinitions, setMetricDefinitions] = useState<MetricDefinition[]>([]);
+  const [atomicMetrics, setAtomicMetrics] = useState<AtomicMetric[]>([]);
+  const [selectedMetricId, setSelectedMetricId] = useState<string>('');
+  const [selectedMetricType, setSelectedMetricType] = useState<'atomic' | 'derived' | 'composite' | null>(null);
+  const [metricTimeRange, setMetricTimeRange] = useState<{ start: string; end: string }>({ start: '', end: '' });
+  const [metricDimensions, setMetricDimensions] = useState<Record<string, any>>({});
+  const [metricResult, setMetricResult] = useState<MetricResult | null>(null);
   const [query, setQuery] = useState<QueryRequest>({
     from: '',
     select: [],
@@ -42,7 +51,39 @@ export default function QueryBuilder() {
 
   useEffect(() => {
     loadSchema();
+    loadMetricDefinitions();
   }, []);
+
+  const normalizeMetricDefinition = (def: any): MetricDefinition => ({
+    ...def,
+    // 兼容后端 camelCase 字段
+    metric_type: def.metric_type || def.metricType,
+    display_name: def.display_name || def.displayName,
+    time_dimension: def.time_dimension || def.timeDimension,
+    time_granularity: def.time_granularity || def.timeGranularity,
+    atomic_metric_id: def.atomic_metric_id || def.atomicMetricId,
+    filter_conditions: def.filter_conditions || def.filterConditions,
+    comparison_type: def.comparison_type || def.comparisonType,
+    base_metric_ids: def.base_metric_ids || def.baseMetricIds,
+    derived_formula: def.derived_formula || def.derivedFormula,
+  });
+
+  const loadMetricDefinitions = async () => {
+    try {
+      const [definitions, atomic] = await Promise.all([
+        metricApi.listMetricDefinitions(),
+        metricApi.listAtomicMetrics(),
+      ]);
+      console.log('Loaded metric definitions:', definitions);
+      console.log('Loaded atomic metrics:', atomic);
+      const normalized = definitions.map(normalizeMetricDefinition);
+      setMetricDefinitions(normalized);
+      setAtomicMetrics(atomic);
+    } catch (error) {
+      console.error('Failed to load metrics:', error);
+      setError('加载指标列表失败: ' + (error as Error).message);
+    }
+  };
 
   // 根据工作空间过滤对象类型
   const filteredObjectTypes = selectedWorkspace && selectedWorkspace.object_types && selectedWorkspace.object_types.length > 0
@@ -110,6 +151,55 @@ export default function QueryBuilder() {
   };
 
   const executeQuery = async () => {
+    // 指标查询
+    if (queryMode === 'metric') {
+      if (!selectedMetricId) {
+        setError('请选择指标');
+        return;
+      }
+
+      setLoading(true);
+      setError(null);
+      try {
+        const metricQuery: MetricQuery = {
+          metric_id: selectedMetricId,
+        };
+
+        // 添加时间范围
+        if (metricTimeRange.start && metricTimeRange.end) {
+          metricQuery.time_range = {
+            start: metricTimeRange.start,
+            end: metricTimeRange.end,
+          };
+        }
+
+        // 添加维度
+        if (Object.keys(metricDimensions).length > 0) {
+          const filteredDimensions: Record<string, any> = {};
+          Object.entries(metricDimensions).forEach(([key, value]) => {
+            if (value && value.trim() !== '') {
+              filteredDimensions[key] = value;
+            }
+          });
+          if (Object.keys(filteredDimensions).length > 0) {
+            metricQuery.dimensions = filteredDimensions;
+          }
+        }
+
+        const result = await metricApi.calculateMetric(metricQuery);
+        setMetricResult(result);
+        setResults(null); // 清空普通查询结果
+      } catch (error: any) {
+        console.error('Failed to calculate metric:', error);
+        setError('指标查询失败: ' + (error.response?.data?.message || error.message || '未知错误'));
+        setMetricResult(null);
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
+    // 普通查询和聚合查询
     const objectName = query.object || query.from;
     if (!objectName) {
       setError('请选择对象类型');
@@ -132,6 +222,7 @@ export default function QueryBuilder() {
 
     setLoading(true);
     setError(null);
+    setMetricResult(null); // 清空指标查询结果
     try {
       // 构建查询对象
       const queryPayload: any = {
@@ -303,27 +394,67 @@ export default function QueryBuilder() {
   };
 
   const copyQueryJson = () => {
-    const queryPayload: any = {
-      object: query.object || query.from,
-      links: query.links,
-      filter: filterExpressions.length > 0 ? filterExpressions : undefined,
-      where: Object.keys(query.where || {}).length > 0 ? query.where : undefined,
-      group_by: query.group_by,
-      select: query.select,
-      orderBy: query.orderBy,
-      limit: query.limit,
-      offset: query.offset
-    };
-    // 将 Metric 对象转换为数组格式用于 JSON 预览
-    if (query.metrics && query.metrics.length > 0) {
-      queryPayload.metrics = query.metrics.map((metric: Metric) => {
-        const arr: any[] = [metric.function, metric.field];
-        if (metric.alias) {
-          arr.push(metric.alias);
-        }
-        return arr;
-      });
+    let queryPayload: any;
+    
+    if (queryMode === 'metric') {
+      // 指标查询 JSON
+      const selectedMetric = atomicMetrics.find(m => m.id === selectedMetricId) || 
+                            metricDefinitions.find(m => m.id === selectedMetricId);
+      
+      queryPayload = {
+        metric_id: selectedMetricId,
+        metric_info: selectedMetric ? {
+          id: selectedMetric.id,
+          name: selectedMetric.name,
+          display_name: 'display_name' in selectedMetric ? selectedMetric.display_name : undefined,
+          type: selectedMetricType || ('metric_type' in selectedMetric ? selectedMetric.metric_type : undefined),
+          ...(selectedMetric && 'business_process' in selectedMetric ? {
+            business_process: selectedMetric.business_process,
+            aggregation_function: selectedMetric.aggregation_function,
+            aggregation_field: selectedMetric.aggregation_field,
+            unit: selectedMetric.unit
+          } : {}),
+          ...(selectedMetric && 'business_scope' in selectedMetric ? {
+            business_scope: selectedMetric.business_scope,
+            time_dimension: selectedMetric.time_dimension,
+            time_granularity: selectedMetric.time_granularity,
+            dimensions: selectedMetric.dimensions
+          } : {})
+        } : undefined,
+        time_range: (metricTimeRange.start && metricTimeRange.end) ? {
+          start: metricTimeRange.start,
+          end: metricTimeRange.end
+        } : undefined,
+        dimensions: Object.keys(metricDimensions).length > 0 ? 
+          Object.fromEntries(
+            Object.entries(metricDimensions).filter(([_, v]) => v && v.trim() !== '')
+          ) : undefined
+      };
+    } else {
+      // 普通查询和聚合查询 JSON
+      queryPayload = {
+        object: query.object || query.from,
+        links: query.links,
+        filter: filterExpressions.length > 0 ? filterExpressions : undefined,
+        where: Object.keys(query.where || {}).length > 0 ? query.where : undefined,
+        group_by: query.group_by,
+        select: query.select,
+        orderBy: query.orderBy,
+        limit: query.limit,
+        offset: query.offset
+      };
+      // 将 Metric 对象转换为数组格式用于 JSON 预览
+      if (query.metrics && query.metrics.length > 0) {
+        queryPayload.metrics = query.metrics.map((metric: Metric) => {
+          const arr: any[] = [metric.function, metric.field];
+          if (metric.alias) {
+            arr.push(metric.alias);
+          }
+          return arr;
+        });
+      }
     }
+    
     navigator.clipboard.writeText(JSON.stringify(queryPayload, null, 2));
   };
 
@@ -419,29 +550,181 @@ export default function QueryBuilder() {
               />
               <span className="text-sm">聚合查询</span>
             </label>
+            <label className="flex items-center cursor-pointer">
+              <input
+                type="radio"
+                value="metric"
+                checked={queryMode === 'metric'}
+                onChange={() => {
+                  setQueryMode('metric');
+                  setMetricResult(null);
+                  // 切换到指标查询模式时，重新加载指标列表
+                  loadMetricDefinitions();
+                }}
+                className="mr-2"
+              />
+              <span className="text-sm">指标查询</span>
+            </label>
           </div>
         </div>
 
-        {/* 对象类型选择 */}
-        <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            对象类型 <span className="text-red-500">*</span>
-          </label>
-          <select
-            value={query.object || query.from}
-            onChange={(e) => {
-              setQuery({ ...query, object: e.target.value, from: e.target.value, select: [] });
-              setWhereConditions([]);
-              setFilterExpressions([]);
-            }}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="">选择对象类型...</option>
-            {filteredObjectTypes.map(ot => (
-              <option key={ot.name} value={ot.name}>{ot.display_name || ot.name}</option>
-            ))}
-          </select>
-        </div>
+        {/* 对象类型选择（非指标查询模式） */}
+        {queryMode !== 'metric' && (
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              对象类型 <span className="text-red-500">*</span>
+            </label>
+            <select
+              value={query.object || query.from}
+              onChange={(e) => {
+                setQuery({ ...query, object: e.target.value, from: e.target.value, select: [] });
+                setWhereConditions([]);
+                setFilterExpressions([]);
+              }}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">选择对象类型...</option>
+              {filteredObjectTypes.map(ot => (
+                <option key={ot.name} value={ot.name}>{ot.display_name || ot.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* 指标查询配置 */}
+        {queryMode === 'metric' && (
+          <>
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                选择指标 <span className="text-red-500">*</span>
+              </label>
+              <select
+                value={selectedMetricId}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setSelectedMetricId(value);
+                  setMetricResult(null);
+                  // 清空维度
+                  setMetricDimensions({});
+                  // 判断指标类型
+                  if (atomicMetrics.find(m => m.id === value)) {
+                    setSelectedMetricType('atomic');
+                  } else if (metricDefinitions.find(m => m.id === value)) {
+                    const metric = metricDefinitions.find(m => m.id === value);
+                    setSelectedMetricType(metric?.metric_type || null);
+                  } else {
+                    setSelectedMetricType(null);
+                  }
+                }}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">选择指标...</option>
+                {/* 原子指标 */}
+                {atomicMetrics.length > 0 && (
+                  <optgroup label="原子指标">
+                    {atomicMetrics.map(metric => (
+                      <option key={metric.id} value={metric.id}>
+                        {metric.display_name || metric.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+                {/* 派生指标 */}
+                {metricDefinitions.filter(m => m.metric_type === 'derived').length > 0 && (
+                  <optgroup label="派生指标">
+                    {metricDefinitions.filter(m => m.metric_type === 'derived').map(metric => (
+                      <option key={metric.id} value={metric.id}>
+                        {metric.display_name || metric.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+                {/* 复合指标 */}
+                {metricDefinitions.filter(m => m.metric_type === 'composite').length > 0 && (
+                  <optgroup label="复合指标">
+                    {metricDefinitions.filter(m => m.metric_type === 'composite').map(metric => (
+                      <option key={metric.id} value={metric.id}>
+                        {metric.display_name || metric.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+                {atomicMetrics.length === 0 && metricDefinitions.length === 0 && (
+                  <option value="" disabled>暂无可用指标</option>
+                )}
+              </select>
+              {atomicMetrics.length === 0 && metricDefinitions.length === 0 && (
+                <p className="text-sm text-gray-500 mt-1">
+                  没有可用的指标，请先在指标管理页面创建指标
+                </p>
+              )}
+            </div>
+
+            {selectedMetricId && (() => {
+              // 先查找原子指标
+              let selectedMetric: AtomicMetric | MetricDefinition | undefined = atomicMetrics.find(m => m.id === selectedMetricId);
+              // 如果没找到，再查找指标定义
+              if (!selectedMetric) {
+                selectedMetric = metricDefinitions.find(m => m.id === selectedMetricId);
+              }
+              return selectedMetric ? (
+                <>
+                  {/* 时间范围（仅派生和复合指标） */}
+                  {'time_dimension' in selectedMetric && selectedMetric.time_dimension && (
+                    <div className="mb-6">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        时间范围
+                      </label>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-xs text-gray-600 mb-1">开始时间</label>
+                          <input
+                            type="date"
+                            value={metricTimeRange.start}
+                            onChange={(e) => setMetricTimeRange({ ...metricTimeRange, start: e.target.value })}
+                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-600 mb-1">结束时间</label>
+                          <input
+                            type="date"
+                            value={metricTimeRange.end}
+                            onChange={(e) => setMetricTimeRange({ ...metricTimeRange, end: e.target.value })}
+                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 维度选择（仅派生和复合指标） */}
+                  {'dimensions' in selectedMetric && selectedMetric.dimensions && selectedMetric.dimensions.length > 0 && (
+                    <div className="mb-6">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        维度筛选
+                      </label>
+                      <div className="space-y-2 border border-gray-300 rounded-lg p-3 bg-white">
+                        {selectedMetric.dimensions.map(dim => (
+                          <div key={dim} className="flex items-center gap-2">
+                            <label className="text-sm text-gray-700 w-24">{dim}:</label>
+                            <input
+                              type="text"
+                              value={metricDimensions[dim] || ''}
+                              onChange={(e) => setMetricDimensions({ ...metricDimensions, [dim]: e.target.value })}
+                              placeholder="输入维度值..."
+                              className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : null;
+            })()}
+          </>
+        )}
 
         {/* 属性选择（仅普通查询模式） */}
         {queryMode === 'simple' && selectedObjectType && (
@@ -472,7 +755,8 @@ export default function QueryBuilder() {
           </div>
         )}
 
-        {/* 关联查询 */}
+        {/* 关联查询（非指标查询模式） */}
+        {queryMode !== 'metric' && (
         <div className="mb-6">
           <div className="flex items-center justify-between mb-2">
             <label className="block text-sm font-medium text-gray-700">关联查询</label>
@@ -537,8 +821,10 @@ export default function QueryBuilder() {
             })}
           </div>
         </div>
+        )}
 
-        {/* 查询条件 */}
+        {/* 查询条件（非指标查询模式） */}
+        {queryMode !== 'metric' && (
         <div className="mb-6">
           <div className="flex items-center justify-between mb-2">
             <label className="block text-sm font-medium text-gray-700">查询条件</label>
@@ -690,6 +976,7 @@ export default function QueryBuilder() {
             </div>
           )}
         </div>
+        )}
 
         {/* 分组功能（仅聚合查询模式） */}
         {queryMode === 'aggregate' && (
@@ -779,70 +1066,74 @@ export default function QueryBuilder() {
           </div>
         )}
 
-        {/* 排序和分页 */}
-        <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-700 mb-2">排序</label>
-          <div className="space-y-2">
-            {query.orderBy?.map((order, index) => (
-              <div key={index} className="flex gap-2 items-center">
-                <select
-                  value={order.field}
-                  onChange={(e) => updateOrderBy(index, e.target.value, order.direction)}
-                  className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm"
-                >
-                  <option value="">选择属性...</option>
-                  {getAvailableFields().map(field => (
-                    <option key={field.path} value={field.path}>{field.label}</option>
-                  ))}
-                </select>
-                <select
-                  value={order.direction}
-                  onChange={(e) => updateOrderBy(index, order.field, e.target.value as 'ASC' | 'DESC')}
-                  className="border border-gray-300 rounded px-2 py-1 text-sm"
-                >
-                  <option value="ASC">ASC</option>
-                  <option value="DESC">DESC</option>
-                </select>
+        {/* 排序和分页（非指标查询模式） */}
+        {queryMode !== 'metric' && (
+          <>
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-gray-700 mb-2">排序</label>
+              <div className="space-y-2">
+                {query.orderBy?.map((order, index) => (
+                  <div key={index} className="flex gap-2 items-center">
+                    <select
+                      value={order.field}
+                      onChange={(e) => updateOrderBy(index, e.target.value, order.direction)}
+                      className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm"
+                    >
+                      <option value="">选择属性...</option>
+                      {getAvailableFields().map(field => (
+                        <option key={field.path} value={field.path}>{field.label}</option>
+                      ))}
+                    </select>
+                    <select
+                      value={order.direction}
+                      onChange={(e) => updateOrderBy(index, order.field, e.target.value as 'ASC' | 'DESC')}
+                      className="border border-gray-300 rounded px-2 py-1 text-sm"
+                    >
+                      <option value="ASC">ASC</option>
+                      <option value="DESC">DESC</option>
+                    </select>
+                    <button
+                      onClick={() => removeOrderBy(index)}
+                      className="text-red-600 hover:text-red-800"
+                    >
+                      <TrashIcon className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
                 <button
-                  onClick={() => removeOrderBy(index)}
-                  className="text-red-600 hover:text-red-800"
+                  onClick={addOrderBy}
+                  className="text-sm text-blue-600 hover:text-blue-800 flex items-center"
                 >
-                  <TrashIcon className="w-4 h-4" />
+                  <PlusIcon className="w-4 h-4 mr-1" />
+                  添加排序
                 </button>
               </div>
-            ))}
-            <button
-              onClick={addOrderBy}
-              className="text-sm text-blue-600 hover:text-blue-800 flex items-center"
-            >
-              <PlusIcon className="w-4 h-4 mr-1" />
-              添加排序
-            </button>
-          </div>
-        </div>
+            </div>
 
-        <div className="mb-6 grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">每页数量</label>
-            <input
-              type="number"
-              value={query.limit || 20}
-              onChange={(e) => setQuery({ ...query, limit: parseInt(e.target.value) || 20 })}
-              className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
-              min="1"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">偏移量</label>
-            <input
-              type="number"
-              value={query.offset || 0}
-              onChange={(e) => setQuery({ ...query, offset: parseInt(e.target.value) || 0 })}
-              className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
-              min="0"
-            />
-          </div>
-        </div>
+            <div className="mb-6 grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">每页数量</label>
+                <input
+                  type="number"
+                  value={query.limit || 20}
+                  onChange={(e) => setQuery({ ...query, limit: parseInt(e.target.value) || 20 })}
+                  className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
+                  min="1"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">偏移量</label>
+                <input
+                  type="number"
+                  value={query.offset || 0}
+                  onChange={(e) => setQuery({ ...query, offset: parseInt(e.target.value) || 0 })}
+                  className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
+                  min="0"
+                />
+              </div>
+            </div>
+          </>
+        )}
 
         {/* JSON 预览 */}
         <div className="mb-6">
@@ -868,25 +1159,147 @@ export default function QueryBuilder() {
             <textarea
               className="w-full font-mono text-xs p-2 border border-gray-300 rounded"
               rows={10}
-              value={JSON.stringify({
-                object: query.object || query.from,
-                links: query.links,
-                filter: filterExpressions.length > 0 ? filterExpressions : undefined,
-                where: Object.keys(query.where || {}).length > 0 ? query.where : undefined,
-                group_by: query.group_by,
-                metrics: query.metrics?.map((metric: Metric) => {
-                  const arr: any[] = [metric.function, metric.field];
-                  if (metric.alias) {
-                    arr.push(metric.alias);
+              value={(() => {
+                if (queryMode === 'metric') {
+                  const selectedMetric = atomicMetrics.find(m => m.id === selectedMetricId) || 
+                                        metricDefinitions.find(m => m.id === selectedMetricId);
+                  
+                  // 构建实际查询结构（OntologyQuery）
+                  let ontologyQuery: any = {};
+                  
+                  if (selectedMetric && 'metric_type' in selectedMetric && selectedMetric.metric_type === 'derived') {
+                    // 派生指标：显示构建后的 OntologyQuery 结构
+                    const derivedMetric = selectedMetric as MetricDefinition;
+                    
+                    // FROM
+                    if (derivedMetric.business_scope) {
+                      if (derivedMetric.business_scope.type === 'single') {
+                        ontologyQuery.from = derivedMetric.business_scope.base_object_type;
+                      } else if (derivedMetric.business_scope.type === 'multi') {
+                        ontologyQuery.from = derivedMetric.business_scope.from;
+                        if (derivedMetric.business_scope.links) {
+                          ontologyQuery.links = derivedMetric.business_scope.links;
+                        }
+                      }
+                    }
+                    
+                    // METRICS（从原子指标获取）
+                    const atomicMetric = atomicMetrics.find(m => m.id === derivedMetric.atomic_metric_id);
+                    if (atomicMetric) {
+                      const func = atomicMetric.aggregation_function?.toLowerCase() || '';
+                      const field = atomicMetric.aggregation_field || '*';
+                      if (func === 'count' || func === 'distinct_count') {
+                        ontologyQuery.metrics = [['count', '*', null]];
+                      } else if (field && field !== '*') {
+                        ontologyQuery.metrics = [[func, field, null]];
+                      }
+                    }
+                    
+                    // FILTER（过滤条件 + 查询维度 + 时间范围）
+                    const filterExpressions: any[] = [];
+                    
+                    // 派生指标的过滤条件
+                    if (derivedMetric.filter_conditions) {
+                      Object.entries(derivedMetric.filter_conditions).forEach(([field, value]) => {
+                        if (value && !(typeof value === 'string' && value.trim() === '')) {
+                          filterExpressions.push(['=', field, value]);
+                        }
+                      });
+                    }
+                    
+                    // 查询维度
+                    Object.entries(metricDimensions).forEach(([field, value]) => {
+                      if (value && value.trim() !== '') {
+                        filterExpressions.push(['=', field, value]);
+                      }
+                    });
+                    
+                    // 时间范围
+                    if (metricTimeRange.start && metricTimeRange.end && derivedMetric.time_dimension) {
+                      filterExpressions.push(['>=', derivedMetric.time_dimension, metricTimeRange.start]);
+                      filterExpressions.push(['<=', derivedMetric.time_dimension, metricTimeRange.end]);
+                    }
+                    
+                    if (filterExpressions.length > 0) {
+                      ontologyQuery.filter = filterExpressions;
+                    }
+                    
+                    // GROUP BY
+                    const groupBy: string[] = [];
+                    if (derivedMetric.time_dimension) {
+                      groupBy.push(derivedMetric.time_dimension);
+                    }
+                    if (derivedMetric.dimensions) {
+                      groupBy.push(...derivedMetric.dimensions);
+                    }
+                    if (groupBy.length > 0) {
+                      ontologyQuery.group_by = groupBy;
+                    }
+                    
+                    // ORDER BY
+                    if (derivedMetric.time_dimension) {
+                      ontologyQuery.orderBy = [{ field: derivedMetric.time_dimension, direction: 'ASC' }];
+                    }
+                  } else {
+                    // 原子指标或未找到：显示指标查询 JSON
+                    ontologyQuery = {
+                      metric_id: selectedMetricId,
+                      metric_info: selectedMetric ? {
+                        id: selectedMetric.id,
+                        name: selectedMetric.name,
+                        display_name: 'display_name' in selectedMetric ? selectedMetric.display_name : undefined,
+                        type: selectedMetricType || ('metric_type' in selectedMetric ? selectedMetric.metric_type : undefined),
+                        ...(selectedMetric && 'business_process' in selectedMetric ? {
+                          business_process: selectedMetric.business_process,
+                          aggregation_function: selectedMetric.aggregation_function,
+                          aggregation_field: selectedMetric.aggregation_field,
+                          unit: selectedMetric.unit
+                        } : {}),
+                        ...(selectedMetric && 'business_scope' in selectedMetric ? {
+                          business_scope: selectedMetric.business_scope,
+                          time_dimension: selectedMetric.time_dimension,
+                          time_granularity: selectedMetric.time_granularity,
+                          dimensions: selectedMetric.dimensions
+                        } : {})
+                      } : undefined,
+                      time_range: (metricTimeRange.start && metricTimeRange.end) ? {
+                        start: metricTimeRange.start,
+                        end: metricTimeRange.end
+                      } : undefined,
+                      dimensions: Object.keys(metricDimensions).length > 0 ? 
+                        Object.fromEntries(
+                          Object.entries(metricDimensions).filter(([_, v]) => v && v.trim() !== '')
+                        ) : undefined
+                    };
                   }
-                  return arr;
-                }),
-                select: query.select,
-                orderBy: query.orderBy,
-                limit: query.limit,
-                offset: query.offset
-              }, null, 2)}
+                  
+                  return JSON.stringify(ontologyQuery, null, 2);
+                } else {
+                  return JSON.stringify({
+                    object: query.object || query.from,
+                    links: query.links,
+                    filter: filterExpressions.length > 0 ? filterExpressions : undefined,
+                    where: Object.keys(query.where || {}).length > 0 ? query.where : undefined,
+                    group_by: query.group_by,
+                    metrics: query.metrics?.map((metric: Metric) => {
+                      const arr: any[] = [metric.function, metric.field];
+                      if (metric.alias) {
+                        arr.push(metric.alias);
+                      }
+                      return arr;
+                    }),
+                    select: query.select,
+                    orderBy: query.orderBy,
+                    limit: query.limit,
+                    offset: query.offset
+                  }, null, 2);
+                }
+              })()}
               onChange={(e) => {
+                if (queryMode === 'metric') {
+                  // 指标查询模式下不允许编辑 JSON
+                  return;
+                }
                 try {
                   const parsed = JSON.parse(e.target.value);
                   // 如果 metrics 是数组格式，转换为对象格式
@@ -910,6 +1323,7 @@ export default function QueryBuilder() {
                   // 忽略无效 JSON
                 }
               }}
+              readOnly={queryMode === 'metric'}
             />
           )}
         </div>
@@ -924,7 +1338,9 @@ export default function QueryBuilder() {
         {/* 执行按钮 */}
         <button
           onClick={executeQuery}
-          disabled={loading || !query.object && !query.from || 
+          disabled={loading || 
+            (queryMode === 'metric' && !selectedMetricId) ||
+            (queryMode !== 'metric' && !query.object && !query.from) ||
             (queryMode === 'simple' && (!query.select || query.select.length === 0)) ||
             (queryMode === 'aggregate' && (!query.group_by || query.group_by.length === 0) && (!query.metrics || query.metrics.length === 0))}
           className="w-full flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
@@ -966,7 +1382,121 @@ export default function QueryBuilder() {
           )}
         </div>
 
-        {results ? (
+        {metricResult ? (
+          <div>
+            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="text-sm">
+                <div className="font-semibold text-blue-900 mb-1">指标: {metricResult.metricName}</div>
+                {metricResult.timeGranularity && (
+                  <div className="text-blue-700">时间粒度: {metricResult.timeGranularity}</div>
+                )}
+                <div className="text-blue-700">计算时间: {new Date(metricResult.calculatedAt).toLocaleString()}</div>
+              </div>
+            </div>
+            
+            {metricResult.sql && (
+              <div className="mb-4">
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="text-sm font-semibold text-gray-700">执行的 SQL</h4>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(metricResult.sql || '');
+                        alert('SQL 已复制到剪贴板');
+                      }}
+                      className="text-xs text-blue-600 hover:text-blue-800"
+                    >
+                      复制
+                    </button>
+                  </div>
+                  <pre className="text-xs text-gray-800 bg-white p-3 rounded border border-gray-300 overflow-x-auto font-mono">
+                    {metricResult.sql}
+                  </pre>
+                </div>
+              </div>
+            )}
+            
+            {viewMode === 'table' ? (
+              <div className="overflow-x-auto">
+                {metricResult.results && metricResult.results.length > 0 ? (
+                  <table className="min-w-full divide-y divide-gray-200 bg-white rounded-lg shadow">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        {metricResult.timeGranularity && (
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            时间
+                          </th>
+                        )}
+                        {metricResult.results[0]?.dimensionValues && Object.keys(metricResult.results[0].dimensionValues).map(dim => (
+                          <th
+                            key={dim}
+                            className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                          >
+                            {dim}
+                          </th>
+                        ))}
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          指标值
+                        </th>
+                        {metricResult.results[0]?.unit && (
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            单位
+                          </th>
+                        )}
+                        {metricResult.results[0]?.comparisons && Object.keys(metricResult.results[0].comparisons).length > 0 && (
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            对比
+                          </th>
+                        )}
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {metricResult.results.map((point, idx) => (
+                      <tr key={idx} className="hover:bg-gray-50">
+                        {metricResult.timeGranularity && (
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {point.timeValue || '-'}
+                          </td>
+                        )}
+                        {point.dimensionValues && Object.entries(point.dimensionValues).map(([key, value]) => (
+                          <td key={key} className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {String(value)}
+                          </td>
+                        ))}
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          {point.metricValue}
+                        </td>
+                        {point.unit && (
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {point.unit}
+                          </td>
+                        )}
+                        {point.comparisons && Object.keys(point.comparisons).length > 0 && (
+                          <td className="px-6 py-4 text-sm text-gray-600">
+                            {Object.entries(point.comparisons).map(([key, comp]) => (
+                              <div key={key} className="text-xs">
+                                {key}: {comp.display} ({comp.description})
+                              </div>
+                            ))}
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                ) : (
+                  <div className="p-8 text-center text-gray-500 bg-white rounded-lg shadow">
+                    <p>查询结果为空，没有数据返回。</p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <pre className="p-4 overflow-auto bg-gray-50 text-sm rounded border border-gray-200">
+                {JSON.stringify(metricResult, null, 2)}
+              </pre>
+            )}
+          </div>
+        ) : results ? (
           <div>
             <div className="mb-4 text-sm text-gray-600">
               共 {results.rowCount} 条结果

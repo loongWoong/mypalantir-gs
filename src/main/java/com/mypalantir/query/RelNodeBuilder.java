@@ -179,6 +179,11 @@ public class RelNodeBuilder {
             String propertyName = entry.getKey();
             Object value = entry.getValue();
             
+            // 跳过空值或空字符串的条件
+            if (value == null || (value instanceof String && ((String) value).trim().isEmpty())) {
+                continue;
+            }
+            
             // 找到属性在行类型中的索引
             int fieldIndex = findFieldIndex(propertyName, objectType, rowType);
             if (fieldIndex < 0) {
@@ -858,7 +863,11 @@ public class RelNodeBuilder {
             case DATE:
                 // DATE 类型：使用 java.sql.Date
                 if (value instanceof String) {
-                    String dateStr = (String) value;
+                    String dateStr = ((String) value).trim();
+                    // 如果字符串为空，返回 NULL
+                    if (dateStr.isEmpty()) {
+                        return rexBuilder.makeNullLiteral(type);
+                    }
                     try {
                         java.sql.Date date = java.sql.Date.valueOf(dateStr);
                         return rexBuilder.makeLiteral(date, type, false);
@@ -868,8 +877,13 @@ public class RelNodeBuilder {
                 } else if (value instanceof java.sql.Date) {
                     return rexBuilder.makeLiteral((java.sql.Date) value, type, false);
                 } else {
+                    String valueStr = value.toString().trim();
+                    // 如果字符串为空，返回 NULL
+                    if (valueStr.isEmpty()) {
+                        return rexBuilder.makeNullLiteral(type);
+                    }
                     try {
-                        java.sql.Date date = java.sql.Date.valueOf(value.toString());
+                        java.sql.Date date = java.sql.Date.valueOf(valueStr);
                         return rexBuilder.makeLiteral(date, type, false);
                     } catch (IllegalArgumentException e) {
                         throw new IllegalArgumentException("Cannot convert '" + value + "' to DATE");
@@ -879,7 +893,11 @@ public class RelNodeBuilder {
                 // TIMESTAMP 类型：Calcite 的 makeLiteral 期望 Long（时间戳毫秒数）
                 // 我们需要将字符串解析为 Timestamp，然后获取毫秒数
                 if (value instanceof String) {
-                    String dateStr = (String) value;
+                    String dateStr = ((String) value).trim();
+                    // 如果字符串为空，返回 NULL
+                    if (dateStr.isEmpty()) {
+                        return rexBuilder.makeNullLiteral(type);
+                    }
                     // 确保日期时间格式正确
                     if (dateStr.length() <= 10) {
                         // 只有日期部分，添加时间部分
@@ -909,7 +927,11 @@ public class RelNodeBuilder {
                     return rexBuilder.makeLiteral(timestampMillis, type, false);
                 } else {
                     // 转换为字符串再解析
-                    String dateStr = value.toString();
+                    String dateStr = value.toString().trim();
+                    // 如果字符串为空，返回 NULL
+                    if (dateStr.isEmpty()) {
+                        return rexBuilder.makeNullLiteral(type);
+                    }
                     if (dateStr.length() <= 10) {
                         dateStr = dateStr + " 00:00:00";
                     }
@@ -965,6 +987,8 @@ public class RelNodeBuilder {
         FieldPathResolver pathResolver = new FieldPathResolver(loader);
         List<RexNode> conditions = new ArrayList<>();
         
+        System.out.println("[buildExpressionFilter] Processing " + filterExpressions.size() + " filter expressions");
+        
         for (Object expr : filterExpressions) {
             if (!(expr instanceof List)) {
                 throw new IllegalArgumentException("Filter expression must be an array: " + expr);
@@ -976,21 +1000,32 @@ public class RelNodeBuilder {
                 continue;
             }
             
+            System.out.println("[buildExpressionFilter] Processing expression: " + exprList);
+            
             RexNode condition = buildFilterExpression(exprList, rowType, rootObjectType, links, pathResolver, rexBuilder);
             if (condition != null) {
                 conditions.add(condition);
+                System.out.println("[buildExpressionFilter] Condition added successfully");
+            } else {
+                System.err.println("[buildExpressionFilter] Failed to build condition for: " + exprList);
             }
         }
         
         // 组合所有条件（AND）
         if (!conditions.isEmpty()) {
+            System.out.println("[buildExpressionFilter] Combining " + conditions.size() + " conditions with AND");
             RexNode combinedCondition = conditions.size() == 1 
                 ? conditions.get(0)
                 : rexBuilder.makeCall(org.apache.calcite.sql.fun.SqlStdOperatorTable.AND, conditions);
             relBuilder.filter(combinedCondition);
+            System.out.println("[buildExpressionFilter] Filter applied successfully");
+        } else {
+            System.err.println("[buildExpressionFilter] No valid conditions to apply");
         }
         
-        return relBuilder.build();
+        RelNode result = relBuilder.build();
+        System.out.println("[buildExpressionFilter] Built Filter RelNode: " + result.getClass().getSimpleName());
+        return result;
     }
     
     /**
@@ -1192,78 +1227,135 @@ public class RelNodeBuilder {
                     throw new IllegalArgumentException("Metric must have at least 2 elements: " + metric);
                 }
                 
-                String function = metric.get(0).toString().toLowerCase();
-                String fieldPath = metric.get(1).toString();
-                String alias = metric.size() > 2 ? metric.get(2).toString() : null;
+                // 检查并获取函数名
+                Object functionObj = metric.get(0);
+                if (functionObj == null) {
+                    throw new IllegalArgumentException("Metric function (first element) cannot be null: " + metric);
+                }
+                String function = functionObj.toString().toLowerCase();
                 
-                // 解析字段路径
-                FieldPathResolver.FieldPath fieldPathResult = pathResolver.resolve(fieldPath, rootObjectType, links);
-                int fieldIndex = findFieldIndexByPath(fieldPathResult, rowType);
-                if (fieldIndex < 0) {
-                    throw new IllegalArgumentException("Metric field '" + fieldPath + "' not found");
+                // 检查并获取字段路径
+                Object fieldPathObj = metric.get(1);
+                if (fieldPathObj == null) {
+                    throw new IllegalArgumentException("Metric field path (second element) cannot be null: " + metric);
+                }
+                String fieldPath = fieldPathObj.toString();
+                
+                // 获取别名（可选）
+                String alias = null;
+                if (metric.size() > 2) {
+                    Object aliasObj = metric.get(2);
+                    if (aliasObj != null) {
+                        alias = aliasObj.toString();
+                    }
                 }
                 
-                // 使用 field() 方法获取字段引用
-                org.apache.calcite.rex.RexNode fieldNode = relBuilder.field(fieldIndex);
+                // 处理 COUNT(*) 和 COUNT(DISTINCT ...)
+                boolean isCountStar = "count".equals(function) && "*".equals(fieldPath);
+                boolean isCountDistinct = "count_distinct".equals(function);
+                boolean isCountDistinctStar = isCountDistinct && "*".equals(fieldPath);
                 
-                // 获取字段类型
-                RelDataType fieldType = rowType.getFieldList().get(fieldIndex).getType();
+                org.apache.calcite.rex.RexNode fieldNode;
+                RelDataType fieldType = null;
+                String finalAlias;
+                FieldPathResolver.FieldPath fieldPathResult = null;
+                
+                if (isCountStar || isCountDistinctStar) {
+                    // COUNT(*) 或 COUNT(DISTINCT *) - 使用常量表达式
+                    fieldNode = relBuilder.literal(1);
+                    fieldType = relBuilder.getTypeFactory().createSqlType(org.apache.calcite.sql.type.SqlTypeName.INTEGER);
+                    if (isCountDistinctStar) {
+                        finalAlias = alias != null ? alias : "count_distinct_star";
+                    } else {
+                        finalAlias = alias != null ? alias : "count_star";
+                    }
+                } else {
+                    // 解析字段路径（包括 COUNT(DISTINCT field) 的情况，但 field 不是 "*"）
+                    fieldPathResult = pathResolver.resolve(fieldPath, rootObjectType, links);
+                    int fieldIndex = findFieldIndexByPath(fieldPathResult, rowType);
+                    if (fieldIndex < 0) {
+                        throw new IllegalArgumentException("Metric field '" + fieldPath + "' not found");
+                    }
+                    
+                    // 使用 field() 方法获取字段引用
+                    fieldNode = relBuilder.field(fieldIndex);
+                    
+                    // 获取字段类型
+                    fieldType = rowType.getFieldList().get(fieldIndex).getType();
+                    
+                    if (isCountDistinct) {
+                        finalAlias = alias != null ? alias : "count_distinct_" + fieldPathResult.getPropertyName();
+                    } else {
+                        finalAlias = alias != null ? alias : function + "_" + fieldPathResult.getPropertyName();
+                    }
+                }
                 
                 // 构建聚合函数调用
                 RelBuilder.AggCall aggregateCall;
-                switch (function) {
-                    case "sum":
-                        // 对于 SUM 函数，如果字段类型是 DECIMAL 或可能返回 DECIMAL（如数据库列是 DECIMAL），
-                        // 先转换为 DOUBLE 再求和，避免 BigDecimal 无法转换为 Double 的错误
-                        org.apache.calcite.rex.RexNode sumFieldNode = fieldNode;
-                        SqlTypeName fieldSqlType = fieldType.getSqlTypeName();
-                        if (fieldSqlType == SqlTypeName.DECIMAL || fieldSqlType == SqlTypeName.DOUBLE || fieldSqlType == SqlTypeName.FLOAT) {
-                            // 将数值类型转换为 DOUBLE，确保 SUM 返回 DOUBLE 而不是 DECIMAL
-                            RelDataType doubleType = relBuilder.getTypeFactory().createSqlType(SqlTypeName.DOUBLE);
-                            sumFieldNode = rexBuilder.makeCast(doubleType, fieldNode, false);
-                        }
-                        aggregateCall = relBuilder.aggregateCall(
-                            org.apache.calcite.sql.fun.SqlStdOperatorTable.SUM,
-                            sumFieldNode
-                        );
-                        break;
-                    case "avg":
-                        // 对于 AVG 函数，也转换为 DOUBLE
-                        org.apache.calcite.rex.RexNode avgFieldNode = fieldNode;
-                        SqlTypeName avgFieldSqlType = fieldType.getSqlTypeName();
-                        if (avgFieldSqlType == SqlTypeName.DECIMAL || avgFieldSqlType == SqlTypeName.DOUBLE || avgFieldSqlType == SqlTypeName.FLOAT) {
-                            RelDataType doubleType = relBuilder.getTypeFactory().createSqlType(SqlTypeName.DOUBLE);
-                            avgFieldNode = rexBuilder.makeCast(doubleType, fieldNode, false);
-                        }
-                        aggregateCall = relBuilder.aggregateCall(
-                            org.apache.calcite.sql.fun.SqlStdOperatorTable.AVG,
-                            avgFieldNode
-                        );
-                        break;
-                    case "count":
-                        aggregateCall = relBuilder.aggregateCall(
-                            org.apache.calcite.sql.fun.SqlStdOperatorTable.COUNT,
-                            fieldNode
-                        );
-                        break;
-                    case "min":
-                        aggregateCall = relBuilder.aggregateCall(
-                            org.apache.calcite.sql.fun.SqlStdOperatorTable.MIN,
-                            fieldNode
-                        );
-                        break;
-                    case "max":
-                        aggregateCall = relBuilder.aggregateCall(
-                            org.apache.calcite.sql.fun.SqlStdOperatorTable.MAX,
-                            fieldNode
-                        );
-                        break;
-                    default:
-                        throw new IllegalArgumentException("Unsupported aggregate function: " + function);
+                if (isCountDistinct) {
+                    // COUNT(DISTINCT field)
+                    // aggregateCall(SqlAggFunction, boolean distinct, RexNode filter, String alias, RexNode... operands)
+                    aggregateCall = relBuilder.aggregateCall(
+                        org.apache.calcite.sql.fun.SqlStdOperatorTable.COUNT,
+                        true, // distinct = true
+                        null, // filter = null
+                        null, // alias = null (will be set later)
+                        fieldNode // operands
+                    );
+                } else {
+                    switch (function) {
+                        case "sum":
+                            // 对于 SUM 函数，如果字段类型是 DECIMAL 或可能返回 DECIMAL（如数据库列是 DECIMAL），
+                            // 先转换为 DOUBLE 再求和，避免 BigDecimal 无法转换为 Double 的错误
+                            org.apache.calcite.rex.RexNode sumFieldNode = fieldNode;
+                            SqlTypeName fieldSqlType = fieldType.getSqlTypeName();
+                            if (fieldSqlType == SqlTypeName.DECIMAL || fieldSqlType == SqlTypeName.DOUBLE || fieldSqlType == SqlTypeName.FLOAT) {
+                                // 将数值类型转换为 DOUBLE，确保 SUM 返回 DOUBLE 而不是 DECIMAL
+                                RelDataType doubleType = relBuilder.getTypeFactory().createSqlType(SqlTypeName.DOUBLE);
+                                sumFieldNode = rexBuilder.makeCast(doubleType, fieldNode, false);
+                            }
+                            aggregateCall = relBuilder.aggregateCall(
+                                org.apache.calcite.sql.fun.SqlStdOperatorTable.SUM,
+                                sumFieldNode
+                            );
+                            break;
+                        case "avg":
+                            // 对于 AVG 函数，也转换为 DOUBLE
+                            org.apache.calcite.rex.RexNode avgFieldNode = fieldNode;
+                            SqlTypeName avgFieldSqlType = fieldType.getSqlTypeName();
+                            if (avgFieldSqlType == SqlTypeName.DECIMAL || avgFieldSqlType == SqlTypeName.DOUBLE || avgFieldSqlType == SqlTypeName.FLOAT) {
+                                RelDataType doubleType = relBuilder.getTypeFactory().createSqlType(SqlTypeName.DOUBLE);
+                                avgFieldNode = rexBuilder.makeCast(doubleType, fieldNode, false);
+                            }
+                            aggregateCall = relBuilder.aggregateCall(
+                                org.apache.calcite.sql.fun.SqlStdOperatorTable.AVG,
+                                avgFieldNode
+                            );
+                            break;
+                        case "count":
+                            aggregateCall = relBuilder.aggregateCall(
+                                org.apache.calcite.sql.fun.SqlStdOperatorTable.COUNT,
+                                fieldNode
+                            );
+                            break;
+                        case "min":
+                            aggregateCall = relBuilder.aggregateCall(
+                                org.apache.calcite.sql.fun.SqlStdOperatorTable.MIN,
+                                fieldNode
+                            );
+                            break;
+                        case "max":
+                            aggregateCall = relBuilder.aggregateCall(
+                                org.apache.calcite.sql.fun.SqlStdOperatorTable.MAX,
+                                fieldNode
+                            );
+                            break;
+                        default:
+                            throw new IllegalArgumentException("Unsupported aggregate function: " + function);
+                    }
                 }
                 
                 // 如果有别名，使用 as() 方法设置别名
-                String finalAlias = alias != null ? alias : function + "_" + fieldPathResult.getPropertyName();
                 aggregateCall = aggregateCall.as(finalAlias);
                 
                 aggregateCalls.add(aggregateCall);

@@ -190,11 +190,20 @@ public class QueryExecutor {
         System.out.println("Query has Links: " + (originalQuery.getLinks() != null && !originalQuery.getLinks().isEmpty()));
         System.out.println("Query has GroupBy: " + (originalQuery.getGroupBy() != null && !originalQuery.getGroupBy().isEmpty()));
         System.out.println("Query has Metrics: " + (originalQuery.getMetrics() != null && !originalQuery.getMetrics().isEmpty()));
+        System.out.println("Query has Filter: " + (originalQuery.getFilter() != null && !originalQuery.getFilter().isEmpty()));
+        System.out.println("Query has Where: " + (originalQuery.getWhere() != null && !originalQuery.getWhere().isEmpty()));
+        if (originalQuery.getFilter() != null && !originalQuery.getFilter().isEmpty()) {
+            System.out.println("Filter expressions: " + originalQuery.getFilter());
+        }
         
-        org.apache.calcite.rel.rel2sql.RelToSqlConverter.Result result = converter.visitRoot(relNode);
+        org.apache.calcite.rel.rel2sql.RelToSqlConverter.Result converterResult = converter.visitRoot(relNode);
         
         // 获取映射后的 SQL（传入原始查询以支持 JOIN）
-        String sql = converter.getMappedSql(result, originalQuery);
+        String sql = converter.getMappedSql(converterResult, originalQuery);
+
+        // 兼容部分方言生成的字符串字面量前缀（如 _UTF-8'xxx'），在 MySQL 会报语法错
+        // 简单移除非法的 charset introducer，保持普通字符串字面量
+        sql = sql.replace("_UTF-8'", "'").replace("_UTF8'", "'");
         
         // 调试：打印生成的 SQL
         System.out.println("=== Generated SQL ===");
@@ -214,7 +223,9 @@ public class QueryExecutor {
         
         // 执行 SQL（这是 Calcite 的标准执行方式）
         // 注意：需要将结果中的数据库列名映射回属性名
-        return executeSql(sql, originalQuery, objectType, dataSourceMapping);
+        QueryResult result = executeSql(sql, originalQuery, objectType, dataSourceMapping);
+        result.setSql(sql);
+        return result;
     }
     
     /**
@@ -642,10 +653,17 @@ public class QueryExecutor {
     public static class QueryResult {
         private final List<Map<String, Object>> rows;
         private final List<String> columns;
+        private String sql;
 
         public QueryResult(List<Map<String, Object>> rows, List<String> columns) {
             this.rows = rows;
             this.columns = columns;
+        }
+
+        public QueryResult(List<Map<String, Object>> rows, List<String> columns, String sql) {
+            this.rows = rows;
+            this.columns = columns;
+            this.sql = sql;
         }
 
         public List<Map<String, Object>> getRows() {
@@ -658,6 +676,14 @@ public class QueryExecutor {
 
         public int getRowCount() {
             return rows.size();
+        }
+
+        public String getSql() {
+            return sql;
+        }
+
+        public void setSql(String sql) {
+            this.sql = sql;
         }
     }
 }
