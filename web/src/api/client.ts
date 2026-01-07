@@ -270,5 +270,32 @@ export const queryApi = {
   },
 };
 
+// Natural Language Query API
+export interface NaturalLanguageQueryResponse {
+  query: string;
+  convertedQuery: QueryRequest;
+  columns?: string[];
+  rows?: Record<string, any>[];
+  rowCount?: number;
+}
+
+export const naturalLanguageQueryApi = {
+  execute: async (query: string): Promise<NaturalLanguageQueryResponse> => {
+    const response = await apiClient.post<ApiResponse<NaturalLanguageQueryResponse>>(
+      '/query/natural-language',
+      { query }
+    );
+    return response.data.data;
+  },
+
+  convert: async (query: string): Promise<NaturalLanguageQueryResponse> => {
+    const response = await apiClient.post<ApiResponse<NaturalLanguageQueryResponse>>(
+      '/query/natural-language/convert',
+      { query }
+    );
+    return response.data.data;
+  },
+};
+
 export default apiClient;
 

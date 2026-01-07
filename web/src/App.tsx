@@ -7,6 +7,7 @@ import LinkList from './pages/LinkList';
 import SchemaGraphView from './pages/SchemaGraphView';
 import DataSourceManagement from './pages/DataSourceManagement';
 import QueryBuilder from './pages/QueryBuilder';
+import NaturalLanguageQuery from './pages/NaturalLanguageQuery';
 
 function App() {
   return (
@@ -21,6 +22,7 @@ function App() {
           <Route path="/schema-graph" element={<SchemaGraphView />} />
           <Route path="/data-sources" element={<DataSourceManagement />} />
           <Route path="/query" element={<QueryBuilder />} />
+          <Route path="/natural-language-query" element={<NaturalLanguageQuery />} />
         </Routes>
       </Layout>
     </BrowserRouter>
