@@ -35,7 +35,10 @@ public class MyPalantirApplication {
     private static final Logger logger = LoggerFactory.getLogger(MyPalantirApplication.class);
 
     public static void main(String[] args) {
-        SpringApplication.run(MyPalantirApplication.class, args);
+        SpringApplication app = new SpringApplication(MyPalantirApplication.class);
+        // 注册 .env 文件加载器
+        app.addListeners(new EnvConfig());
+        app.run(args);
     }
 
     @Bean

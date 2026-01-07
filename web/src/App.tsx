@@ -11,6 +11,7 @@ import QueryBuilder from './pages/QueryBuilder';
 import MetricBrowser from './pages/MetricBrowser';
 import MetricBuilder from './pages/MetricBuilder';
 import MetricDetail from './pages/MetricDetail';
+import NaturalLanguageQuery from './pages/NaturalLanguageQuery';
 
 function App() {
   return (
@@ -29,6 +30,7 @@ function App() {
           <Route path="/metrics" element={<MetricBrowser />} />
           <Route path="/metrics/builder" element={<MetricBuilder />} />
           <Route path="/metrics/:id" element={<MetricDetail />} />
+          <Route path="/natural-language-query" element={<NaturalLanguageQuery />} />
         </Routes>
       </Layout>
     </BrowserRouter>

@@ -10,7 +10,8 @@ import {
   MagnifyingGlassIcon,
   PlusIcon,
   PencilIcon,
-  ChevronDownIcon
+  ChevronDownIcon,
+  SparklesIcon
 } from '@heroicons/react/24/outline';
 import type { ObjectType, LinkType } from '../api/client';
 import { schemaApi } from '../api/client';
@@ -208,7 +209,7 @@ export default function Layout({ children }: LayoutProps) {
             <Link
               to="/query"
               className={`flex items-center px-3 py-2 rounded-lg mb-2 ${
-                isActive('/query')
+                isActive('/query') && location.pathname === '/query'
                   ? 'bg-blue-50 text-blue-700'
                   : 'text-gray-700 hover:bg-gray-100'
               }`}
@@ -227,6 +228,18 @@ export default function Layout({ children }: LayoutProps) {
             >
               <ChartBarIcon className="w-5 h-5 mr-3" />
               指标管理
+            </Link>
+
+            <Link
+              to="/natural-language-query"
+              className={`flex items-center px-3 py-2 rounded-lg mb-2 ${
+                isActive('/natural-language-query')
+                  ? 'bg-blue-50 text-blue-700'
+                  : 'text-gray-700 hover:bg-gray-100'
+              }`}
+            >
+              <SparklesIcon className="w-5 h-5 mr-3" />
+              Natural Language Query
             </Link>
 
             {!loading && (
@@ -305,6 +318,8 @@ export default function Layout({ children }: LayoutProps) {
             {location.pathname.startsWith('/schema-graph') && 'Schema Graph'}
             {location.pathname.startsWith('/data-sources') && 'Data Sources'}
             {location.pathname.startsWith('/metrics') && '指标管理'}
+            {location.pathname === '/query' && 'Query Builder'}
+            {location.pathname === '/natural-language-query' && 'Natural Language Query'}
           </h2>
         </header>
 
