@@ -41,44 +41,53 @@ public class NaturalLanguageQueryService {
      */
     public OntologyQuery convertToQuery(String naturalLanguageQuery) throws NaturalLanguageQueryException {
         if (naturalLanguageQuery == null || naturalLanguageQuery.trim().isEmpty()) {
+            logger.error("Natural language query is empty");
             throw new NaturalLanguageQueryException("自然语言查询不能为空");
         }
         
         try {
             // 1. 获取 Ontology 摘要
             String ontologySummary = ontologySummaryService.generateOntologySummary();
-            
             // 2. 构建 Prompt
             String systemPrompt = buildSystemPrompt(ontologySummary);
             String userPrompt = "用户查询：" + naturalLanguageQuery;
-            
-            logger.info("Converting natural language query: {}", naturalLanguageQuery);
+            logger.debug("System prompt length: {} characters", systemPrompt.length());
             
             // 3. 调用 LLM
             String jsonResponse;
             try {
                 jsonResponse = llmService.chat(systemPrompt, userPrompt);
             } catch (LLMService.LLMException e) {
+                logger.error("LLM service call failed: {}", e.getMessage());
                 throw new NaturalLanguageQueryException("LLM 调用失败: " + e.getMessage(), e);
             }
             
             // 4. 清理响应（移除可能的 markdown 代码块标记）
+            String originalResponse = jsonResponse;
             jsonResponse = cleanJsonResponse(jsonResponse);
-            
-            logger.debug("LLM response: {}", jsonResponse);
+            logger.debug("Cleaned JSON response: {}", jsonResponse.length() > 500 ? jsonResponse.substring(0, 500) + "..." : jsonResponse);
             
             // 5. 解析 JSON 响应为 OntologyQuery
             OntologyQuery query;
             try {
                 query = parseJsonToQuery(jsonResponse);
             } catch (Exception e) {
+                logger.error("Failed to parse JSON response: {}", e.getMessage());
+                logger.error("Response content: {}", jsonResponse);
                 throw new NaturalLanguageQueryException("解析 LLM 响应失败: " + e.getMessage() + "\n响应内容: " + jsonResponse, e);
             }
             
             // 6. 验证查询
             validateQuery(query);
             
-            logger.info("Successfully converted natural language query to OntologyQuery: object={}", query.getObject());
+            logger.info("=== Conversion completed successfully ===");
+            logger.info("Result - Object: {}, Links: {}, GroupBy: {}, Metrics: {}, Filter: {}", 
+                query.getObject(),
+                query.getLinks() != null ? query.getLinks().size() : 0,
+                query.getGroupBy() != null ? query.getGroupBy().size() : 0,
+                query.getMetrics() != null ? query.getMetrics().size() : 0,
+                query.getFilter() != null ? query.getFilter().size() : 0
+            );
             
             return query;
             
@@ -247,6 +256,7 @@ public class NaturalLanguageQueryService {
         // 验证 object
         String objectName = query.getObject();
         if (objectName == null || objectName.isEmpty()) {
+            logger.error("Query validation failed: missing object field");
             throw new NaturalLanguageQueryException("查询必须指定 object 字段");
         }
         
@@ -254,6 +264,7 @@ public class NaturalLanguageQueryService {
         try {
             loader.getObjectType(objectName);
         } catch (Loader.NotFoundException e) {
+            logger.error("Query validation failed: object type '{}' not found", objectName);
             throw new NaturalLanguageQueryException("对象类型 '" + objectName + "' 不存在");
         }
         
@@ -261,12 +272,14 @@ public class NaturalLanguageQueryService {
         if (query.getLinks() != null) {
             for (OntologyQuery.LinkQuery linkQuery : query.getLinks()) {
                 if (linkQuery.getName() == null || linkQuery.getName().isEmpty()) {
+                    logger.error("Query validation failed: link query missing name field");
                     throw new NaturalLanguageQueryException("LinkQuery 必须指定 name 字段");
                 }
                 
                 try {
                     loader.getLinkType(linkQuery.getName());
                 } catch (Loader.NotFoundException e) {
+                    logger.error("Query validation failed: link type '{}' not found", linkQuery.getName());
                     throw new NaturalLanguageQueryException("LinkType '" + linkQuery.getName() + "' 不存在");
                 }
             }
@@ -321,18 +334,18 @@ public class NaturalLanguageQueryService {
             ## 示例
             
             ### 示例 1: 简单查询
-            用户查询："显示所有收费站"
+            用户查询："显示所有车辆通行路径"
             转换结果：
             {
-              "object": "收费站",
-              "select": ["名称", "省份"]
+              "object": "车辆通行路径",
+              "select": ["车牌号码", "通行标识ID"]
             }
             
             ### 示例 2: 聚合查询
-            用户查询："显示每个收费站的总收费金额，按金额降序排列"
+            用户查询："显示每个车的总收费金额，按金额降序排列"
             转换结果：
             {
-              "object": "收费站",
+              "object": "出口车道流水",
               "links": [{"name": "拥有收费记录"}],
               "group_by": ["名称"],
               "metrics": [["sum", "拥有收费记录.金额", "总金额"]],

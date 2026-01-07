@@ -4,6 +4,8 @@ import com.mypalantir.query.OntologyQuery;
 import com.mypalantir.query.QueryExecutor;
 import com.mypalantir.service.NaturalLanguageQueryService;
 import com.mypalantir.service.QueryService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -16,6 +18,8 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/v1/query/natural-language")
 public class NaturalLanguageQueryController {
+    private static final Logger logger = LoggerFactory.getLogger(NaturalLanguageQueryController.class);
+    
     private final NaturalLanguageQueryService naturalLanguageQueryService;
     private final QueryService queryService;
     
@@ -60,12 +64,15 @@ public class NaturalLanguageQueryController {
             return ResponseEntity.ok(ApiResponse.success(response));
             
         } catch (NaturalLanguageQueryService.NaturalLanguageQueryException e) {
+            logger.error("Natural language query conversion failed: {}", e.getMessage());
             return ResponseEntity.badRequest()
                 .body(ApiResponse.error(400, "自然语言查询转换失败: " + e.getMessage()));
         } catch (IllegalArgumentException e) {
+            logger.error("Invalid argument: {}", e.getMessage());
             return ResponseEntity.badRequest()
                 .body(ApiResponse.error(400, e.getMessage()));
         } catch (Exception e) {
+            logger.error("Query execution failed", e);
             e.printStackTrace();
             String errorMessage = e.getMessage();
             if (errorMessage == null || errorMessage.isEmpty()) {
@@ -106,9 +113,11 @@ public class NaturalLanguageQueryController {
             return ResponseEntity.ok(ApiResponse.success(response));
             
         } catch (NaturalLanguageQueryService.NaturalLanguageQueryException e) {
+            logger.error("Natural language query conversion failed: {}", e.getMessage());
             return ResponseEntity.badRequest()
                 .body(ApiResponse.error(400, "自然语言查询转换失败: " + e.getMessage()));
         } catch (Exception e) {
+            logger.error("Conversion failed", e);
             e.printStackTrace();
             String errorMessage = e.getMessage();
             if (errorMessage == null || errorMessage.isEmpty()) {

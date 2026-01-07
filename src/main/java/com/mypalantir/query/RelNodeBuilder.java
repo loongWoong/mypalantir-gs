@@ -1165,6 +1165,11 @@ public class RelNodeBuilder {
                 RexNode leCondition = rexBuilder.makeCall(org.apache.calcite.sql.fun.SqlStdOperatorTable.LESS_THAN_OR_EQUAL, inputRef, literal2);
                 return rexBuilder.makeCall(org.apache.calcite.sql.fun.SqlStdOperatorTable.AND, geCondition, leCondition);
             
+            case "like":
+                // 构建 LIKE 表达式
+                RexNode literalForLike = buildLiteral(rexBuilder, value, fieldType);
+                return rexBuilder.makeCall(org.apache.calcite.sql.fun.SqlStdOperatorTable.LIKE, inputRef, literalForLike);
+            
             default:
                 throw new IllegalArgumentException("Unsupported filter operator: " + operator);
         }

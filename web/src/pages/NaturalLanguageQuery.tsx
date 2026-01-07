@@ -14,33 +14,23 @@ import { naturalLanguageQueryApi, type NaturalLanguageQueryResponse } from '../a
 const EXAMPLE_QUERIES = [
   {
     title: '简单查询',
-    query: '显示所有收费站',
-    description: '查询所有收费站的基本信息'
+    query: '显示所有车辆通行路径',
+    description: '查询所有车辆通行路径的基本信息'
   },
   {
     title: '过滤查询',
-    query: '显示江苏省的收费站',
-    description: '按省份过滤收费站'
+    query: '显示鲁C开头车牌的车辆通行路径',
+    description: '按车牌号码模糊过滤车辆通行路径'
   },
   {
     title: '聚合查询',
-    query: '显示每个收费站的总收费金额',
-    description: '按收费站分组统计总金额'
+    query: '显示每个车的总收费金额',
+    description: '按车分组统计总金额'
   },
   {
     title: '排序查询',
-    query: '显示每个收费站的总收费金额，按金额降序排列',
+    query: '显示每个车的总收费金额，按金额降序排列',
     description: '聚合查询并排序'
-  },
-  {
-    title: '车辆查询',
-    query: '显示所有车辆信息',
-    description: '查询所有车辆'
-  },
-  {
-    title: '收费记录查询',
-    query: '显示所有收费记录',
-    description: '查询所有收费记录'
   }
 ];
 

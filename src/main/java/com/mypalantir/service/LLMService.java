@@ -104,7 +104,8 @@ public class LLMService {
             
             HttpEntity<Map<String, Object>> entity = new HttpEntity<>(request, headers);
             
-            logger.debug("Calling LLM API: {}", apiUrl);
+            logger.info("Calling LLM API: {}", apiUrl);
+            long startTime = System.currentTimeMillis();
             
             // 调用 API
             ResponseEntity<String> response = restTemplate.exchange(
@@ -128,25 +129,30 @@ public class LLMService {
             try {
                 jsonNode = objectMapper.readTree(responseBody);
             } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+                logger.error("Failed to parse LLM API response as JSON: {}", e.getMessage());
                 throw new LLMException("Failed to parse LLM API response: " + e.getMessage(), e);
             }
             JsonNode choices = jsonNode.get("choices");
             if (choices == null || !choices.isArray() || choices.size() == 0) {
+                logger.error("LLM API response missing choices field. Response: {}", responseBody);
                 throw new LLMException("LLM API response missing choices: " + responseBody);
             }
             
             JsonNode message = choices.get(0).get("message");
             if (message == null) {
+                logger.error("LLM API response missing message field. Response: {}", responseBody);
                 throw new LLMException("LLM API response missing message: " + responseBody);
             }
             
             JsonNode content = message.get("content");
             if (content == null) {
+                logger.error("LLM API response missing content field. Response: {}", responseBody);
                 throw new LLMException("LLM API response missing content: " + responseBody);
             }
             
             String result = content.asText();
-            logger.debug("LLM response received: {}", result);
+            logger.info("LLM response received successfully, content length: {} characters", result.length());
+            logger.debug("LLM response content: {}", result.length() > 500 ? result.substring(0, 500) + "..." : result);
             
             return result;
             
