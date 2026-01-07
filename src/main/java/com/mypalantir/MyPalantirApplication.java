@@ -1,6 +1,7 @@
 package com.mypalantir;
 
 import com.mypalantir.config.Config;
+import com.mypalantir.config.EnvConfig;
 import com.mypalantir.meta.Loader;
 import com.mypalantir.meta.Validator;
 import com.mypalantir.service.DataValidator;
@@ -26,7 +27,10 @@ public class MyPalantirApplication {
     private static final Logger logger = LoggerFactory.getLogger(MyPalantirApplication.class);
 
     public static void main(String[] args) {
-        SpringApplication.run(MyPalantirApplication.class, args);
+        SpringApplication app = new SpringApplication(MyPalantirApplication.class);
+        // 注册 .env 文件加载器
+        app.addListeners(new EnvConfig());
+        app.run(args);
     }
 
     @Bean
