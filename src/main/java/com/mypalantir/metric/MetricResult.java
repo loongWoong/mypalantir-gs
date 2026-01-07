@@ -11,7 +11,10 @@ public class MetricResult {
     private String metricId;
     private String metricName;
     private String timeGranularity;
-    private List<MetricDataPoint> results;
+    // 使用通用的行数据列表，而不是固定的 MetricDataPoint 结构
+    private List<Map<String, Object>> results;
+    // 列名列表（与 QueryResult 保持一致）
+    private List<String> columns;
     private LocalDateTime calculatedAt;
     private String sql;
 
@@ -42,12 +45,20 @@ public class MetricResult {
         this.timeGranularity = timeGranularity;
     }
 
-    public List<MetricDataPoint> getResults() {
+    public List<Map<String, Object>> getResults() {
         return results;
     }
 
-    public void setResults(List<MetricDataPoint> results) {
+    public void setResults(List<Map<String, Object>> results) {
         this.results = results;
+    }
+
+    public List<String> getColumns() {
+        return columns;
+    }
+
+    public void setColumns(List<String> columns) {
+        this.columns = columns;
     }
 
     public LocalDateTime getCalculatedAt() {
@@ -67,8 +78,10 @@ public class MetricResult {
     }
 
     /**
-     * 指标数据点
+     * @deprecated 保留此类仅为向后兼容，建议直接使用 results 字段
+     * 指标数据点（已废弃，保留用于向后兼容）
      */
+    @Deprecated
     public static class MetricDataPoint {
         private String timeValue;
         private Map<String, Object> dimensionValues;

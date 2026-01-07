@@ -1734,73 +1734,133 @@ export default function QueryBuilder() {
             
             {viewMode === 'table' ? (
               <div className="overflow-x-auto">
-                {metricResult.results && metricResult.results.length > 0 ? (
-                  <table className="min-w-full divide-y divide-gray-200 bg-white rounded-lg shadow">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        {metricResult.timeGranularity && (
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            时间
-                          </th>
-                        )}
-                        {metricResult.results[0]?.dimensionValues && Object.keys(metricResult.results[0].dimensionValues).map(dim => (
-                          <th
-                            key={dim}
-                            className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                          >
-                            {dim}
-                          </th>
+                {metricResult.results && metricResult.results.length > 0 ? (() => {
+                  // 动态收集所有列
+                  const columns: string[] = [];
+                  const columnLabels: Map<string, string> = new Map();
+                  
+                  // 从第一个数据点分析结构
+                  const firstPoint = metricResult.results[0];
+                  
+                  // 检测数据格式：是原始 SQL 结果还是结构化格式
+                  const isStructuredFormat = 'metricValue' in firstPoint;
+                  
+                  if (isStructuredFormat) {
+                    // 结构化格式（MetricDataPoint）- 向后兼容
+                    const typedPoint = firstPoint as any; // MetricDataPoint
+                    
+                    // 1. 时间列
+                    if (typedPoint.timeValue !== undefined || metricResult.timeGranularity) {
+                      columns.push('timeValue');
+                      columnLabels.set('timeValue', '时间');
+                    }
+                    
+                    // 2. 维度列
+                    if (typedPoint.dimensionValues) {
+                      Object.keys(typedPoint.dimensionValues).forEach(dim => {
+                        const colKey = `dimension_${dim}`;
+                        columns.push(colKey);
+                        columnLabels.set(colKey, dim);
+                      });
+                    }
+                    
+                    // 3. 指标值列
+                    columns.push('metricValue');
+                    columnLabels.set('metricValue', '指标值');
+                    
+                    // 4. 单位列
+                    if (typedPoint.unit !== undefined) {
+                      columns.push('unit');
+                      columnLabels.set('unit', '单位');
+                    }
+                    
+                    // 5. 对比列
+                    if (typedPoint.comparisons && Object.keys(typedPoint.comparisons).length > 0) {
+                      columns.push('comparisons');
+                      columnLabels.set('comparisons', '对比');
+                    }
+                  } else {
+                    // 原始 SQL 结果格式（推荐）
+                    // 优先使用 columns 字段，如果没有则使用 firstPoint 的 keys
+                    const resultColumns = metricResult.columns || Object.keys(firstPoint);
+                    resultColumns.forEach(col => {
+                      columns.push(col);
+                      // 可以尝试优化列名显示
+                      columnLabels.set(col, col);
+                    });
+                  }
+                  
+                  return (
+                    <table className="min-w-full divide-y divide-gray-200 bg-white rounded-lg shadow">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          {columns.map(col => (
+                            <th
+                              key={col}
+                              className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                            >
+                              {columnLabels.get(col) || col}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {metricResult.results.map((point: any, idx) => (
+                          <tr key={idx} className="hover:bg-gray-50">
+                            {columns.map(col => {
+                              let cellValue: any = '-';
+                              
+                              if (isStructuredFormat) {
+                                // 结构化格式处理
+                                if (col === 'timeValue') {
+                                  cellValue = point.timeValue || '-';
+                                } else if (col.startsWith('dimension_')) {
+                                  const dimKey = col.substring('dimension_'.length);
+                                  cellValue = point.dimensionValues?.[dimKey] !== undefined 
+                                    ? String(point.dimensionValues[dimKey]) 
+                                    : '-';
+                                } else if (col === 'metricValue') {
+                                  cellValue = point.metricValue !== undefined ? point.metricValue : '-';
+                                } else if (col === 'unit') {
+                                  cellValue = point.unit || '-';
+                                } else if (col === 'comparisons') {
+                                  if (point.comparisons && Object.keys(point.comparisons).length > 0) {
+                                    return (
+                                      <td key={col} className="px-6 py-4 text-sm text-gray-600">
+                                        {Object.entries(point.comparisons).map(([key, comp]: [string, any]) => (
+                                          <div key={key} className="text-xs">
+                                            {key}: {comp.display} ({comp.description})
+                                          </div>
+                                        ))}
+                                      </td>
+                                    );
+                                  } else {
+                                    cellValue = '-';
+                                  }
+                                }
+                              } else {
+                                // 原始 SQL 结果格式处理
+                                const value = point[col];
+                                cellValue = value !== undefined && value !== null 
+                                  ? (typeof value === 'object' ? JSON.stringify(value) : String(value))
+                                  : '-';
+                              }
+                              
+                              return (
+                                <td
+                                  key={col}
+                                  className="px-6 py-4 whitespace-nowrap text-sm text-gray-900"
+                                >
+                                  {cellValue}
+                                </td>
+                              );
+                            })}
+                          </tr>
                         ))}
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          指标值
-                        </th>
-                        {metricResult.results[0]?.unit && (
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            单位
-                          </th>
-                        )}
-                        {metricResult.results[0]?.comparisons && Object.keys(metricResult.results[0].comparisons).length > 0 && (
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            对比
-                          </th>
-                        )}
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {metricResult.results.map((point, idx) => (
-                      <tr key={idx} className="hover:bg-gray-50">
-                        {metricResult.timeGranularity && (
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {point.timeValue || '-'}
-                          </td>
-                        )}
-                        {point.dimensionValues && Object.entries(point.dimensionValues).map(([key, value]) => (
-                          <td key={key} className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {String(value)}
-                          </td>
-                        ))}
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          {point.metricValue}
-                        </td>
-                        {point.unit && (
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {point.unit}
-                          </td>
-                        )}
-                        {point.comparisons && Object.keys(point.comparisons).length > 0 && (
-                          <td className="px-6 py-4 text-sm text-gray-600">
-                            {Object.entries(point.comparisons).map(([key, comp]) => (
-                              <div key={key} className="text-xs">
-                                {key}: {comp.display} ({comp.description})
-                              </div>
-                            ))}
-                          </td>
-                        )}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                ) : (
+                      </tbody>
+                    </table>
+                  );
+                })() : (
                   <div className="p-8 text-center text-gray-500 bg-white rounded-lg shadow">
                     <p>查询结果为空，没有数据返回。</p>
                   </div>

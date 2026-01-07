@@ -12,11 +12,15 @@ interface ApiResponse<T> {
 export interface AtomicMetric {
   id: string;
   name: string;
-  display_name?: string;
+  displayName?: string;  // 后端返回驼峰命名
+  display_name?: string; // 兼容下划线命名
   description?: string;
-  business_process: string;
-  aggregation_function: string;
-  aggregation_field?: string;
+  businessProcess: string;  // 后端返回驼峰命名
+  business_process?: string; // 兼容下划线命名
+  aggregationFunction: string;  // 后端返回驼峰命名
+  aggregation_function?: string; // 兼容下划线命名
+  aggregationField?: string;  // 后端返回驼峰命名
+  aggregation_field?: string; // 兼容下划线命名
   unit?: string;
   status: string;
 }
@@ -75,7 +79,12 @@ export type MetricResult = {
   metricId: string;
   metricName: string;
   timeGranularity?: string;
-  results: MetricDataPoint[];
+  // 支持两种格式：
+  // 1. 原始 SQL 结果（推荐）：Record<string, any>[] - 直接返回查询结果的行数据
+  // 2. 结构化格式（向后兼容）：MetricDataPoint[] - 用于复合指标等需要特殊处理的场景
+  results: (Record<string, any> | MetricDataPoint)[];
+  // 列名列表（当返回原始 SQL 结果时提供）
+  columns?: string[];
   calculatedAt: string;
   sql?: string;
 };

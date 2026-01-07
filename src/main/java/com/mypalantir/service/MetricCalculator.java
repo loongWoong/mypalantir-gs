@@ -408,6 +408,7 @@ public class MetricCalculator {
 
     /**
      * 将原子指标查询结果转换为MetricResult
+     * 直接返回 SQL 执行结果，不进行结构转换
      */
     private MetricResult convertAtomicMetricToResult(QueryExecutor.QueryResult queryResult, AtomicMetric atomicMetric) {
         MetricResult result = new MetricResult();
@@ -415,28 +416,9 @@ public class MetricCalculator {
         result.setMetricName(atomicMetric.getDisplayName() != null ? atomicMetric.getDisplayName() : atomicMetric.getName());
         result.setCalculatedAt(LocalDateTime.now());
 
-        List<MetricResult.MetricDataPoint> dataPoints = new ArrayList<>();
-        for (Map<String, Object> row : queryResult.getRows()) {
-            MetricResult.MetricDataPoint point = new MetricResult.MetricDataPoint();
-            
-            // 提取指标值（聚合结果）
-            // 从查询结果的列中获取聚合值
-            if (!queryResult.getColumns().isEmpty()) {
-                String firstColumn = queryResult.getColumns().get(0);
-                Object metricValue = row.get(firstColumn);
-                if (metricValue instanceof Number) {
-                    point.setMetricValue((Number) metricValue);
-                }
-            }
-
-            // 设置单位
-            if (atomicMetric.getUnit() != null) {
-                point.setUnit(atomicMetric.getUnit());
-            }
-
-            dataPoints.add(point);
-        }
-        result.setResults(dataPoints);
+        // 直接使用查询结果的原始数据
+        result.setResults(queryResult.getRows());
+        result.setColumns(queryResult.getColumns());
         
         // 设置 SQL
         if (queryResult.getSql() != null) {
@@ -448,6 +430,7 @@ public class MetricCalculator {
 
     /**
      * 转换为MetricResult
+     * 直接返回 SQL 执行结果，不进行结构转换
      */
     private MetricResult convertToMetricResult(QueryExecutor.QueryResult queryResult, MetricDefinition metricDefinition, AtomicMetric atomicMetric) {
         MetricResult result = new MetricResult();
@@ -456,52 +439,15 @@ public class MetricCalculator {
         result.setTimeGranularity(metricDefinition.getTimeGranularity());
         result.setCalculatedAt(LocalDateTime.now());
 
-        List<MetricResult.MetricDataPoint> dataPoints = new ArrayList<>();
-        for (Map<String, Object> row : queryResult.getRows()) {
-            MetricResult.MetricDataPoint point = new MetricResult.MetricDataPoint();
-            
-            // 提取时间值（不区分大小写）
-            if (metricDefinition.getTimeDimension() != null) {
-                String timeField = getTimeGroupField(metricDefinition.getTimeDimension(), metricDefinition.getTimeGranularity());
-                Object timeValue = getValueIgnoreCase(row, timeField);
-                if (timeValue != null) {
-                    point.setTimeValue(timeValue.toString());
-                }
-            }
-
-            // 提取维度值（不区分大小写）
-            Map<String, Object> dimensionValues = new HashMap<>();
-            if (metricDefinition.getDimensions() != null) {
-                for (String dim : metricDefinition.getDimensions()) {
-                    Object value = getValueIgnoreCase(row, dim);
-                    if (value != null) {
-                        dimensionValues.put(dim, value);
-                    }
-                }
-            }
-            point.setDimensionValues(dimensionValues);
-
-            // 提取指标值（取最后一个聚合结果列）
-            if (!queryResult.getColumns().isEmpty()) {
-                // 聚合结果通常是最后一列
-                String lastColumn = queryResult.getColumns().get(queryResult.getColumns().size() - 1);
-                Object metricValue = getValueIgnoreCase(row, lastColumn);
-                if (metricValue instanceof Number) {
-                    point.setMetricValue((Number) metricValue);
-                }
-            }
-
-            point.setUnit(atomicMetric.getUnit());
-            dataPoints.add(point);
-        }
-
-        result.setResults(dataPoints);
+        // 直接使用查询结果的原始数据
+        result.setResults(queryResult.getRows());
+        result.setColumns(queryResult.getColumns());
         
         // 设置 SQL
         if (queryResult.getSql() != null) {
             result.setSql(queryResult.getSql());
         }
-        
+
         return result;
     }
 
@@ -517,7 +463,7 @@ public class MetricCalculator {
      * 添加对比数据
      */
     private MetricResult addComparisons(MetricResult result, MetricDefinition metricDefinition, MetricQuery query) throws Exception {
-        for (MetricResult.MetricDataPoint point : result.getResults()) {
+        for (Map<String, Object> point : result.getResults()) {
             Map<String, MetricResult.ComparisonValue> comparisons = new HashMap<>();
             
             for (String comparisonType : metricDefinition.getComparisonType()) {
@@ -527,7 +473,7 @@ public class MetricCalculator {
                 }
             }
             
-            point.setComparisons(comparisons);
+            point.put("comparisons", comparisons);
         }
         
         return result;
@@ -536,12 +482,13 @@ public class MetricCalculator {
     /**
      * 计算对比值
      */
-    private MetricResult.ComparisonValue calculateComparison(MetricResult.MetricDataPoint point, MetricDefinition metricDefinition, String comparisonType, MetricQuery query) throws Exception {
-        if (point.getTimeValue() == null) {
+    private MetricResult.ComparisonValue calculateComparison(Map<String, Object> point, MetricDefinition metricDefinition, String comparisonType, MetricQuery query) throws Exception {
+        String timeValue = (String) point.get(metricDefinition.getTimeDimension());
+        if (timeValue == null) {
             return null;
         }
 
-        LocalDate currentDate = parseTimeValue(point.getTimeValue(), metricDefinition.getTimeGranularity());
+        LocalDate currentDate = parseTimeValue(timeValue, metricDefinition.getTimeGranularity());
         LocalDate compareDate = null;
 
         if ("YoY".equals(comparisonType)) {
@@ -564,14 +511,40 @@ public class MetricCalculator {
             return null;
         }
 
+        // 构建维度值映射
+        Map<String, Object> dimensionValues = new HashMap<>();
+        if (metricDefinition.getDimensions() != null) {
+            for (String dim : metricDefinition.getDimensions()) {
+                if (point.containsKey(dim)) {
+                    dimensionValues.put(dim, point.get(dim));
+                }
+            }
+        }
+
         // 查询对比时间的数据
-        Number compareValue = queryMetricValue(metricDefinition, compareDate, point.getDimensionValues(), query);
+        Number compareValue = queryMetricValue(metricDefinition, compareDate, dimensionValues, query);
         if (compareValue == null || compareValue.doubleValue() == 0) {
             return null;
         }
 
+        // 获取当前指标值（从结果列中查找聚合字段）
+        Object metricValueObj = null;
+        for (Map.Entry<String, Object> entry : point.entrySet()) {
+            String key = entry.getKey();
+            // 跳过时间和维度字段，找到聚合指标字段
+            if (!key.equals(metricDefinition.getTimeDimension()) && 
+                (metricDefinition.getDimensions() == null || !metricDefinition.getDimensions().contains(key))) {
+                metricValueObj = entry.getValue();
+                break;
+            }
+        }
+        
+        if (metricValueObj == null || !(metricValueObj instanceof Number)) {
+            return null;
+        }
+        
         // 计算增长率
-        double currentValue = point.getMetricValue().doubleValue();
+        double currentValue = ((Number) metricValueObj).doubleValue();
         double changeRate = (currentValue - compareValue.doubleValue()) / compareValue.doubleValue();
 
         String typeName = comparisonType.equals("YoY") ? "去年同期" : "上一周期";
@@ -596,7 +569,18 @@ public class MetricCalculator {
 
         MetricResult result = calculateMetric(metricDefinition, compareQuery);
         if (result.getResults() != null && !result.getResults().isEmpty()) {
-            return result.getResults().get(0).getMetricValue();
+            Map<String, Object> row = result.getResults().get(0);
+            // 获取聚合字段的值（跳过时间和维度字段）
+            for (Map.Entry<String, Object> entry : row.entrySet()) {
+                String key = entry.getKey();
+                if (!key.equals(metricDefinition.getTimeDimension()) && 
+                    (metricDefinition.getDimensions() == null || !metricDefinition.getDimensions().contains(key))) {
+                    Object value = entry.getValue();
+                    if (value instanceof Number) {
+                        return (Number) value;
+                    }
+                }
+            }
         }
         return null;
     }
@@ -671,7 +655,7 @@ public class MetricCalculator {
         System.out.println("[CompositeMetric] Base results count: " + baseResults.size());
 
         // 解析公式并计算结果
-        List<MetricResult.MetricDataPoint> calculatedResults = calculateFormulaResults(
+        List<Map<String, Object>> calculatedResults = calculateFormulaResults(
             formula, metricDefinition, baseResults);
         result.setResults(calculatedResults);
 
@@ -726,7 +710,9 @@ public class MetricCalculator {
                     String metricId = baseMetricIds.get(i);
                     MetricResult baseResult = baseResults.get(i);
                     if (baseResult.getResults() != null && !baseResult.getResults().isEmpty()) {
-                        Number value = baseResult.getResults().get(0).getMetricValue();
+                        Map<String, Object> row = baseResult.getResults().get(0);
+                        // 从第一行提取指标值
+                        Number value = extractMetricValue(row, metricDefinition);
                         if (value != null) {
                             exampleFormula = exampleFormula.replace("{" + metricId + "}", 
                                 "(" + value + ")");
@@ -746,10 +732,10 @@ public class MetricCalculator {
     /**
      * 根据公式计算数据点
      */
-    private List<MetricResult.MetricDataPoint> calculateFormulaResults(
+    private List<Map<String, Object>> calculateFormulaResults(
             String formula, MetricDefinition metricDefinition, List<MetricResult> baseResults) {
         
-        List<MetricResult.MetricDataPoint> results = new ArrayList<>();
+        List<Map<String, Object>> results = new ArrayList<>();
         
         // 确保公式计算逻辑总是被执行
         // 即使只有一个基础指标，也要通过公式计算流程，确保公式逻辑被应用
@@ -779,13 +765,10 @@ public class MetricCalculator {
         // 收集所有唯一的数据点键（时间值 + 维度值的组合）
         for (MetricResult baseResult : baseResults) {
             if (baseResult.getResults() != null) {
-                for (MetricResult.MetricDataPoint point : baseResult.getResults()) {
-                    String key = buildDataPointKey(point);
+                for (Map<String, Object> point : baseResult.getResults()) {
+                    String key = buildDataPointKeyFromRow(point, metricDefinition);
                     if (!dataPointKeyMap.containsKey(key)) {
-                        Map<String, Object> pointData = new HashMap<>();
-                        pointData.put("timeValue", point.getTimeValue());
-                        pointData.put("dimensionValues", point.getDimensionValues() != null 
-                            ? new HashMap<>(point.getDimensionValues()) : new HashMap<>());
+                        Map<String, Object> pointData = new HashMap<>(point);
                         dataPointKeyMap.put(key, pointData);
                     }
                 }
@@ -804,10 +787,14 @@ public class MetricCalculator {
                 
                 if (baseResult.getResults() != null) {
                     // 查找匹配的数据点
-                    MetricResult.MetricDataPoint matchingPoint = findMatchingDataPoint(
-                        pointData, baseResult.getResults());
-                    if (matchingPoint != null && matchingPoint.getMetricValue() != null) {
-                        metricValues.put(metricId, matchingPoint.getMetricValue());
+                    Map<String, Object> matchingPoint = findMatchingDataPointInRows(
+                        pointData, baseResult.getResults(), metricDefinition);
+                    if (matchingPoint != null) {
+                        // 找到聚合字段的值
+                        Number metricValue = extractMetricValue(matchingPoint, metricDefinition);
+                        if (metricValue != null) {
+                            metricValues.put(metricId, metricValue);
+                        }
                     }
                 }
             }
@@ -819,21 +806,10 @@ public class MetricCalculator {
             System.out.println("[CompositeMetric] Calculated value: " + calculatedValue);
             
             if (calculatedValue != null) {
-                MetricResult.MetricDataPoint calculatedPoint = new MetricResult.MetricDataPoint();
-                calculatedPoint.setTimeValue((String) pointData.get("timeValue"));
-                @SuppressWarnings("unchecked")
-                Map<String, Object> dimensionValues = (Map<String, Object>) pointData.get("dimensionValues");
-                calculatedPoint.setDimensionValues(dimensionValues);
-                calculatedPoint.setMetricValue(calculatedValue);
-                
-                // 设置单位（从第一个基础指标获取，或使用复合指标的单位）
-                if (metricDefinition.getUnit() != null && !metricDefinition.getUnit().isEmpty()) {
-                    calculatedPoint.setUnit(metricDefinition.getUnit());
-                } else if (!baseResults.isEmpty() && baseResults.get(0).getResults() != null 
-                        && !baseResults.get(0).getResults().isEmpty()) {
-                    String unit = baseResults.get(0).getResults().get(0).getUnit();
-                    calculatedPoint.setUnit(unit);
-                }
+                Map<String, Object> calculatedPoint = new HashMap<>(pointData);
+                // 将计算结果作为聚合字段添加到结果中
+                String metricFieldName = "metric_value";
+                calculatedPoint.put(metricFieldName, calculatedValue);
                 
                 results.add(calculatedPoint);
             }
@@ -861,6 +837,35 @@ public class MetricCalculator {
     }
 
     /**
+     * 从Map行构建数据点键
+     */
+    private String buildDataPointKeyFromRow(Map<String, Object> row, MetricDefinition metricDefinition) {
+        StringBuilder key = new StringBuilder();
+        
+        // 添加时间字段
+        if (metricDefinition.getTimeDimension() != null) {
+            Object timeValue = row.get(metricDefinition.getTimeDimension());
+            if (timeValue != null) {
+                key.append("time:").append(timeValue);
+            }
+        }
+        
+        // 添加维度字段
+        if (metricDefinition.getDimensions() != null && !metricDefinition.getDimensions().isEmpty()) {
+            List<String> sortedDims = new ArrayList<>(metricDefinition.getDimensions());
+            Collections.sort(sortedDims);
+            for (String dimKey : sortedDims) {
+                Object dimValue = row.get(dimKey);
+                if (dimValue != null) {
+                    key.append("|").append(dimKey).append(":").append(dimValue);
+                }
+            }
+        }
+        
+        return key.toString();
+    }
+
+    /**
      * 查找匹配的数据点
      */
     private MetricResult.MetricDataPoint findMatchingDataPoint(
@@ -870,6 +875,43 @@ public class MetricCalculator {
             String pointKey = buildDataPointKey(point);
             if (targetKey.equals(pointKey)) {
                 return point;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 在行列表中查找匹配的数据点
+     */
+    private Map<String, Object> findMatchingDataPointInRows(
+            Map<String, Object> targetRow, List<Map<String, Object>> rows, MetricDefinition metricDefinition) {
+        String targetKey = buildDataPointKeyFromRow(targetRow, metricDefinition);
+        for (Map<String, Object> row : rows) {
+            String rowKey = buildDataPointKeyFromRow(row, metricDefinition);
+            if (targetKey.equals(rowKey)) {
+                return row;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 从行中提取指标值（跳过时间和维度字段）
+     */
+    private Number extractMetricValue(Map<String, Object> row, MetricDefinition metricDefinition) {
+        for (Map.Entry<String, Object> entry : row.entrySet()) {
+            String key = entry.getKey();
+            // 跳过时间和维度字段
+            if (metricDefinition.getTimeDimension() != null && key.equals(metricDefinition.getTimeDimension())) {
+                continue;
+            }
+            if (metricDefinition.getDimensions() != null && metricDefinition.getDimensions().contains(key)) {
+                continue;
+            }
+            // 找到聚合字段
+            Object value = entry.getValue();
+            if (value instanceof Number) {
+                return (Number) value;
             }
         }
         return null;

@@ -59,8 +59,33 @@ const DerivedMetricBuilder: React.FC<Props> = ({ onCancel, onSuccess }) => {
     }
   }, [selectedWorkspace, selectedObjectType]);
 
+  // 当选择原子指标且业务范围为单一对象时，自动同步对象类型
   useEffect(() => {
+    console.log('===== useEffect 触发 =====');
+    console.log('businessScopeType:', businessScopeType);
+    console.log('selectedAtomicMetric:', selectedAtomicMetric);
+    
+    if (businessScopeType === 'single') {
+      if (selectedAtomicMetric) {
+        // 兼容两种命名方式：business_process (下划线) 和 businessProcess (驼峰)
+        const businessProcess = (selectedAtomicMetric as any).business_process || (selectedAtomicMetric as any).businessProcess;
+        console.log('businessProcess (兼容两种命名):', businessProcess);
+        
+        if (businessProcess) {
+          console.log('自动同步对象类型:', businessProcess, '当前对象类型:', selectedObjectType);
+          // 直接设置对象类型，会触发下面的 useEffect 来加载信息
+          setSelectedObjectType(businessProcess);
+        } else {
+          console.log('未找到 businessProcess 字段');
+        }
+      }
+    }
+  }, [selectedAtomicMetric, businessScopeType]);
+
+  useEffect(() => {
+    console.log('selectedObjectType 变化:', selectedObjectType);
     if (selectedObjectType) {
+      console.log('开始加载对象类型信息...');
       loadObjectTypeInfo(selectedObjectType);
       // 重置时间维度字段，因为对象类型变了
       setTimeDimension('');
@@ -68,7 +93,9 @@ const DerivedMetricBuilder: React.FC<Props> = ({ onCancel, onSuccess }) => {
       setDimensions([]);
     } else {
       // 如果没有选择对象类型，清空属性信息
+      console.log('清空对象类型信息');
       setObjectTypeProperties([]);
+      setAvailableDimensions([]);
     }
   }, [selectedObjectType]);
 
@@ -87,14 +114,19 @@ const DerivedMetricBuilder: React.FC<Props> = ({ onCancel, onSuccess }) => {
 
   const loadObjectTypeInfo = async (objectTypeName: string) => {
     try {
+      console.log('=== 开始加载对象类型信息 ===');
+      console.log('对象类型名称:', objectTypeName);
       const objectType = await schemaApi.getObjectType(objectTypeName);
       const properties = objectType.properties || [];
+      console.log('加载到 ' + properties.length + ' 个属性:', properties.map(p => p.name));
       setAvailableDimensions(properties.map(p => p.name));
       setObjectTypeProperties(properties);
+      console.log('已更新 availableDimensions 和 objectTypeProperties');
       
       // 加载关联类型
       const outgoingLinks = await schemaApi.getOutgoingLinks(objectTypeName);
       setLinkTypes(outgoingLinks);
+      console.log('=== 对象类型信息加载完成 ===');
     } catch (error) {
       console.error('Failed to load object type info:', error);
     }
@@ -282,117 +314,213 @@ const DerivedMetricBuilder: React.FC<Props> = ({ onCancel, onSuccess }) => {
   };
 
   return (
-    <div className="max-w-6xl mx-auto">
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold">派生指标构建器</h2>
-        <button
-          onClick={onCancel}
-          className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
-        >
-          取消
-        </button>
-      </div>
+    <div className="max-w-7xl mx-auto">
+      <div className="bg-white rounded-lg shadow-lg p-6">
+        <div className="flex justify-between items-center mb-4">
+          <div>
+            <h2 className="text-2xl font-bold">派生指标构建器</h2>
+            <p className="text-gray-600 text-sm mt-1">基于原子指标添加时间、维度等约束条件</p>
+          </div>
+          <div className="flex space-x-3">
+            <button
+              onClick={onCancel}
+              className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+            >
+              取消
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={!selectedAtomicMetric || !selectedObjectType}
+              className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
+            >
+              保存指标
+            </button>
+          </div>
+        </div>
 
-      <div className="space-y-6">
-        {/* 栏目1: 基本信息 */}
-        <div className="bg-white p-6 rounded-lg shadow">
-          <h3 className="text-lg font-semibold mb-4 border-b pb-2">基本信息</h3>
-          <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-3 gap-4">
+          {/* 第一列：基本信息 + 原子指标 */}
+          <div className="space-y-3">
+            <div className="text-sm font-semibold text-gray-700 border-b pb-1">基本信息</div>
+            
             <div>
-              <label className="block mb-1 text-sm font-medium">指标名称</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">指标名称</label>
               <input
                 type="text"
                 value={metricName}
                 onChange={(e) => setMetricName(e.target.value)}
-                className="w-full p-2 border rounded"
+                className="w-full p-2 border rounded text-sm"
                 placeholder="自动生成或手动输入"
               />
             </div>
+
             <div>
-              <label className="block mb-1 text-sm font-medium">显示名称</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">显示名称</label>
               <input
                 type="text"
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
-                className="w-full p-2 border rounded"
-                placeholder="用于界面显示"
+                className="w-full p-2 border rounded text-sm"
+                placeholder="界面显示"
               />
             </div>
-            <div className="col-span-2">
-              <label className="block mb-1 text-sm font-medium">描述</label>
+
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">描述</label>
               <textarea
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                className="w-full p-2 border rounded"
+                className="w-full p-2 border rounded text-sm"
                 rows={2}
-                placeholder="描述该派生指标的用途和含义"
+                placeholder="指标用途和含义"
               />
             </div>
-          </div>
-        </div>
 
-        {/* 栏目2: 原子指标选择 */}
-        <div className="bg-white p-6 rounded-lg shadow">
-          <h3 className="text-lg font-semibold mb-4 border-b pb-2">原子指标（度量）</h3>
-          
-          <div className="mb-4">
-            <label className="flex items-center mr-4">
-              <input
-                type="radio"
-                checked={!createNewAtomic}
-                onChange={() => setCreateNewAtomic(false)}
-                className="mr-2"
-              />
-              选择已有原子指标
-            </label>
-            <label className="flex items-center">
-              <input
-                type="radio"
-                checked={createNewAtomic}
-                onChange={() => setCreateNewAtomic(true)}
-                className="mr-2"
-              />
-              创建新原子指标
-            </label>
-          </div>
+            <div className="text-sm font-semibold text-gray-700 border-b pb-1 pt-2">原子指标（度量）</div>
+            
+            <div className="space-y-2">
+              <div className="flex items-center space-x-2 text-xs">
+                <label className="flex items-center">
+                  <input
+                    type="radio"
+                    checked={!createNewAtomic}
+                    onChange={() => setCreateNewAtomic(false)}
+                    className="mr-1"
+                  />
+                  选择已有
+                </label>
+                <label className="flex items-center">
+                  <input
+                    type="radio"
+                    checked={createNewAtomic}
+                    onChange={() => setCreateNewAtomic(true)}
+                    className="mr-1"
+                  />
+                  创建新的
+                </label>
+              </div>
 
-          {!createNewAtomic ? (
-            <div>
-              <select
-                value={selectedAtomicMetric?.id || ''}
-                onChange={(e) => {
-                  const metric = atomicMetrics.find(m => m.id === e.target.value);
-                  setSelectedAtomicMetric(metric || null);
-                }}
-                className="w-full p-2 border rounded"
-              >
-                <option value="">请选择原子指标</option>
-                {atomicMetrics.map(metric => (
-                  <option key={metric.id} value={metric.id}>
-                    {metric.display_name || metric.name} - {metric.description || '无描述'}
-                  </option>
-                ))}
-              </select>
-              {selectedAtomicMetric && (
-                <div className="mt-3 p-3 bg-gray-50 rounded">
-                  <p className="font-medium">已选择原子指标:</p>
-                  <p className="text-sm">名称: {selectedAtomicMetric.display_name || selectedAtomicMetric.name}</p>
-                  <p className="text-sm">业务过程: {selectedAtomicMetric.business_process}</p>
-                  <p className="text-sm">聚合函数: {selectedAtomicMetric.aggregation_function}</p>
-                  {selectedAtomicMetric.aggregation_field && (
-                    <p className="text-sm">聚合字段: {selectedAtomicMetric.aggregation_field}</p>
+              {!createNewAtomic ? (
+                <div>
+                  <select
+                    value={selectedAtomicMetric?.id || ''}
+                    onChange={(e) => {
+                      const metric = atomicMetrics.find(m => m.id === e.target.value);
+                      console.log('===== 选择原子指标 =====');
+                      console.log('选中的原子指标:', metric);
+                      console.log('business_process:', metric?.business_process);
+                      setSelectedAtomicMetric(metric || null);
+                    }}
+                    className="w-full p-2 border rounded text-xs"
+                  >
+                    <option value="">请选择原子指标</option>
+                    {atomicMetrics.map(metric => (
+                      <option key={metric.id} value={metric.id}>
+                        {metric.display_name || metric.name}
+                      </option>
+                    ))}
+                  </select>
+                  {selectedAtomicMetric && (
+                    <div className="mt-1 p-2 bg-gray-50 rounded text-xs">
+                      <p><span className="font-medium">名称:</span> {(selectedAtomicMetric as any).display_name || (selectedAtomicMetric as any).displayName || selectedAtomicMetric.name}</p>
+                      <p><span className="font-medium">业务过程:</span> {(selectedAtomicMetric as any).business_process || (selectedAtomicMetric as any).businessProcess}</p>
+                      <p><span className="font-medium">聚合函数:</span> {(selectedAtomicMetric as any).aggregation_function || (selectedAtomicMetric as any).aggregationFunction}</p>
+                    </div>
                   )}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <select
+                    value={newAtomicMetric.business_process || ''}
+                    onChange={(e) => setNewAtomicMetric({ ...newAtomicMetric, business_process: e.target.value })}
+                    className="w-full p-2 border rounded text-xs"
+                  >
+                    <option value="">对象类型</option>
+                    {filteredObjectTypes.map(ot => (
+                      <option key={ot.name} value={ot.name}>
+                        {ot.display_name || ot.name}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    value={newAtomicMetric.aggregation_function || ''}
+                    onChange={(e) => setNewAtomicMetric({ ...newAtomicMetric, aggregation_function: e.target.value })}
+                    className="w-full p-2 border rounded text-xs"
+                  >
+                    <option value="">聚合函数</option>
+                    <option value="SUM">SUM</option>
+                    <option value="AVG">AVG</option>
+                    <option value="COUNT">COUNT</option>
+                    <option value="MAX">MAX</option>
+                    <option value="MIN">MIN</option>
+                    <option value="DISTINCT_COUNT">DISTINCT_COUNT</option>
+                  </select>
+                  <input
+                    type="text"
+                    value={newAtomicMetric.aggregation_field || ''}
+                    onChange={(e) => setNewAtomicMetric({ ...newAtomicMetric, aggregation_field: e.target.value })}
+                    className="w-full p-2 border rounded text-xs"
+                    placeholder="度量字段"
+                  />
+                  <input
+                    type="text"
+                    value={newAtomicMetric.name || ''}
+                    onChange={(e) => setNewAtomicMetric({ ...newAtomicMetric, name: e.target.value })}
+                    className="w-full p-2 border rounded text-xs"
+                    placeholder="原子指标名称"
+                  />
+                  <button
+                    onClick={handleCreateAtomicMetric}
+                    className="w-full px-2 py-1.5 bg-blue-500 text-white rounded hover:bg-blue-600 text-xs"
+                  >
+                    创建原子指标
+                  </button>
                 </div>
               )}
             </div>
-          ) : (
-            <div className="grid grid-cols-3 gap-4">
+          </div>
+
+          {/* 第二列：业务范围 + 时间维度 */}
+          <div className="space-y-3">
+            <div className="text-sm font-semibold text-gray-700 border-b pb-1">业务范围</div>
+            
+            <div className="flex items-center space-x-2 text-xs">
+              <label className="flex items-center">
+                <input
+                  type="radio"
+                  name="businessScopeType"
+                  checked={businessScopeType === 'single'}
+                  onChange={() => setBusinessScopeType('single')}
+                  className="mr-1"
+                />
+                单一对象
+              </label>
+              <label className="flex items-center">
+                <input
+                  type="radio"
+                  name="businessScopeType"
+                  checked={businessScopeType === 'multi'}
+                  onChange={() => setBusinessScopeType('multi')}
+                  className="mr-1"
+                />
+                多对象（关联）
+              </label>
+            </div>
+
+            {businessScopeType === 'single' ? (
               <div>
-                <label className="block mb-1 text-sm font-medium">业务过程（对象类型）</label>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  对象类型 <span className="text-red-500">*</span>
+                  {selectedAtomicMetric && (
+                    <span className="ml-1 text-blue-600 font-normal">(已从原子指标同步)</span>
+                  )}
+                </label>
                 <select
-                  value={newAtomicMetric.business_process || ''}
-                  onChange={(e) => setNewAtomicMetric({ ...newAtomicMetric, business_process: e.target.value })}
-                  className="w-full p-2 border rounded"
+                  value={selectedObjectType}
+                  onChange={(e) => setSelectedObjectType(e.target.value)}
+                  className="w-full p-2 border rounded text-xs"
+                  disabled={selectedAtomicMetric !== null}
+                  key={`object-type-${selectedObjectType}-${selectedAtomicMetric?.id || 'none'}`}
                 >
                   <option value="">请选择对象类型</option>
                   {filteredObjectTypes.map(ot => (
@@ -402,223 +530,82 @@ const DerivedMetricBuilder: React.FC<Props> = ({ onCancel, onSuccess }) => {
                   ))}
                 </select>
                 {selectedWorkspace && filteredObjectTypes.length === 0 && (
-                  <p className="text-yellow-600 text-xs mt-1">
-                    当前工作空间未添加任何对象类型
+                  <p className="text-yellow-600 text-xs mt-0.5">工作空间未添加对象类型</p>
+                )}
+                {selectedAtomicMetric && selectedObjectType && (
+                  <p className="text-blue-600 text-xs mt-0.5">
+                    ✓ 已自动从原子指标"{(selectedAtomicMetric as any).display_name || (selectedAtomicMetric as any).displayName || selectedAtomicMetric.name}"同步业务过程
                   </p>
                 )}
               </div>
-              <div>
-                <label className="block mb-1 text-sm font-medium">统计方式</label>
-                <select
-                  value={newAtomicMetric.aggregation_function || ''}
-                  onChange={(e) => setNewAtomicMetric({ ...newAtomicMetric, aggregation_function: e.target.value })}
-                  className="w-full p-2 border rounded"
-                >
-                  <option value="">请选择聚合函数</option>
-                  <option value="SUM">SUM（求和）</option>
-                  <option value="AVG">AVG（平均值）</option>
-                  <option value="COUNT">COUNT（计数）</option>
-                  <option value="MAX">MAX（最大值）</option>
-                  <option value="MIN">MIN（最小值）</option>
-                  <option value="DISTINCT_COUNT">DISTINCT_COUNT（去重计数）</option>
-                </select>
-              </div>
-              <div>
-                <label className="block mb-1 text-sm font-medium">度量字段</label>
-                <input
-                  type="text"
-                  value={newAtomicMetric.aggregation_field || ''}
-                  onChange={(e) => setNewAtomicMetric({ ...newAtomicMetric, aggregation_field: e.target.value })}
-                  className="w-full p-2 border rounded"
-                  placeholder="例如: trans_amount"
-                />
-              </div>
-              <div className="col-span-3">
-                <label className="block mb-1 text-sm font-medium">原子指标名称</label>
-                <input
-                  type="text"
-                  value={newAtomicMetric.name || ''}
-                  onChange={(e) => setNewAtomicMetric({ ...newAtomicMetric, name: e.target.value })}
-                  className="w-full p-2 border rounded"
-                  placeholder="例如: 交易金额"
-                />
-              </div>
-              <div className="col-span-3">
-                <button
-                  onClick={handleCreateAtomicMetric}
-                  className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-                >
-                  创建原子指标
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* 栏目3: 业务范围 */}
-        <div className="bg-white p-6 rounded-lg shadow">
-          <h3 className="text-lg font-semibold mb-4 border-b pb-2">业务范围</h3>
-          
-          <div className="mb-4">
-            <label className="flex items-center mr-4">
-              <input
-                type="radio"
-                name="businessScopeType"
-                checked={businessScopeType === 'single'}
-                onChange={() => setBusinessScopeType('single')}
-                className="mr-2"
-              />
-              单一对象类型
-            </label>
-            <label className="flex items-center">
-              <input
-                type="radio"
-                name="businessScopeType"
-                checked={businessScopeType === 'multi'}
-                onChange={() => setBusinessScopeType('multi')}
-                className="mr-2"
-              />
-              多对象类型（关联路径）
-            </label>
-          </div>
-
-          {businessScopeType === 'single' ? (
-            <div>
-              <label className="block mb-2 text-sm font-medium">选择对象类型</label>
-              <select
-                value={selectedObjectType}
-                onChange={(e) => setSelectedObjectType(e.target.value)}
-                className="w-full p-2 border rounded"
-              >
-                <option value="">请选择对象类型</option>
-                {filteredObjectTypes.map(ot => (
-                  <option key={ot.name} value={ot.name}>
-                    {ot.display_name || ot.name} - {ot.description || '无描述'}
-                  </option>
-                ))}
-              </select>
-              {selectedWorkspace && filteredObjectTypes.length === 0 && (
-                <p className="text-yellow-600 text-xs mt-1">
-                  当前工作空间未添加任何对象类型，请先在工作空间管理中添加对象类型
-                </p>
-              )}
-              {selectedObjectType && (
-                <p className="text-sm text-gray-500 mt-1">
-                  已选择: {objectTypes.find(ot => ot.name === selectedObjectType)?.display_name || selectedObjectType}
-                </p>
-              )}
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <div>
-                <label className="block mb-2 text-sm font-medium">起始对象类型</label>
+            ) : (
+              <div className="space-y-2">
+                <label className="block text-xs font-medium text-gray-700 mb-1">起始对象类型</label>
                 <select
                   value={selectedObjectType}
                   onChange={(e) => setSelectedObjectType(e.target.value)}
-                  className="w-full p-2 border rounded"
+                  className="w-full p-2 border rounded text-xs"
                 >
                   <option value="">请选择起始对象类型</option>
                   {filteredObjectTypes.map(ot => (
                     <option key={ot.name} value={ot.name}>
-                      {ot.display_name || ot.name} - {ot.description || '无描述'}
+                      {ot.display_name || ot.name}
                     </option>
                   ))}
                 </select>
-                {selectedWorkspace && filteredObjectTypes.length === 0 && (
-                  <p className="text-yellow-600 text-xs mt-1">
-                    当前工作空间未添加任何对象类型
-                  </p>
+                
+                {selectedObjectType && linkTypes.length > 0 && (
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">选择关联路径</label>
+                    <div className="max-h-32 overflow-y-auto border rounded bg-white p-2 space-y-1">
+                      {linkTypes.map((link, index) => (
+                        <label key={link.name} className="flex items-center text-xs">
+                          <input
+                            type="checkbox"
+                            id={`link-${index}`}
+                            checked={selectedLinks.some(l => l.name === link.name)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedLinks([...selectedLinks, { name: link.name, select: [] }]);
+                              } else {
+                                setSelectedLinks(selectedLinks.filter(l => l.name !== link.name));
+                              }
+                            }}
+                            className="mr-1"
+                          />
+                          {link.display_name || link.name}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
                 )}
               </div>
-              
-              {selectedObjectType && (
-                <div>
-                  <label className="block mb-2 text-sm font-medium">选择关联路径</label>
-                  <div className="space-y-2 max-h-40 overflow-y-auto">
-                    {linkTypes.map((link, index) => (
-                      <div key={link.name} className="flex items-center space-x-2">
-                        <input
-                          type="checkbox"
-                          id={`link-${index}`}
-                          checked={selectedLinks.some(l => l.name === link.name)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setSelectedLinks([...selectedLinks, { name: link.name, select: [] }]);
-                            } else {
-                              setSelectedLinks(selectedLinks.filter(l => l.name !== link.name));
-                            }
-                          }}
-                          className="h-4 w-4"
-                        />
-                        <label htmlFor={`link-${index}`} className="flex-1">
-                          <span className="font-medium">{link.display_name || link.name}</span>
-                          <span className="text-sm text-gray-500 ml-2">({link.name})</span>
-                          {link.description && (
-                            <p className="text-xs text-gray-500">{link.description}</p>
-                          )}
-                        </label>
-                      </div>
-                    ))}
-                    {linkTypes.length === 0 && (
-                      <p className="text-sm text-gray-500">当前对象类型没有可用的关联关系</p>
-                    )}
-                  </div>
-                  
-                  {selectedLinks.length > 0 && (
-                    <div className="mt-3 p-3 bg-gray-50 rounded">
-                      <h4 className="font-medium mb-2">已选择的关联路径</h4>
-                      <ul className="list-disc pl-5 space-y-1">
-                        {selectedLinks.map((link, index) => (
-                          <li key={index}>
-                            {linkTypes.find(l => l.name === link.name)?.display_name || link.name}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+            )}
 
-        {/* 栏目4: 时间维度 */}
-        <div className="bg-white p-6 rounded-lg shadow">
-          <h3 className="text-lg font-semibold mb-4 border-b pb-2">时间维度</h3>
-          <div className="grid grid-cols-2 gap-4">
+            <div className="text-sm font-semibold text-gray-700 border-b pb-1 pt-2">时间维度</div>
+            
             <div>
-              <label className="block mb-2 text-sm font-medium">时间维度字段</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">时间字段</label>
               <select
                 value={timeDimension}
                 onChange={(e) => setTimeDimension(e.target.value)}
-                className="w-full p-2 border rounded"
+                className="w-full p-2 border rounded text-xs"
               >
-                <option value="">请选择时间维度字段</option>
-                {timeRelatedProperties.length > 0 ? (
-                  timeRelatedProperties.map(prop => (
-                    <option key={prop} value={prop}>
-                      {prop}
-                    </option>
-                  ))
-                ) : (
-                  availableDimensions.map(prop => (
-                    <option key={prop} value={prop}>
-                      {prop}
-                    </option>
-                  ))
-                )}
+                <option value="">请选择时间字段</option>
+                {(timeRelatedProperties.length > 0 ? timeRelatedProperties : availableDimensions).map(prop => (
+                  <option key={prop} value={prop}>
+                    {prop}
+                  </option>
+                ))}
               </select>
-              {timeRelatedProperties.length === 0 && availableDimensions.length > 0 && (
-                <p className="text-sm text-yellow-600 mt-1">注意：未检测到明显的时间相关字段</p>
-              )}
             </div>
             
             <div>
-              <label className="block mb-2 text-sm font-medium">时间粒度</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">时间粒度</label>
               <select
                 value={timeGranularity}
                 onChange={(e) => setTimeGranularity(e.target.value as any)}
-                className="w-full p-2 border rounded"
+                className="w-full p-2 border rounded text-xs"
               >
                 <option value="day">日</option>
                 <option value="week">周</option>
@@ -628,9 +615,9 @@ const DerivedMetricBuilder: React.FC<Props> = ({ onCancel, onSuccess }) => {
               </select>
             </div>
             
-            <div className="col-span-2">
-              <label className="block mb-2 text-sm font-medium">同比/环比类型</label>
-              <div className="flex flex-wrap gap-2">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">同比/环比</label>
+              <div className="grid grid-cols-2 gap-1 text-xs">
                 {(['YoY', 'MoM', 'WoW', 'QoQ'] as const).map(type => (
                   <label key={type} className="flex items-center">
                     <input
@@ -643,161 +630,144 @@ const DerivedMetricBuilder: React.FC<Props> = ({ onCancel, onSuccess }) => {
                           setComparisonTypes(comparisonTypes.filter(t => t !== type));
                         }
                       }}
-                      className="mr-2 h-4 w-4"
+                      className="mr-1"
                     />
-                    <span>
-                      {type === 'YoY' && '同比（年）'}
-                      {type === 'MoM' && '环比（月）'}
-                      {type === 'WoW' && '环比（周）'}
-                      {type === 'QoQ' && '环比（季度）'}
-                    </span>
+                    {type === 'YoY' && '同比(年)'}
+                    {type === 'MoM' && '环比(月)'}
+                    {type === 'WoW' && '环比(周)'}
+                    {type === 'QoQ' && '环比(季)'}
                   </label>
                 ))}
               </div>
             </div>
           </div>
-        </div>
 
-        {/* 栏目5: 维度 */}
-        <div className="bg-white p-6 rounded-lg shadow">
-          <h3 className="text-lg font-semibold mb-4 border-b pb-2">维度</h3>
-          <div>
-            <label className="block mb-2 text-sm font-medium">选择维度字段</label>
-            <select
-              multiple
-              value={dimensions}
-              onChange={(e) => {
-                const values = Array.from(e.target.selectedOptions, option => option.value);
-                setDimensions(values);
-              }}
-              className="w-full p-2 border rounded h-40"
-            >
-              {availableDimensions.map(dim => (
-                <option key={dim} value={dim}>
-                  {dim}
-                </option>
-              ))}
-            </select>
-            <p className="text-sm text-gray-500 mt-1">按住Ctrl/Cmd键可多选维度字段</p>
+          {/* 第三列：维度 + 过滤条件 */}
+          <div className="space-y-3">
+            <div className="text-sm font-semibold text-gray-700 border-b pb-1">维度</div>
             
-            {dimensions.length > 0 && (
-              <div className="mt-2 p-3 bg-gray-50 rounded">
-                <p className="font-medium mb-1">已选择维度:</p>
-                <div className="flex flex-wrap gap-2">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                选择维度字段
+                {availableDimensions.length > 0 && (
+                  <span className="ml-1 text-gray-500">(共 {availableDimensions.length} 个可用)</span>
+                )}
+              </label>
+              <select
+                multiple
+                value={dimensions}
+                onChange={(e) => {
+                  const values = Array.from(e.target.selectedOptions, option => option.value);
+                  setDimensions(values);
+                }}
+                className="w-full p-2 border rounded text-xs h-28"
+              >
+                {availableDimensions.length === 0 ? (
+                  <option disabled>请先选择对象类型</option>
+                ) : (
+                  availableDimensions.map(dim => (
+                    <option key={dim} value={dim}>
+                      {dim}
+                    </option>
+                  ))
+                )}
+              </select>
+              <p className="text-xs text-gray-500 mt-0.5">Ctrl/Cmd+点击多选</p>
+              
+              {dimensions.length > 0 && (
+                <div className="mt-1 flex flex-wrap gap-1">
                   {dimensions.map(dim => (
-                    <span key={dim} className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-sm">
+                    <span key={dim} className="px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded text-xs">
                       {dim}
                     </span>
                   ))}
                 </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* 栏目6: 过滤条件 */}
-        <div className="bg-white p-6 rounded-lg shadow">
-          <h3 className="text-lg font-semibold mb-4 border-b pb-2">过滤条件</h3>
-          <div>
-            <div className="flex justify-between items-center mb-2">
-              <label className="block text-sm font-medium">过滤条件</label>
-              <button
-                type="button"
-                onClick={addFilter}
-                className="px-3 py-1 bg-blue-500 text-white text-sm rounded hover:bg-blue-600"
-              >
-                添加条件
-              </button>
+              )}
             </div>
-            
-            {filterConditions.length === 0 ? (
-              <p className="text-sm text-gray-500">暂无过滤条件</p>
-            ) : (
-              <div className="space-y-3">
-                {filterConditions.map((condition, index) => (
-                  <div key={index} className="flex items-center space-x-2">
-                    <select
-                      value={condition.field}
-                      onChange={(e) => updateFilter(index, 'field', e.target.value)}
-                      className="flex-1 p-2 border rounded"
-                    >
-                      <option value="">请选择字段</option>
-                      {filterFieldOptions.map(field => (
-                        <option key={field} value={field}>
-                          {field}
-                        </option>
-                      ))}
-                    </select>
-                    <select
-                      value={condition.operator}
-                      onChange={(e) => updateFilter(index, 'operator', e.target.value)}
-                      className="p-2 border rounded"
-                    >
-                      <option value="=">等于</option>
-                      <option value="!=">不等于</option>
-                      <option value=">">大于</option>
-                      <option value="<">小于</option>
-                      <option value=">=">大于等于</option>
-                      <option value="<=">小于等于</option>
-                      <option value="like">包含</option>
-                      <option value="in">在列表中</option>
-                    </select>
-                    {isTimeTypeField(condition.field) ? (
-                      <input
-                        type="datetime-local"
-                        value={formatDateTimeForInput(condition.value)}
-                        onChange={(e) => updateFilter(index, 'value', e.target.value)}
-                        className="flex-1 p-2 border rounded"
-                        placeholder="选择日期时间"
-                      />
-                    ) : (
-                      <input
-                        type="text"
-                        value={condition.value}
-                        onChange={(e) => updateFilter(index, 'value', e.target.value)}
-                        className="flex-1 p-2 border rounded"
-                        placeholder="值"
-                      />
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => removeFilter(index)}
-                      className="px-2 py-1 bg-red-500 text-white rounded hover:bg-red-600"
-                    >
-                      删除
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-            {filterFieldOptions.length === 0 && selectedObjectType && (
-              <p className="text-sm text-yellow-600 mt-2">
-                提示：请先选择时间维度或维度字段，然后才能添加过滤条件
-              </p>
-            )}
-            {!selectedObjectType && (
-              <p className="text-sm text-gray-500 mt-2">
-                提示：请先选择业务范围中的对象类型
-              </p>
-            )}
-          </div>
-        </div>
 
-        {/* 保存按钮 */}
-        <div className="flex justify-end space-x-4">
-          <button
-            onClick={onCancel}
-            className="px-6 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
-          >
-            取消
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={!selectedAtomicMetric || !selectedObjectType}
-            className="px-6 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
-          >
-            保存指标
-          </button>
+            <div className="text-sm font-semibold text-gray-700 border-b pb-1 pt-2">过滤条件</div>
+            
+            <div>
+              <div className="flex justify-between items-center mb-1">
+                <label className="block text-xs font-medium text-gray-700">过滤条件</label>
+                <button
+                  type="button"
+                  onClick={addFilter}
+                  className="px-2 py-0.5 bg-blue-500 text-white text-xs rounded hover:bg-blue-600"
+                >
+                  +
+                </button>
+              </div>
+              
+              {filterConditions.length === 0 ? (
+                <p className="text-xs text-gray-500">暂无过滤条件</p>
+              ) : (
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {filterConditions.map((condition, index) => (
+                    <div key={index} className="flex items-center space-x-1">
+                      <select
+                        value={condition.field}
+                        onChange={(e) => updateFilter(index, 'field', e.target.value)}
+                        className="flex-1 p-1 border rounded text-xs"
+                      >
+                        <option value="">字段</option>
+                        {filterFieldOptions.map(field => (
+                          <option key={field} value={field}>
+                            {field}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        value={condition.operator}
+                        onChange={(e) => updateFilter(index, 'operator', e.target.value)}
+                        className="p-1 border rounded text-xs"
+                      >
+                        <option value="=">=</option>
+                        <option value="!=">≠</option>
+                        <option value=">">&gt;</option>
+                        <option value="<">&lt;</option>
+                        <option value=">=">≥</option>
+                        <option value="<=">≤</option>
+                      </select>
+                      {isTimeTypeField(condition.field) ? (
+                        <input
+                          type="datetime-local"
+                          value={formatDateTimeForInput(condition.value)}
+                          onChange={(e) => updateFilter(index, 'value', e.target.value)}
+                          className="flex-1 p-1 border rounded text-xs"
+                        />
+                      ) : (
+                        <input
+                          type="text"
+                          value={condition.value}
+                          onChange={(e) => updateFilter(index, 'value', e.target.value)}
+                          className="flex-1 p-1 border rounded text-xs"
+                          placeholder="值"
+                        />
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => removeFilter(index)}
+                        className="px-1.5 py-0.5 bg-red-500 text-white rounded hover:bg-red-600 text-xs"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="bg-blue-50 p-2 rounded border border-blue-200">
+              <p className="text-xs text-blue-800 font-medium mb-1">提示</p>
+              <ul className="text-xs text-blue-700 space-y-0.5 list-disc list-inside">
+                <li>必须选择原子指标</li>
+                <li>必须选择对象类型</li>
+                <li>时间粒度影响指标名称</li>
+                <li>维度用于分组统计</li>
+              </ul>
+            </div>
+          </div>
         </div>
       </div>
     </div>

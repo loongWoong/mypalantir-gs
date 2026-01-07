@@ -161,204 +161,209 @@ const CompositeMetricBuilder: React.FC<Props> = ({ onCancel, onSuccess }) => {
   };
 
   return (
-    <div className="max-w-6xl mx-auto">
-      <h2 className="text-2xl font-bold mb-6">复合指标构建器</h2>
-
-      <div className="bg-white p-6 rounded-lg shadow space-y-6">
-        <div>
-          <label className="block mb-1">指标名称</label>
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="w-full p-2 border rounded"
-            placeholder="例如: 日均交易金额"
-          />
+    <div className="max-w-7xl mx-auto">
+      <div className="bg-white rounded-lg shadow-lg p-6">
+        <div className="flex justify-between items-center mb-4">
+          <div>
+            <h2 className="text-2xl font-bold">复合指标构建器</h2>
+            <p className="text-gray-600 text-sm mt-1">通过组合多个基础指标进行数学运算创建复合指标</p>
+          </div>
+          <div className="flex space-x-3">
+            <button
+              onClick={onCancel}
+              className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+            >
+              取消
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={!name || usedMetricIds.length === 0 || !formula}
+              className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:bg-gray-300"
+            >
+              保存指标
+            </button>
+          </div>
         </div>
 
-        <div>
-          <label className="block mb-1">显示名称</label>
-          <input
-            type="text"
-            value={displayName}
-            onChange={(e) => setDisplayName(e.target.value)}
-            className="w-full p-2 border rounded"
-          />
-        </div>
+        <div className="grid grid-cols-3 gap-4">
+          {/* 第一列：基本信息 */}
+          <div className="space-y-3">
+            <div className="text-sm font-semibold text-gray-700 border-b pb-1">基本信息</div>
+            
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">指标名称 <span className="text-red-500">*</span></label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="w-full p-2 border rounded text-sm"
+                placeholder="例如: 日均交易金额"
+              />
+            </div>
 
-        <div>
-          <label className="block mb-1">描述</label>
-          <textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            className="w-full p-2 border rounded"
-            rows={3}
-          />
-        </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">显示名称</label>
+              <input
+                type="text"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                className="w-full p-2 border rounded text-sm"
+                placeholder="界面显示名称"
+              />
+            </div>
 
-        {/* 公式构建器 */}
-        <div className="border-2 border-gray-200 rounded-lg p-4 bg-gray-50">
-          <label className="block mb-3 font-semibold">计算公式构建</label>
-          
-          {/* 公式显示区域 */}
-          <div className="mb-4">
-            <input
-              type="text"
-              value={formula}
-              onChange={(e) => setFormula(e.target.value)}
-              className="w-full p-3 border-2 border-blue-300 rounded font-mono text-lg bg-white"
-              placeholder="公式将显示在这里... 也可以手动输入"
-            />
-            {formula && (
-              <div className="mt-2 text-sm text-gray-600">
-                <span className="font-semibold">已使用指标:</span>
-                {usedMetricNames.length > 0 ? (
-                  <span className="ml-2">
-                    {usedMetricNames.map((name, idx) => (
-                      <span key={`${name}-${idx}`} className="inline-block bg-blue-100 text-blue-800 px-2 py-1 rounded mr-2">
-                        {name}
-                      </span>
-                    ))}
-                  </span>
-                ) : (
-                  <span className="ml-2 text-gray-400">暂无</span>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">描述</label>
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                className="w-full p-2 border rounded text-sm"
+                rows={3}
+                placeholder="描述指标用途"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">单位</label>
+              <input
+                type="text"
+                value={unit}
+                onChange={(e) => setUnit(e.target.value)}
+                className="w-full p-2 border rounded text-sm"
+                placeholder="例如: 元/笔"
+              />
+            </div>
+          </div>
+
+          {/* 第二列：公式构建器 */}
+          <div className="space-y-3 col-span-2">
+            <div className="text-sm font-semibold text-gray-700 border-b pb-1">计算公式构建</div>
+            
+            {/* 公式显示 */}
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">公式 <span className="text-red-500">*</span></label>
+              <input
+                type="text"
+                value={formula}
+                onChange={(e) => setFormula(e.target.value)}
+                className="w-full p-2 border-2 border-blue-300 rounded font-mono text-sm bg-white"
+                placeholder="公式将显示在这里... 也可以手动输入"
+              />
+              {formula && usedMetricNames.length > 0 && (
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {usedMetricNames.map((name, idx) => (
+                    <span key={`${name}-${idx}`} className="inline-block bg-blue-100 text-blue-800 px-2 py-0.5 rounded text-xs">
+                      {name}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* 运算符按钮 */}
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">运算符</label>
+              <div className="flex gap-1">
+                {['+', '-', '*', '/', '%', '(', ')'].map(op => (
+                  <button
+                    key={op}
+                    onClick={() => addOperatorToFormula(op)}
+                    className="px-3 py-1.5 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors font-mono text-sm"
+                  >
+                    {op}
+                  </button>
+                ))}
+                <button
+                  onClick={deleteLastChar}
+                  disabled={!formula}
+                  className="px-3 py-1.5 bg-yellow-500 text-white rounded hover:bg-yellow-600 disabled:bg-gray-300 text-xs"
+                >
+                  删除
+                </button>
+                <button
+                  onClick={clearFormula}
+                  disabled={!formula}
+                  className="px-3 py-1.5 bg-red-500 text-white rounded hover:bg-red-600 disabled:bg-gray-300 text-xs"
+                >
+                  清空
+                </button>
+              </div>
+            </div>
+
+            {/* 基础指标选择 */}
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">选择基础指标</label>
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="搜索指标..."
+                className="w-full p-2 border rounded text-sm mb-2"
+              />
+              <div className="max-h-56 overflow-y-auto border rounded bg-white">
+                {/* 原子指标 */}
+                {filteredMetrics.filter(m => m.type === 'atomic').length > 0 && (
+                  <div className="p-2">
+                    <div className="text-xs font-semibold text-gray-500 mb-1">原子指标</div>
+                    <div className="flex flex-wrap gap-1">
+                      {filteredMetrics.filter(m => m.type === 'atomic').map(metric => (
+                        <button
+                          key={metric.id}
+                          onClick={() => addMetricToFormula(metric.id)}
+                          className="px-2 py-1 bg-green-100 text-green-800 rounded hover:bg-green-200 text-xs"
+                        >
+                          {metric.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {/* 派生指标 */}
+                {filteredMetrics.filter(m => m.type === 'derived').length > 0 && (
+                  <div className="p-2 border-t">
+                    <div className="text-xs font-semibold text-gray-500 mb-1">派生指标</div>
+                    <div className="flex flex-wrap gap-1">
+                      {filteredMetrics.filter(m => m.type === 'derived').map(metric => (
+                        <button
+                          key={metric.id}
+                          onClick={() => addMetricToFormula(metric.id)}
+                          className="px-2 py-1 bg-blue-100 text-blue-800 rounded hover:bg-blue-200 text-xs"
+                        >
+                          {metric.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {/* 复合指标 */}
+                {filteredMetrics.filter(m => m.type === 'composite').length > 0 && (
+                  <div className="p-2 border-t">
+                    <div className="text-xs font-semibold text-gray-500 mb-1">复合指标</div>
+                    <div className="flex flex-wrap gap-1">
+                      {filteredMetrics.filter(m => m.type === 'composite').map(metric => (
+                        <button
+                          key={metric.id}
+                          onClick={() => addMetricToFormula(metric.id)}
+                          className="px-2 py-1 bg-purple-100 text-purple-800 rounded hover:bg-purple-200 text-xs"
+                        >
+                          {metric.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {filteredMetrics.length === 0 && (
+                  <div className="p-3 text-center text-gray-400 text-xs">未找到匹配的指标</div>
                 )}
               </div>
-            )}
-          </div>
+            </div>
 
-          {/* 运算符按钮 */}
-          <div className="mb-4">
-            <label className="block mb-2 text-sm font-semibold text-gray-700">运算符</label>
-            <div className="flex flex-wrap gap-2">
-              {['+', '-', '*', '/', '%', '(', ')'].map(op => (
-                <button
-                  key={op}
-                  onClick={() => addOperatorToFormula(op)}
-                  className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors font-mono text-lg"
-                >
-                  {op}
-                </button>
-              ))}
+            <div className="bg-blue-50 p-2 rounded border border-blue-200">
+              <p className="text-xs text-blue-800">
+                提示: 点击指标按钮或运算符按钮构建公式。公式中显示指标名称，保存时自动转换为ID。
+              </p>
             </div>
           </div>
-
-          {/* 基础指标选择 */}
-          <div className="mb-4">
-            <label className="block mb-2 text-sm font-semibold text-gray-700">选择基础指标</label>
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="搜索指标..."
-              className="w-full p-2 border rounded mb-3"
-            />
-            <div className="max-h-64 overflow-y-auto border rounded bg-white">
-              {/* 原子指标 */}
-              {filteredMetrics.filter(m => m.type === 'atomic').length > 0 && (
-                <div className="p-2">
-                  <div className="text-xs font-semibold text-gray-500 mb-1 px-2">原子指标</div>
-                  <div className="flex flex-wrap gap-2">
-                    {filteredMetrics.filter(m => m.type === 'atomic').map(metric => (
-                      <button
-                        key={metric.id}
-                        onClick={() => addMetricToFormula(metric.id)}
-                        className="px-3 py-1.5 bg-green-100 text-green-800 rounded hover:bg-green-200 transition-colors text-sm"
-                      >
-                        {metric.name}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {/* 派生指标 */}
-              {filteredMetrics.filter(m => m.type === 'derived').length > 0 && (
-                <div className="p-2 border-t">
-                  <div className="text-xs font-semibold text-gray-500 mb-1 px-2">派生指标</div>
-                  <div className="flex flex-wrap gap-2">
-                    {filteredMetrics.filter(m => m.type === 'derived').map(metric => (
-                      <button
-                        key={metric.id}
-                        onClick={() => addMetricToFormula(metric.id)}
-                        className="px-3 py-1.5 bg-blue-100 text-blue-800 rounded hover:bg-blue-200 transition-colors text-sm"
-                      >
-                        {metric.name}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {/* 复合指标 */}
-              {filteredMetrics.filter(m => m.type === 'composite').length > 0 && (
-                <div className="p-2 border-t">
-                  <div className="text-xs font-semibold text-gray-500 mb-1 px-2">复合指标</div>
-                  <div className="flex flex-wrap gap-2">
-                    {filteredMetrics.filter(m => m.type === 'composite').map(metric => (
-                      <button
-                        key={metric.id}
-                        onClick={() => addMetricToFormula(metric.id)}
-                        className="px-3 py-1.5 bg-purple-100 text-purple-800 rounded hover:bg-purple-200 transition-colors text-sm"
-                      >
-                        {metric.name}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {filteredMetrics.length === 0 && (
-                <div className="p-4 text-center text-gray-400">未找到匹配的指标</div>
-              )}
-            </div>
-          </div>
-
-          {/* 公式操作按钮 */}
-          <div className="flex gap-2">
-            <button
-              onClick={deleteLastChar}
-              disabled={!formula}
-              className="px-4 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
-            >
-              删除最后一个字符
-            </button>
-            <button
-              onClick={clearFormula}
-              disabled={!formula}
-              className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
-            >
-              清空公式
-            </button>
-          </div>
-
-          <p className="text-xs text-gray-500 mt-3">
-            提示: 点击指标按钮或运算符按钮来构建公式。公式中显示指标名称，保存时会自动转换为ID。
-          </p>
-        </div>
-
-        <div>
-          <label className="block mb-1">单位</label>
-          <input
-            type="text"
-            value={unit}
-            onChange={(e) => setUnit(e.target.value)}
-            className="w-full p-2 border rounded"
-            placeholder="例如: 元/笔"
-          />
-        </div>
-
-        <div className="flex justify-end space-x-4">
-          <button
-            onClick={onCancel}
-            className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
-          >
-            取消
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={!name || usedMetricIds.length === 0 || !formula}
-            className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:bg-gray-300"
-          >
-            保存指标
-          </button>
         </div>
       </div>
     </div>
