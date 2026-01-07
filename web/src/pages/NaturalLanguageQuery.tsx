@@ -24,13 +24,23 @@ const EXAMPLE_QUERIES = [
   },
   {
     title: '聚合查询',
-    query: '显示每个车的总收费金额',
-    description: '按车分组统计总金额'
+    query: '显示出口车道流水每个车的总收费金额',
+    description: '出口车道流水按车牌号码分组统计总金额'
   },
   {
     title: '排序查询',
-    query: '显示每个车的总收费金额，按金额降序排列',
-    description: '聚合查询并排序'
+    query: '显示出口车道流水每个车的总收费金额，按金额降序排列',
+    description: '聚合查询并按金额降序排序'
+  },
+  {
+    title: '时间范围查询',
+    query: '显示2024年7月的出口车道流水',
+    description: '按时间范围过滤出口交易记录'
+  },
+  {
+    title: '复杂统计查询',
+    query: '显示每个车牌号码通过的门架数量',
+    description: '统计每辆车通过的ETC门架数量'
   }
 ];
 
@@ -113,7 +123,7 @@ export default function NaturalLanguageQuery() {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={handleKeyPress}
-                placeholder="例如：显示每个收费站的总收费金额，按金额降序排列"
+                placeholder="例如：显示每个车牌号码的总收费金额，按金额降序排列"
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
                 rows={4}
               />
