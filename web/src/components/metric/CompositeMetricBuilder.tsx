@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { metricApi } from '../../api/metric';
-import type { MetricDefinition, AtomicMetric } from '../../api/metric';
+import type { MetricDefinition } from '../../api/metric';
 import { useWorkspace } from '../../WorkspaceContext';
 
 interface Props {

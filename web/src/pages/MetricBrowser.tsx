@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { metricApi } from '../api/metric';
 import type { MetricDefinition, AtomicMetric } from '../api/metric';
-import { PlusIcon, PencilIcon, TrashIcon } from '@heroicons/react/24/outline';
+import { PlusIcon } from '@heroicons/react/24/outline';
 
 const MetricBrowser: React.FC = () => {
   const [metrics, setMetrics] = useState<MetricDefinition[]>([]);

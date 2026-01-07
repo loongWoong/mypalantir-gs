@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { metricApi } from '../../api/metric';
-import type { AtomicMetric } from '../../api/metric';
 import { schemaApi } from '../../api/client';
 import type { ObjectType, Property } from '../../api/client';
 import { useWorkspace } from '../../WorkspaceContext';
@@ -13,7 +12,6 @@ interface Props {
 const AtomicMetricBuilder: React.FC<Props> = ({ onCancel, onSuccess }) => {
   const { selectedWorkspaceId, selectedWorkspace } = useWorkspace();
   const [objectTypes, setObjectTypes] = useState<ObjectType[]>([]);
-  const [selectedObjectType, setSelectedObjectType] = useState<string>('');
   const [objectTypeProperties, setObjectTypeProperties] = useState<Property[]>([]);
   const [selectedObjectTypeInfo, setSelectedObjectTypeInfo] = useState<ObjectType | null>(null);
   
@@ -45,7 +43,6 @@ const AtomicMetricBuilder: React.FC<Props> = ({ onCancel, onSuccess }) => {
         setBusinessProcess('');
         setObjectTypeProperties([]);
         setSelectedObjectTypeInfo(null);
-        setSelectedObjectType('');
       }
     }
   }, [selectedWorkspace, businessProcess]);
@@ -53,11 +50,9 @@ const AtomicMetricBuilder: React.FC<Props> = ({ onCancel, onSuccess }) => {
   useEffect(() => {
     if (businessProcess) {
       loadObjectTypeInfo(businessProcess);
-      setSelectedObjectType(businessProcess);
     } else {
       setObjectTypeProperties([]);
       setSelectedObjectTypeInfo(null);
-      setSelectedObjectType('');
     }
   }, [businessProcess]);
 
