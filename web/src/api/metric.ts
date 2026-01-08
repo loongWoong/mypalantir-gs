@@ -8,6 +8,174 @@ interface ApiResponse<T> {
   timestamp: string;
 }
 
+// SQL粘贴指标提取选项
+export interface SqlPasteOptions {
+  enableLLM?: boolean;
+  suggestMetrics?: boolean;
+  workspaceId?: string;
+}
+
+// 提取的指标
+export interface ExtractedMetric {
+  suggestedId?: string;
+  name: string;
+  displayName?: string;
+  description?: string;
+  category: 'ATOMIC' | 'DERIVED' | 'COMPOSITE';
+  sourceSql?: string;
+  confidence?: 'HIGH' | 'MEDIUM' | 'LOW';
+  notes?: string[];
+  unit?: string;
+  definition: {
+    businessProcess?: string;
+    business_process?: string;
+    aggregationFunction?: string;
+    aggregation_function?: string;
+    aggregationField?: string;
+    aggregation_field?: string;
+    atomicMetricId?: string;
+    atomic_metric_id?: string;
+    timeDimension?: string;
+    time_dimension?: string;
+    timeGranularity?: string;
+    time_granularity?: string;
+    dimensions?: string[];
+    filterConditions?: Record<string, any>;
+    filter_conditions?: Record<string, any>;
+    comparisonType?: string[];
+    comparison_type?: string[];
+    derivedFormula?: string;
+    derived_formula?: string;
+    baseMetricIds?: string[];
+    base_metric_ids?: string[];
+    status?: string;
+  };
+}
+
+// 验证结果
+export interface MetricValidation {
+  valid: boolean;
+  errorCount: number;
+  warningCount: number;
+  errors: ValidationMessage[];
+  warnings: ValidationMessage[];
+  infos: ValidationMessage[];
+}
+
+export interface ValidationMessage {
+  code: string;
+  message: string;
+}
+
+// 字段映射
+export interface FieldMapping {
+  sqlField: string;
+  sqlTable: string;
+  objectProperty: string;
+  objectType: string;
+  columnName: string;
+  confidence: 'HIGH' | 'MEDIUM' | 'LOW';
+}
+
+// 未映射字段
+export interface UnmappedField {
+  sqlExpression: string;
+  fieldType: string;
+  aggregated: boolean;
+  suggestedObjectType?: string;
+  confidence: 'HIGH' | 'MEDIUM' | 'LOW';
+}
+
+// 映射对齐结果
+export interface MappingAlignment {
+  mappingId?: string;
+  fieldMappings: FieldMapping[];
+  unmappedFields: UnmappedField[];
+  involvedObjectTypes: string[];
+  tableToObjectMap: Record<string, string>;
+}
+
+// 语义指标
+export interface SemanticMetric {
+  sqlField: string;
+  businessMeaning: string;
+  recommendedName: string;
+  aggregationType: string;
+  suggestedMetricType: string;
+  unit?: string;
+  confidence: number;
+}
+
+// 语义维度
+export interface SemanticDimension {
+  sqlField: string;
+  businessMeaning: string;
+  timeDimension: boolean;
+  enumDimension: boolean;
+  enumValues?: string[];
+}
+
+// 时间分析
+export interface TimeAnalysis {
+  timeField?: string;
+  timeGranularity?: string;
+  timeRange?: {
+    start: string;
+    end: string;
+  };
+}
+
+// 过滤分析
+export interface FilterAnalysis {
+  field: string;
+  operator: string;
+  value: string;
+  businessScope: boolean;
+}
+
+// 语义对齐结果
+export interface SemanticAlignment {
+  metrics: SemanticMetric[];
+  dimensions: SemanticDimension[];
+  timeAnalysis?: TimeAnalysis;
+  filterAnalysis: FilterAnalysis[];
+}
+
+// SQL解析结果
+export interface SqlPasteParseResult {
+  originalSql: string;
+  extractedMetrics: ExtractedMetric[];
+  validations: MetricValidation[];
+  mappingResult?: MappingAlignment;
+  semanticResult?: SemanticAlignment;
+  suggestions: string[];
+  errors?: string[];
+}
+
+// 保存结果
+export interface SaveResult {
+  success: boolean;
+  savedIds: string[];
+  results: {
+    metricName: string;
+    savedId: string;
+    status: string;
+  }[];
+  errors: {
+    metricName: string;
+    message: string;
+  }[];
+}
+
+// 验证结果（仅验证）
+export interface ValidationOnlyResult {
+  originalSql: string;
+  extractedMetrics: ExtractedMetric[];
+  validations: MetricValidation[];
+  suggestions: string[];
+  allValid: boolean;
+}
+
 // 原子指标接口
 export interface AtomicMetric {
   id: string;
@@ -201,6 +369,39 @@ export const metricApi = {
 
   batchQueryMetrics: async (queries: MetricQuery[]): Promise<MetricResult[]> => {
     const response = await apiClient.post<ApiResponse<MetricResult[]>>('/metrics/query/batch', { queries });
+    return response.data.data;
+  },
+
+  // ==================== SQL 粘贴指标提取 API ====================
+
+  // 解析 SQL 并提取指标
+  parseAndExtractSql: async (sql: string, options?: SqlPasteOptions): Promise<SqlPasteParseResult> => {
+    const response = await apiClient.post<ApiResponse<SqlPasteParseResult>>('/sql-paste/parse', {
+      sql,
+      options: options || { enableLLM: true, suggestMetrics: true },
+    });
+    return response.data.data;
+  },
+
+  // 保存提取的指标
+  saveExtractedMetrics: async (
+    metrics: ExtractedMetric[],
+    createNew: boolean,
+    existingMetricIds?: string[],
+    workspaceIds?: string[]
+  ): Promise<SaveResult> => {
+    const response = await apiClient.post<ApiResponse<SaveResult>>('/sql-paste/save', {
+      metrics,
+      createNew,
+      existingMetricIds: existingMetricIds || [],
+      workspaceIds: workspaceIds || [],
+    });
+    return response.data.data;
+  },
+
+  // 仅验证指标定义
+  validateExtractedMetrics: async (sql: string): Promise<ValidationOnlyResult> => {
+    const response = await apiClient.post<ApiResponse<ValidationOnlyResult>>('/sql-paste/validate', { sql });
     return response.data.data;
   },
 };
