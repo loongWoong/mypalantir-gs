@@ -1,6 +1,5 @@
 package com.mypalantir.meta;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonGetter;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.Map;
@@ -54,7 +53,8 @@ public class DataSourceMapping {
     /**
      * 属性映射：ObjectType/LinkType 属性名 -> 数据库列名
      * 例如：{"车牌号": "plate_number", "车辆类型": "vehicle_type"}
-     * 对于 LinkType，还可以映射 link type 的属性，如 {"绑定时间": "bind_time", "绑定状态": "bind_status"}
+     * 对于 LinkType，还可以映射 link type 的属性，如 {"绑定时间": "bind_time", "绑定状态":
+     * "bind_status"}
      */
     @JsonProperty("field_mapping")
     private Map<String, String> fieldMapping;
@@ -140,23 +140,24 @@ public class DataSourceMapping {
             return null;
         }
         return fieldMapping.entrySet().stream()
-            .filter(entry -> columnName.equals(entry.getValue()))
-            .map(Map.Entry::getKey)
-            .findFirst()
-            .orElse(null);
+                .filter(entry -> columnName.equals(entry.getValue()))
+                .map(Map.Entry::getKey)
+                .findFirst()
+                .orElse(null);
     }
 
     /**
      * 检查是否有数据源映射配置
      */
     public boolean isConfigured() {
-        return connectionId != null && !connectionId.isEmpty() 
-            && table != null && !table.isEmpty()
-            && idColumn != null && !idColumn.isEmpty();
+        return connectionId != null && !connectionId.isEmpty()
+                && table != null && !table.isEmpty()
+                && idColumn != null && !idColumn.isEmpty();
     }
 
     /**
      * 判断 LinkType 是否为外键模式
+     * 
      * @param targetObjectType 目标 ObjectType（用于自动检测模式）
      * @return true 表示外键模式，false 表示关系表模式
      */
@@ -165,15 +166,14 @@ public class DataSourceMapping {
         if (linkMode != null) {
             return "foreign_key".equalsIgnoreCase(linkMode);
         }
-        
+
         // 自动检测：如果 table 与目标表的 table 相同，则为外键模式
         if (targetObjectType != null && targetObjectType.getDataSource() != null) {
             DataSourceMapping targetMapping = targetObjectType.getDataSource();
             return table != null && table.equals(targetMapping.getTable());
         }
-        
+
         // 默认返回 false（关系表模式）
         return false;
     }
 }
-

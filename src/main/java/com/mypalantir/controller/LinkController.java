@@ -12,7 +12,6 @@ import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -39,7 +38,7 @@ public class LinkController {
 
             if (sourceID == null || targetID == null) {
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body(ApiResponse.error(400, "source_id and target_id are required"));
+                        .body(ApiResponse.error(400, "source_id and target_id are required"));
             }
 
             String id = linkService.createLink(linkType, sourceID, targetID, properties);
@@ -48,10 +47,10 @@ public class LinkController {
             return ResponseEntity.ok(ApiResponse.success(result));
         } catch (Loader.NotFoundException | DataValidator.ValidationException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(ApiResponse.error(400, e.getMessage()));
+                    .body(ApiResponse.error(400, e.getMessage()));
         } catch (IOException e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ApiResponse.error(500, "Failed to create link: " + e.getMessage()));
+                    .body(ApiResponse.error(500, "Failed to create link: " + e.getMessage()));
         }
     }
 
@@ -64,7 +63,7 @@ public class LinkController {
             return ResponseEntity.ok(ApiResponse.success(link));
         } catch (IOException e) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(ApiResponse.error(404, e.getMessage()));
+                    .body(ApiResponse.error(404, e.getMessage()));
         }
     }
 
@@ -78,10 +77,10 @@ public class LinkController {
             return ResponseEntity.ok(ApiResponse.success(null));
         } catch (Loader.NotFoundException | DataValidator.ValidationException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(ApiResponse.error(400, e.getMessage()));
+                    .body(ApiResponse.error(400, e.getMessage()));
         } catch (IOException e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ApiResponse.error(500, "Failed to update link: " + e.getMessage()));
+                    .body(ApiResponse.error(500, "Failed to update link: " + e.getMessage()));
         }
     }
 
@@ -94,7 +93,7 @@ public class LinkController {
             return ResponseEntity.ok(ApiResponse.success(null));
         } catch (IOException e) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(ApiResponse.error(404, e.getMessage()));
+                    .body(ApiResponse.error(404, e.getMessage()));
         }
     }
 
@@ -105,7 +104,7 @@ public class LinkController {
             @RequestParam(defaultValue = "20") int limit) {
         try {
             InstanceStorage.ListResult result = linkService.listLinks(linkType, offset, limit);
-            
+
             Map<String, Object> response = new HashMap<>();
             response.put("items", result.getItems());
             response.put("total", result.getTotal());
@@ -115,10 +114,10 @@ public class LinkController {
             return ResponseEntity.ok(ApiResponse.success(response));
         } catch (Loader.NotFoundException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(ApiResponse.error(400, e.getMessage()));
+                    .body(ApiResponse.error(400, e.getMessage()));
         } catch (IOException e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ApiResponse.error(500, "Failed to list links: " + e.getMessage()));
+                    .body(ApiResponse.error(500, "Failed to list links: " + e.getMessage()));
         }
     }
 
@@ -130,15 +129,14 @@ public class LinkController {
             return ResponseEntity.ok(ApiResponse.success(result.toMap()));
         } catch (Loader.NotFoundException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(ApiResponse.error(400, e.getMessage()));
+                    .body(ApiResponse.error(400, e.getMessage()));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(ApiResponse.error(400, e.getMessage()));
+                    .body(ApiResponse.error(400, e.getMessage()));
         } catch (IOException e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ApiResponse.error(500, "Failed to sync links: " + e.getMessage()));
+                    .body(ApiResponse.error(500, "Failed to sync links: " + e.getMessage()));
         }
     }
 
 }
-
