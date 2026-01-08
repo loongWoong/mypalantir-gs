@@ -418,14 +418,7 @@ public class RelNodeBuilder {
                 linkType.getSourceType() + "'");
         }
         
-        // 4. 检查 LinkType 是否有 data_source 配置
-        if (linkType.getDataSource() == null || !linkType.getDataSource().isConfigured()) {
-            throw new IllegalArgumentException("Link type '" + linkQuery.getName() + "' does not have data source configured");
-        }
-        
-        DataSourceMapping linkMapping = linkType.getDataSource();
-        
-        // 5. 确定实际的 source 和 target（根据查询方向）
+        // 4. 确定实际的 source 和 target（根据查询方向）
         ObjectType actualSourceType, actualTargetType;
         DataSourceMapping actualSourceMapping, actualTargetMapping;
         
@@ -447,19 +440,30 @@ public class RelNodeBuilder {
             }
         }
         
-        // 6. 获取数据源映射
-        actualSourceMapping = actualSourceType.getDataSource();
+        // 5. 获取数据源映射（从 mapping 动态获取，而不是从 schema 静态配置）
+        actualSourceMapping = getDataSourceMappingFromMapping(actualSourceType);
         if (actualSourceMapping == null || !actualSourceMapping.isConfigured()) {
-            throw new IllegalArgumentException("Source object type '" + actualSourceType.getName() + "' does not have data source configured");
+            throw new IllegalArgumentException("Source object type '" + actualSourceType.getName() + 
+                "' does not have data source configured. Please configure a mapping for this object type.");
         }
         
-        actualTargetMapping = actualTargetType.getDataSource();
+        actualTargetMapping = getDataSourceMappingFromMapping(actualTargetType);
         if (actualTargetMapping == null || !actualTargetMapping.isConfigured()) {
-            throw new IllegalArgumentException("Target object type '" + actualTargetType.getName() + "' does not have data source configured");
+            throw new IllegalArgumentException("Target object type '" + actualTargetType.getName() + 
+                "' does not have data source configured. Please configure a mapping for this object type.");
         }
+        
+        // 6. 获取 LinkType 的数据源映射（支持显式配置或从 ObjectType mapping 推导）
+        DataSourceMapping linkMapping = getLinkDataSourceMapping(linkType, actualSourceType, actualTargetType, actualTargetMapping);
         
         // 7. 判断 LinkType 映射模式（基于实际的 target）
         boolean isForeignKeyMode = linkMapping.isForeignKeyMode(actualTargetType);
+        
+        System.out.println("[buildJoin] Link type '" + linkQuery.getName() + "' mode: " + 
+            (isForeignKeyMode ? "foreign_key" : "relation_table"));
+        System.out.println("[buildJoin] Link mapping table: " + linkMapping.getTable());
+        System.out.println("[buildJoin] Source mapping table: " + actualSourceMapping.getTable());
+        System.out.println("[buildJoin] Target mapping table: " + actualTargetMapping.getTable());
         
         if (isForeignKeyMode) {
             // 外键模式：直接 JOIN 目标表（目标表中包含外键）
@@ -1406,25 +1410,53 @@ public class RelNodeBuilder {
 
     /**
      * 从映射关系获取 DataSourceMapping
+     * 强制要求必须配置 Mapping，不再回退到 ObjectType 内部的 data_source
+     * 数据源获取链路：Mapping → table_id → Table → database_id → Database → 连接信息
      */
     private DataSourceMapping getDataSourceMappingFromMapping(ObjectType objectType) {
         try {
             List<Map<String, Object>> mappings = mappingService.getMappingsByObjectType(objectType.getName());
             if (mappings == null || mappings.isEmpty()) {
-                // 如果没有映射关系，返回 schema 中定义的 data_source（向后兼容）
-                return objectType.getDataSource();
+                // 强制要求配置 Mapping，不再回退到 schema 中的 data_source
+                throw new IllegalArgumentException(
+                    "Object type '" + objectType.getName() + "' does not have a mapping configured. " +
+                    "Please configure a mapping in the Data Mapping page."
+                );
             }
             
             // 使用第一个映射关系
             Map<String, Object> mappingData = mappings.get(0);
             String tableId = (String) mappingData.get("table_id");
             if (tableId == null) {
-                return objectType.getDataSource();
+                throw new IllegalArgumentException(
+                    "Mapping for object type '" + objectType.getName() + "' does not have table_id configured."
+                );
             }
             
             // 获取表信息
             Map<String, Object> table = instanceStorage.getInstance("table", tableId);
+            if (table == null) {
+                throw new IllegalArgumentException(
+                    "Table with id '" + tableId + "' not found for object type '" + objectType.getName() + "'."
+                );
+            }
+            
             String tableName = (String) table.get("name");
+            if (tableName == null || tableName.isEmpty()) {
+                throw new IllegalArgumentException(
+                    "Table with id '" + tableId + "' does not have a name."
+                );
+            }
+            
+            // 关键：从 Table 对象获取 database_id（数据源连接ID）
+            String databaseId = (String) table.get("database_id");
+            if (databaseId == null || databaseId.isEmpty()) {
+                throw new IllegalArgumentException(
+                    "Table '" + tableName + "' (id: '" + tableId + "') does not have database_id configured. " +
+                    "Please ensure the table is associated with a database."
+                );
+            }
+            
             String primaryKeyColumn = (String) mappingData.get("primary_key_column");
             
             @SuppressWarnings("unchecked")
@@ -1440,17 +1472,74 @@ public class RelNodeBuilder {
                 }
             }
             
+            // 构造 DataSourceMapping，包含完整的数据源连接信息
             DataSourceMapping dataSourceMapping = new DataSourceMapping();
+            dataSourceMapping.setConnectionId(databaseId);  // 设置数据源连接ID
             dataSourceMapping.setTable(tableName);
             dataSourceMapping.setIdColumn(primaryKeyColumn != null ? primaryKeyColumn : "id");
             dataSourceMapping.setFieldMapping(fieldMapping);
             
+            System.out.println("[getDataSourceMappingFromMapping] Successfully loaded mapping for '" + 
+                objectType.getName() + "':");
+            System.out.println("  → table: " + tableName + " (table_id: " + tableId + ")");
+            System.out.println("  → database_id (connectionId): " + databaseId);
+            System.out.println("  → primaryKey: " + dataSourceMapping.getIdColumn());
+            
             return dataSourceMapping;
+        } catch (IllegalArgumentException e) {
+            // 直接抛出参数异常，不做任何回退
+            throw e;
         } catch (Exception e) {
-            System.err.println("Failed to get DataSourceMapping from mapping for " + objectType.getName() + ": " + e.getMessage());
-            // 回退到 schema 中定义的 data_source
-            return objectType.getDataSource();
+            // 其他异常也转换为明确的错误信息
+            throw new IllegalArgumentException(
+                "Failed to get DataSourceMapping from mapping for object type '" + objectType.getName() + "': " + 
+                e.getMessage() + ". Please ensure the mapping is correctly configured.",
+                e
+            );
         }
+    }
+    
+    /**
+     * 获取 LinkType 的数据源映射
+     * 主要从 ObjectType 的 Mapping 推导，不依赖 LinkType 内部的 data_source 配置
+     * 
+     * 支持两种方式：
+     * 1. （可选）LinkType 显式配置了 data_source（向后兼容，用于关系表模式）
+     * 2. （默认）从 ObjectType mapping 推导：
+     *    - 外键模式：使用目标表的 mapping，外键字段命名为 {source_type}_id
+     *    - 关系表模式：需要 LinkType 显式配置独立的中间表
+     * 
+     * @param linkType LinkType 定义
+     * @param sourceType 源对象类型
+     * @param targetType 目标对象类型
+     * @param targetMapping 目标对象的数据源映射（从 Mapping 获取）
+     * @return LinkType 的数据源映射
+     */
+    private DataSourceMapping getLinkDataSourceMapping(LinkType linkType, ObjectType sourceType, 
+                                                       ObjectType targetType, DataSourceMapping targetMapping) {
+        // 1. （可选）如果 LinkType 显式配置了 data_source，直接使用（向后兼容，用于关系表模式）
+        if (linkType.getDataSource() != null && linkType.getDataSource().isConfigured()) {
+            System.out.println("[getLinkDataSourceMapping] Using explicit data_source from LinkType (for relation_table mode): " + linkType.getName());
+            return linkType.getDataSource();
+        }
+        
+        // 2. （默认）从 ObjectType 的 Mapping 推导外键模式
+        // 外键字段命名规则：{source_type_name}_id
+        String sourceIdColumnName = sourceType.getName().toLowerCase() + "_id";
+        
+        // 构造 DataSourceMapping，指向目标表（外键在目标表中）
+        DataSourceMapping inferredMapping = new DataSourceMapping();
+        inferredMapping.setTable(targetMapping.getTable());
+        inferredMapping.setIdColumn(targetMapping.getIdColumn());
+        inferredMapping.setSourceIdColumn(sourceIdColumnName);  // 外键字段名
+        inferredMapping.setTargetIdColumn(targetMapping.getIdColumn());  // 目标表的主键
+        inferredMapping.setLinkMode("foreign_key");  // 显式标记为外键模式
+        
+        System.out.println("[getLinkDataSourceMapping] Inferred foreign_key mode from ObjectType mapping for link: " + linkType.getName());
+        System.out.println("[getLinkDataSourceMapping] Inferred source_id_column: " + sourceIdColumnName);
+        System.out.println("[getLinkDataSourceMapping] Using target table from mapping: " + targetMapping.getTable());
+        
+        return inferredMapping;
     }
     
     /**
