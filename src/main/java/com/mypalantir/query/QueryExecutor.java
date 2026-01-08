@@ -230,25 +230,53 @@ public class QueryExecutor {
     
     /**
      * 从映射关系获取 DataSourceMapping
+     * 强制要求必须配置 Mapping，不再回退到 ObjectType 内部的 data_source
+     * 数据源获取链路：Mapping → table_id → Table → database_id → Database → 连接信息
      */
     private com.mypalantir.meta.DataSourceMapping getDataSourceMappingFromMapping(com.mypalantir.meta.ObjectType objectType) {
         try {
             List<Map<String, Object>> mappings = mappingService.getMappingsByObjectType(objectType.getName());
             if (mappings == null || mappings.isEmpty()) {
-                // 如果没有映射关系，返回 schema 中定义的 data_source（向后兼容）
-                return objectType.getDataSource();
+                // 强制要求配置 Mapping，不再回退到 schema 中的 data_source
+                throw new IllegalArgumentException(
+                    "Object type '" + objectType.getName() + "' does not have a mapping configured. " +
+                    "Please configure a mapping in the Data Mapping page."
+                );
             }
             
             // 使用第一个映射关系
             Map<String, Object> mappingData = mappings.get(0);
             String tableId = (String) mappingData.get("table_id");
             if (tableId == null) {
-                return objectType.getDataSource();
+                throw new IllegalArgumentException(
+                    "Mapping for object type '" + objectType.getName() + "' does not have table_id configured."
+                );
             }
             
             // 获取表信息
             Map<String, Object> table = instanceStorage.getInstance("table", tableId);
+            if (table == null) {
+                throw new IllegalArgumentException(
+                    "Table with id '" + tableId + "' not found for object type '" + objectType.getName() + "'."
+                );
+            }
+            
             String tableName = (String) table.get("name");
+            if (tableName == null || tableName.isEmpty()) {
+                throw new IllegalArgumentException(
+                    "Table with id '" + tableId + "' does not have a name."
+                );
+            }
+            
+            // 关键：从 Table 对象获取 database_id（数据源连接ID）
+            String databaseId = (String) table.get("database_id");
+            if (databaseId == null || databaseId.isEmpty()) {
+                throw new IllegalArgumentException(
+                    "Table '" + tableName + "' (id: '" + tableId + "') does not have database_id configured. " +
+                    "Please ensure the table is associated with a database."
+                );
+            }
+            
             String primaryKeyColumn = (String) mappingData.get("primary_key_column");
             
             @SuppressWarnings("unchecked")
@@ -264,16 +292,30 @@ public class QueryExecutor {
                 }
             }
             
+            // 构造 DataSourceMapping，包含完整的数据源连接信息
             com.mypalantir.meta.DataSourceMapping dataSourceMapping = new com.mypalantir.meta.DataSourceMapping();
+            dataSourceMapping.setConnectionId(databaseId);  // 设置数据源连接ID
             dataSourceMapping.setTable(tableName);
             dataSourceMapping.setIdColumn(primaryKeyColumn != null ? primaryKeyColumn : "id");
             dataSourceMapping.setFieldMapping(fieldMapping);
             
+            System.out.println("[QueryExecutor.getDataSourceMappingFromMapping] Successfully loaded mapping for '" + 
+                objectType.getName() + "':");
+            System.out.println("  → table: " + tableName + " (table_id: " + tableId + ")");
+            System.out.println("  → database_id (connectionId): " + databaseId);
+            System.out.println("  → primaryKey: " + dataSourceMapping.getIdColumn());
+            
             return dataSourceMapping;
+        } catch (IllegalArgumentException e) {
+            // 直接抛出参数异常，不做任何回退
+            throw e;
         } catch (Exception e) {
-            System.err.println("Failed to get DataSourceMapping from mapping for " + objectType.getName() + ": " + e.getMessage());
-            // 回退到 schema 中定义的 data_source
-            return objectType.getDataSource();
+            // 其他异常也转换为明确的错误信息
+            throw new IllegalArgumentException(
+                "Failed to get DataSourceMapping from mapping for object type '" + objectType.getName() + "': " + 
+                e.getMessage() + ". Please ensure the mapping is correctly configured.",
+                e
+            );
         }
     }
     
