@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { metricApi } from '../../api/metric';
+import type { AtomicMetric } from '../../api/metric';
 import { schemaApi } from '../../api/client';
 import type { ObjectType, Property } from '../../api/client';
 import { useWorkspace } from '../../WorkspaceContext';
@@ -7,9 +8,11 @@ import { useWorkspace } from '../../WorkspaceContext';
 interface Props {
   onCancel: () => void;
   onSuccess: () => void;
+  editMode?: boolean;
+  initialData?: AtomicMetric | null;
 }
 
-const AtomicMetricBuilder: React.FC<Props> = ({ onCancel, onSuccess }) => {
+const AtomicMetricBuilder: React.FC<Props> = ({ onCancel, onSuccess, editMode = false, initialData = null }) => {
   const { selectedWorkspaceId, selectedWorkspace } = useWorkspace();
   const [objectTypes, setObjectTypes] = useState<ObjectType[]>([]);
   const [objectTypeProperties, setObjectTypeProperties] = useState<Property[]>([]);
@@ -28,7 +31,18 @@ const AtomicMetricBuilder: React.FC<Props> = ({ onCancel, onSuccess }) => {
 
   useEffect(() => {
     loadObjectTypes();
-  }, []);
+    // 如果是编辑模式且有初始数据，回显数据
+    if (editMode && initialData) {
+      setName(initialData.name || '');
+      setDisplayName((initialData as any).display_name || (initialData as any).displayName || '');
+      setDescription(initialData.description || '');
+      setBusinessProcess((initialData as any).business_process || (initialData as any).businessProcess || '');
+      setAggregationFunction((initialData as any).aggregation_function || (initialData as any).aggregationFunction || '');
+      setAggregationField((initialData as any).aggregation_field || (initialData as any).aggregationField || '');
+      setUnit(initialData.unit || '');
+      setStatus(initialData.status || 'active');
+    }
+  }, [editMode, initialData]);
 
   // 根据工作空间过滤对象类型
   const filteredObjectTypes = selectedWorkspace && selectedWorkspace.object_types && selectedWorkspace.object_types.length > 0
@@ -172,15 +186,22 @@ const AtomicMetricBuilder: React.FC<Props> = ({ onCancel, onSuccess }) => {
       console.log('Sending atomic metric data:', JSON.stringify(requestData, null, 2));
       console.log('Data types:', Object.entries(requestData).map(([k, v]) => `${k}: ${typeof v}`));
 
-      await metricApi.createAtomicMetric(requestData);
-      alert('原子指标创建成功！');
+      if (editMode && initialData) {
+        // 编辑模式：调用更新API
+        await metricApi.updateAtomicMetric(initialData.id, requestData);
+        alert('原子指标更新成功！');
+      } else {
+        // 创建模式：调用创建API
+        await metricApi.createAtomicMetric(requestData);
+        alert('原子指标创建成功！');
+      }
       onSuccess();
     } catch (error: any) {
-      console.error('Failed to create atomic metric:', error);
+      console.error('Failed to save atomic metric:', error);
       console.error('Error response:', error.response?.data);
       
       // 尝试从响应中提取错误消息
-      let errorMessage = '创建原子指标失败';
+      let errorMessage = editMode ? '更新原子指标失败' : '创建原子指标失败';
       if (error.response?.data?.message) {
         errorMessage += ': ' + error.response.data.message;
       } else if (error.response?.data?.data) {
@@ -221,7 +242,7 @@ const AtomicMetricBuilder: React.FC<Props> = ({ onCancel, onSuccess }) => {
       <div className="bg-white rounded-lg shadow-lg p-6">
         <div className="flex justify-between items-center mb-4">
           <div>
-            <h2 className="text-2xl font-bold">原子指标构建器</h2>
+            <h2 className="text-2xl font-bold">{editMode ? '编辑原子指标' : '原子指标构建器'}</h2>
             <p className="text-gray-600 text-sm mt-1">定义在特定业务过程上的最小可度量单元</p>
           </div>
           <div className="flex space-x-3">
@@ -237,7 +258,7 @@ const AtomicMetricBuilder: React.FC<Props> = ({ onCancel, onSuccess }) => {
               disabled={loading}
               className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:bg-gray-400 transition-colors"
             >
-              {loading ? '创建中...' : '创建原子指标'}
+              {loading ? (editMode ? '保存中...' : '创建中...') : (editMode ? '保存修改' : '创建原子指标')}
             </button>
           </div>
         </div>

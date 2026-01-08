@@ -6,6 +6,8 @@ import { useWorkspace } from '../../WorkspaceContext';
 interface Props {
   onCancel: () => void;
   onSuccess: () => void;
+  editMode?: boolean;
+  initialData?: MetricDefinition | null;
 }
 
 // 统一的基础指标类型（可以是原子指标或派生/复合指标）
@@ -16,7 +18,7 @@ interface BaseMetric {
   type: 'atomic' | 'derived' | 'composite';
 }
 
-const CompositeMetricBuilder: React.FC<Props> = ({ onCancel, onSuccess }) => {
+const CompositeMetricBuilder: React.FC<Props> = ({ onCancel, onSuccess, editMode = false, initialData = null }) => {
   const { selectedWorkspaceId } = useWorkspace();
   const [baseMetrics, setBaseMetrics] = useState<BaseMetric[]>([]);
   const [formula, setFormula] = useState<string>('');
@@ -25,10 +27,41 @@ const CompositeMetricBuilder: React.FC<Props> = ({ onCancel, onSuccess }) => {
   const [description, setDescription] = useState<string>('');
   const [unit, setUnit] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState<string>('');
+  
+  // 添加一个标志位，记录是否已经完成初始化回显
+  const [isInitialized, setIsInitialized] = useState<boolean>(false);
 
   useEffect(() => {
     loadBaseMetrics();
   }, []);
+
+  // 单独的useEffect处理编辑模式的数据回显
+  useEffect(() => {
+    // 如果是编辑模式且有初始数据，且还未初始化，且baseMetrics已加载
+    if (editMode && initialData && !isInitialized && baseMetrics.length > 0) {
+      console.log('===== 开始回显复合指标数据 =====');
+      console.log('initialData:', initialData);
+      console.log('baseMetrics count:', baseMetrics.length);
+      
+      // 回显基本信息
+      setName(initialData.name || '');
+      setDisplayName(initialData.display_name || '');
+      setDescription(initialData.description || '');
+      setUnit(initialData.unit || '');
+      
+      // 回显公式：将ID转换为名称显示
+      if (initialData.derived_formula) {
+        console.log('原始公式 (ID):', initialData.derived_formula);
+        const formulaWithNames = convertFormulaIdsToNames(initialData.derived_formula);
+        console.log('转换后公式 (名称):', formulaWithNames);
+        setFormula(formulaWithNames);
+      }
+      
+      // 标记为已初始化
+      setIsInitialized(true);
+      console.log('===== 复合指标数据回显完成 =====');
+    }
+  }, [editMode, initialData, isInitialized, baseMetrics]);
 
   const loadBaseMetrics = async () => {
     try {
@@ -94,6 +127,17 @@ const CompositeMetricBuilder: React.FC<Props> = ({ onCancel, onSuccess }) => {
     }
   };
 
+  // 将公式中ID转换为名称（用于回显）
+  const convertFormulaIdsToNames = (formulaWithIds: string): string => {
+    let convertedFormula = formulaWithIds;
+    baseMetrics.forEach(metric => {
+      // 替换 {ID} 为 {指标名称}
+      const idPattern = new RegExp(`\\{${metric.id.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')}\\}`, 'g');
+      convertedFormula = convertedFormula.replace(idPattern, `{${metric.name}}`);
+    });
+    return convertedFormula;
+  };
+
   // 将公式中的名称转换为ID（用于保存）
   const convertFormulaNamesToIds = (formulaWithNames: string): string => {
     let convertedFormula = formulaWithNames;
@@ -141,7 +185,7 @@ const CompositeMetricBuilder: React.FC<Props> = ({ onCancel, onSuccess }) => {
         metric_type: 'composite',
         base_metric_ids: usedMetricIds,
         derived_formula: formulaWithIds,
-        unit,
+        unit: unit || undefined,
         status: 'active',
       };
 
@@ -151,12 +195,19 @@ const CompositeMetricBuilder: React.FC<Props> = ({ onCancel, onSuccess }) => {
         requestData.workspace_ids = [selectedWorkspaceId];
       }
 
-      await metricApi.createMetricDefinition(requestData);
-      alert('复合指标创建成功！');
+      if (editMode && initialData) {
+        // 编辑模式：调用更新API
+        await metricApi.updateMetricDefinition(initialData.id, requestData);
+        alert('复合指标更新成功！');
+      } else {
+        // 创建模式：调用创建API
+        await metricApi.createMetricDefinition(requestData);
+        alert('复合指标创建成功！');
+      }
       onSuccess();
     } catch (error) {
-      console.error('Failed to create composite metric:', error);
-      alert('创建复合指标失败: ' + (error as Error).message);
+      console.error('Failed to save composite metric:', error);
+      alert((editMode ? '更新' : '创建') + '复合指标失败: ' + (error as Error).message);
     }
   };
 
@@ -165,7 +216,7 @@ const CompositeMetricBuilder: React.FC<Props> = ({ onCancel, onSuccess }) => {
       <div className="bg-white rounded-lg shadow-lg p-6">
         <div className="flex justify-between items-center mb-4">
           <div>
-            <h2 className="text-2xl font-bold">复合指标构建器</h2>
+            <h2 className="text-2xl font-bold">{editMode ? '编辑复合指标' : '复合指标构建器'}</h2>
             <p className="text-gray-600 text-sm mt-1">通过组合多个基础指标进行数学运算创建复合指标</p>
           </div>
           <div className="flex space-x-3">
@@ -180,7 +231,7 @@ const CompositeMetricBuilder: React.FC<Props> = ({ onCancel, onSuccess }) => {
               disabled={!name || usedMetricIds.length === 0 || !formula}
               className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:bg-gray-300"
             >
-              保存指标
+              {editMode ? '保存修改' : '保存指标'}
             </button>
           </div>
         </div>

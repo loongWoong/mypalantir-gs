@@ -8,9 +8,11 @@ import { useWorkspace } from '../../WorkspaceContext';
 interface Props {
   onCancel: () => void;
   onSuccess: () => void;
+  editMode?: boolean;
+  initialData?: MetricDefinition | null;
 }
 
-const DerivedMetricBuilder: React.FC<Props> = ({ onCancel, onSuccess }) => {
+const DerivedMetricBuilder: React.FC<Props> = ({ onCancel, onSuccess, editMode = false, initialData = null }) => {
   const { selectedWorkspaceId, selectedWorkspace } = useWorkspace();
   const [objectTypes, setObjectTypes] = useState<ObjectType[]>([]);
   const [atomicMetrics, setAtomicMetrics] = useState<AtomicMetric[]>([]);
@@ -36,6 +38,10 @@ const DerivedMetricBuilder: React.FC<Props> = ({ onCancel, onSuccess }) => {
   const [metricName, setMetricName] = useState<string>('');
   const [displayName, setDisplayName] = useState<string>('');
   const [description, setDescription] = useState<string>('');
+  const [unit, setUnit] = useState<string>('');
+  
+  // 添加一个标志位，记录是否已经完成初始化回显
+  const [isInitialized, setIsInitialized] = useState<boolean>(false);
 
   // 根据工作空间过滤对象类型
   const filteredObjectTypes = selectedWorkspace && selectedWorkspace.object_types && selectedWorkspace.object_types.length > 0
@@ -45,6 +51,83 @@ const DerivedMetricBuilder: React.FC<Props> = ({ onCancel, onSuccess }) => {
   useEffect(() => {
     loadData();
   }, []);
+
+  // 单独的useEffect处理编辑模式的数据回显
+  useEffect(() => {
+    // 如果是编辑模式且有初始数据，且还未初始化
+    if (editMode && initialData && !isInitialized && atomicMetrics.length > 0 && objectTypes.length > 0) {
+      console.log('===== 开始回显数据 =====');
+      console.log('initialData:', initialData);
+      
+      setMetricName(initialData.name || '');
+      setDisplayName(initialData.display_name || '');
+      setDescription(initialData.description || '');
+      setUnit(initialData.unit || '');
+      
+      // 回显时间粒度和比较类型
+      if (initialData.time_granularity) setTimeGranularity(initialData.time_granularity);
+      if (initialData.comparison_type) setComparisonTypes(initialData.comparison_type);
+      
+      // 回显业务范围
+      if (initialData.business_scope) {
+        const scope = initialData.business_scope;
+        setBusinessScopeType(scope.type || 'single');
+        
+        if (scope.type === 'single' && scope.base_object_type) {
+          setSelectedObjectType(scope.base_object_type);
+        } else if (scope.type === 'multi' && scope.from) {
+          setSelectedObjectType(scope.from);
+          if (scope.links) {
+            const links = scope.links.map(link => ({
+              name: link.name,
+              select: link.select || []
+            }));
+            setSelectedLinks(links);
+          }
+        }
+      }
+      
+      // 回显原子指标
+      if (initialData.atomic_metric_id) {
+        const atomic = atomicMetrics.find(m => m.id === initialData.atomic_metric_id);
+        if (atomic) {
+          console.log('找到原子指标:', atomic);
+          setSelectedAtomicMetric(atomic);
+        }
+      }
+      
+      // 标记为已初始化，防止重复执行
+      setIsInitialized(true);
+      
+      // 延迟回显依赖于objectType的字段（时间维度、维度、过滤条件）
+      setTimeout(() => {
+        console.log('===== 延迟回显依赖字段 =====');
+        
+        // 回显时间维度
+        if (initialData.time_dimension) {
+          console.log('回显时间维度:', initialData.time_dimension);
+          setTimeDimension(initialData.time_dimension);
+        }
+        
+        // 回显维度
+        if (initialData.dimensions) {
+          console.log('回显维度:', initialData.dimensions);
+          setDimensions(initialData.dimensions);
+        }
+        
+        // 回显过滤条件
+        if (initialData.filter_conditions) {
+          const conditions = Object.entries(initialData.filter_conditions).map(([field, value]) => ({
+            field,
+            operator: '=',
+            value: String(value)
+          }));
+          console.log('回显过滤条件:', conditions);
+          setFilterConditions(conditions);
+        }
+      }, 500); // 等待loadObjectTypeInfo完成
+    }
+  }, [editMode, initialData, isInitialized, atomicMetrics, objectTypes]);
 
   // 当工作空间变化时，如果当前选择的对象类型不在新工作空间中，则清空选择
   useEffect(() => {
@@ -87,17 +170,20 @@ const DerivedMetricBuilder: React.FC<Props> = ({ onCancel, onSuccess }) => {
     if (selectedObjectType) {
       console.log('开始加载对象类型信息...');
       loadObjectTypeInfo(selectedObjectType);
-      // 重置时间维度字段，因为对象类型变了
-      setTimeDimension('');
-      // 重置维度字段，因为对象类型变了
-      setDimensions([]);
+      // 只在非编辑模式或已初始化后才重置这些字段
+      if (!editMode || isInitialized) {
+        // 重置时间维度字段，因为对象类型变了
+        setTimeDimension('');
+        // 重置维度字段，因为对象类型变了
+        setDimensions([]);
+      }
     } else {
       // 如果没有选择对象类型，清空属性信息
       console.log('清空对象类型信息');
       setObjectTypeProperties([]);
       setAvailableDimensions([]);
     }
-  }, [selectedObjectType]);
+  }, [selectedObjectType, editMode, isInitialized]);
 
   const loadData = async () => {
     try {
@@ -204,6 +290,7 @@ const DerivedMetricBuilder: React.FC<Props> = ({ onCancel, onSuccess }) => {
           ? Object.fromEntries(filterConditions.map(f => [f.field, f.value]))
           : undefined,
         comparison_type: comparisonTypes.length > 0 ? comparisonTypes : undefined,
+        unit: unit || undefined,
         status: 'active',
       };
 
@@ -213,12 +300,19 @@ const DerivedMetricBuilder: React.FC<Props> = ({ onCancel, onSuccess }) => {
         requestData.workspace_ids = [selectedWorkspaceId];
       }
 
-      await metricApi.createMetricDefinition(requestData);
-      alert('指标创建成功！');
+      if (editMode && initialData) {
+        // 编辑模式：调用更新API
+        await metricApi.updateMetricDefinition(initialData.id, requestData);
+        alert('派生指标更新成功！');
+      } else {
+        // 创建模式：调用创建API
+        await metricApi.createMetricDefinition(requestData);
+        alert('派生指标创建成功！');
+      }
       onSuccess();
     } catch (error) {
-      console.error('Failed to create metric:', error);
-      alert('创建指标失败: ' + (error as Error).message);
+      console.error('Failed to save metric:', error);
+      alert((editMode ? '更新' : '创建') + '派生指标失败: ' + (error as Error).message);
     }
   };
 
@@ -318,7 +412,7 @@ const DerivedMetricBuilder: React.FC<Props> = ({ onCancel, onSuccess }) => {
       <div className="bg-white rounded-lg shadow-lg p-6">
         <div className="flex justify-between items-center mb-4">
           <div>
-            <h2 className="text-2xl font-bold">派生指标构建器</h2>
+            <h2 className="text-2xl font-bold">{editMode ? '编辑派生指标' : '派生指标构建器'}</h2>
             <p className="text-gray-600 text-sm mt-1">基于原子指标添加时间、维度等约束条件</p>
           </div>
           <div className="flex space-x-3">
@@ -333,7 +427,7 @@ const DerivedMetricBuilder: React.FC<Props> = ({ onCancel, onSuccess }) => {
               disabled={!selectedAtomicMetric || !selectedObjectType}
               className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
             >
-              保存指标
+              {editMode ? '保存修改' : '保存指标'}
             </button>
           </div>
         </div>
@@ -373,6 +467,17 @@ const DerivedMetricBuilder: React.FC<Props> = ({ onCancel, onSuccess }) => {
                 className="w-full p-2 border rounded text-sm"
                 rows={2}
                 placeholder="指标用途和含义"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">单位</label>
+              <input
+                type="text"
+                value={unit}
+                onChange={(e) => setUnit(e.target.value)}
+                className="w-full p-2 border rounded text-sm"
+                placeholder="例如: 元、次、个、%"
               />
             </div>
 

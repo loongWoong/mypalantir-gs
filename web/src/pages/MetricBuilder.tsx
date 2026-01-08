@@ -1,20 +1,86 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import DerivedMetricBuilder from '../components/metric/DerivedMetricBuilder';
 import CompositeMetricBuilder from '../components/metric/CompositeMetricBuilder';
 import AtomicMetricBuilder from '../components/metric/AtomicMetricBuilder';
+import { metricApi } from '../api/metric';
+import type { AtomicMetric, MetricDefinition } from '../api/metric';
 
 type MetricType = 'derived' | 'atomic' | 'composite' | null;
 
 const MetricBuilder: React.FC = () => {
-  const [selectedType, setSelectedType] = useState<MetricType>(null);
+  const [searchParams] = useSearchParams();
+  const metricId = searchParams.get('id');
+  const metricTypeParam = searchParams.get('type') as MetricType;
+  
+  const [selectedType, setSelectedType] = useState<MetricType>(metricTypeParam);
+  const [editMode, setEditMode] = useState<boolean>(!!metricId);
+  const [atomicMetricData, setAtomicMetricData] = useState<AtomicMetric | null>(null);
+  const [metricDefinitionData, setMetricDefinitionData] = useState<MetricDefinition | null>(null);
+  const [loading, setLoading] = useState<boolean>(false);
   const navigate = useNavigate();
+
+  // 当进入编辑模式时，加载指标数据
+  useEffect(() => {
+    if (metricId && metricTypeParam) {
+      loadMetricData(metricId, metricTypeParam);
+    }
+  }, [metricId, metricTypeParam]);
+
+  const loadMetricData = async (id: string, type: MetricType) => {
+    setLoading(true);
+    try {
+      if (type === 'atomic') {
+        const data = await metricApi.getAtomicMetric(id);
+        // 字段标准化：统一使用下划线命名
+        const normalizedData = {
+          ...data,
+          display_name: (data as any).display_name || (data as any).displayName,
+          business_process: (data as any).business_process || (data as any).businessProcess,
+          aggregation_function: (data as any).aggregation_function || (data as any).aggregationFunction,
+          aggregation_field: (data as any).aggregation_field || (data as any).aggregationField,
+        };
+        setAtomicMetricData(normalizedData);
+      } else if (type === 'derived' || type === 'composite') {
+        const data = await metricApi.getMetricDefinition(id);
+        // 字段标准化：统一使用下划线命名
+        const normalizedData = {
+          ...data,
+          metric_type: (data as any).metric_type || (data as any).metricType,
+          display_name: (data as any).display_name || (data as any).displayName,
+          atomic_metric_id: (data as any).atomic_metric_id || (data as any).atomicMetricId,
+          business_scope: (data as any).business_scope || (data as any).businessScope,
+          time_dimension: (data as any).time_dimension || (data as any).timeDimension,
+          time_granularity: (data as any).time_granularity || (data as any).timeGranularity,
+          filter_conditions: (data as any).filter_conditions || (data as any).filterConditions,
+          comparison_type: (data as any).comparison_type || (data as any).comparisonType,
+          derived_formula: (data as any).derived_formula || (data as any).derivedFormula,
+          base_metric_ids: (data as any).base_metric_ids || (data as any).baseMetricIds,
+        };
+        console.log('加载的指标数据 (标准化后):', normalizedData);
+        setMetricDefinitionData(normalizedData as MetricDefinition);
+      }
+    } catch (error) {
+      console.error('Failed to load metric data:', error);
+      alert('加载指标数据失败: ' + (error as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="container mx-auto p-6">
+        <div className="text-center py-8">加载中...</div>
+      </div>
+    );
+  }
 
   if (selectedType === null) {
     return (
       <div className="container mx-auto p-6">
         <div className="max-w-4xl mx-auto">
-          <h1 className="text-3xl font-bold mb-6">指标构建器</h1>
+          <h1 className="text-3xl font-bold mb-6">{editMode ? '编辑指标' : '指标构建器'}</h1>
           
           <div className="space-y-4">
             <div
@@ -89,20 +155,26 @@ const MetricBuilder: React.FC = () => {
     <div className="container mx-auto p-6">
       {selectedType === 'derived' && (
         <DerivedMetricBuilder
-          onCancel={() => setSelectedType(null)}
+          onCancel={() => navigate('/metrics')}
           onSuccess={() => navigate('/metrics')}
+          editMode={editMode}
+          initialData={metricDefinitionData}
         />
       )}
       {selectedType === 'composite' && (
         <CompositeMetricBuilder
-          onCancel={() => setSelectedType(null)}
+          onCancel={() => navigate('/metrics')}
           onSuccess={() => navigate('/metrics')}
+          editMode={editMode}
+          initialData={metricDefinitionData}
         />
       )}
       {selectedType === 'atomic' && (
         <AtomicMetricBuilder
-          onCancel={() => setSelectedType(null)}
+          onCancel={() => navigate('/metrics')}
           onSuccess={() => navigate('/metrics')}
+          editMode={editMode}
+          initialData={atomicMetricData}
         />
       )}
     </div>

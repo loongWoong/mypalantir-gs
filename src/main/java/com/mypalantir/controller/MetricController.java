@@ -73,6 +73,9 @@ public class MetricController {
     @PutMapping("/atomic-metrics/{id}")
     public ResponseEntity<ApiResponse<Void>> updateAtomicMetric(@PathVariable String id, @RequestBody Map<String, Object> data) {
         try {
+            // 移除 workspace_ids 字段（它不属于 AtomicMetric schema）
+            data.remove("workspace_ids");
+            
             AtomicMetric atomicMetric = new AtomicMetric(data);
             atomicMetricService.updateAtomicMetric(id, atomicMetric);
             return ResponseEntity.ok(ApiResponse.success(null));
@@ -153,6 +156,9 @@ public class MetricController {
     @PutMapping("/definitions/{id}")
     public ResponseEntity<ApiResponse<Void>> updateMetricDefinition(@PathVariable String id, @RequestBody Map<String, Object> data) {
         try {
+            // 移除 workspace_ids 字段（它不属于 MetricDefinition schema）
+            data.remove("workspace_ids");
+            
             MetricDefinition metricDefinition = new MetricDefinition(data);
             metricService.updateMetricDefinition(id, metricDefinition);
             return ResponseEntity.ok(ApiResponse.success(null));

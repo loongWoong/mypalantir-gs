@@ -159,6 +159,12 @@ const MetricBrowser: React.FC = () => {
                       查看
                     </button>
                     <button
+                      onClick={() => navigate(`/metrics/builder?id=${atomic.id}&type=atomic`)}
+                      className="text-blue-600 hover:text-blue-900 mr-4"
+                    >
+                      编辑
+                    </button>
+                    <button
                       onClick={async () => {
                         if (!confirm('确定要删除这个原子指标吗？')) return;
                         try {
@@ -212,6 +218,12 @@ const MetricBrowser: React.FC = () => {
                       className="text-indigo-600 hover:text-indigo-900 mr-4"
                     >
                       查看
+                    </button>
+                    <button
+                      onClick={() => navigate(`/metrics/builder?id=${metric.id}&type=${metric.metric_type}`)}
+                      className="text-blue-600 hover:text-blue-900 mr-4"
+                    >
+                      编辑
                     </button>
                     <button
                       onClick={() => handleDelete(metric.id)}
