@@ -1414,6 +1414,15 @@ public class RelNodeBuilder {
      * 数据源获取链路：Mapping → table_id → Table → database_id → Database → 连接信息
      */
     private DataSourceMapping getDataSourceMappingFromMapping(ObjectType objectType) {
+        // 检查是否为系统虚拟对象类型（不需要数据映射）
+        String objectTypeName = objectType.getName();
+        if (isSystemVirtualObjectType(objectTypeName)) {
+            throw new IllegalArgumentException(
+                "Object type '" + objectTypeName + "' is a system virtual object and cannot be queried directly. " +
+                "Please use business object types (e.g., EntryTransaction, Vehicle) instead."
+            );
+        }
+        
         try {
             List<Map<String, Object>> mappings = mappingService.getMappingsByObjectType(objectType.getName());
             if (mappings == null || mappings.isEmpty()) {
@@ -1547,6 +1556,22 @@ public class RelNodeBuilder {
      */
     public void close() throws SQLException {
         schemaFactory.closeConnections();
+    }
+    
+    /**
+     * 判断是否为系统虚拟对象类型（不需要数据映射）
+     * @param objectTypeName 对象类型名称
+     * @return true 表示是系统虚拟对象
+     */
+    private boolean isSystemVirtualObjectType(String objectTypeName) {
+        // 系统虚拟对象类型列表（来自 schema-system.yaml）
+        return "workspace".equals(objectTypeName) ||
+               "database".equals(objectTypeName) ||
+               "table".equals(objectTypeName) ||
+               "column".equals(objectTypeName) ||
+               "mapping".equals(objectTypeName) ||
+               "AtomicMetric".equals(objectTypeName) ||
+               "MetricDefinition".equals(objectTypeName);
     }
 }
 

@@ -64,6 +64,9 @@ public class SqlPasteController {
                     .body(ApiResponse.error(400, "指标列表不能为空"));
             }
 
+            System.out.println("[SqlPasteController.saveMetrics] 收到保存请求，指标数量: " + metricsData.size());
+            System.out.println("[SqlPasteController.saveMetrics] 原始请求数据: " + metricsData);
+
             boolean createNew = request.containsKey("createNew") && (Boolean) request.get("createNew");
 
             @SuppressWarnings("unchecked")
@@ -77,6 +80,12 @@ public class SqlPasteController {
             List<ExtractedMetric> metrics = metricsData.stream()
                 .map(this::convertToExtractedMetric)
                 .collect(Collectors.toList());
+
+            System.out.println("[SqlPasteController.saveMetrics] 转换后的指标对象:");
+            for (ExtractedMetric m : metrics) {
+                System.out.println("  - 指标: " + m.getName() + ", businessProcess=" + m.getBusinessProcess() + 
+                    ", aggregationFunction=" + m.getAggregationFunction());
+            }
 
             SaveResult saveResult = sqlPasteMetricService.saveExtractedMetrics(
                 metrics, createNew, existingMetricIds, workspaceIds);
@@ -192,6 +201,9 @@ public class SqlPasteController {
         definition.put("base_metric_ids", metric.getBaseMetricIds());
         definition.put("status", metric.getStatus());
         dto.setDefinition(definition);
+        
+        System.out.println("[SqlPasteController.convertToExtractedMetricDTO] 指标 " + metric.getName() + 
+            " 转换为DTO，businessProcess: " + metric.getBusinessProcess());
 
         return dto;
     }
@@ -386,32 +398,48 @@ public class SqlPasteController {
             metric.setConfidence(ExtractedMetric.ConfidenceLevel.valueOf(confidence.toUpperCase()));
         }
 
-        metric.setBusinessProcess((String) data.get("businessProcess"));
-        metric.setAggregationFunction((String) data.get("aggregationFunction"));
-        metric.setAggregationField((String) data.get("aggregationField"));
-        metric.setAtomicMetricId((String) data.get("atomicMetricId"));
-        metric.setTimeDimension((String) data.get("timeDimension"));
-        metric.setTimeGranularity((String) data.get("timeGranularity"));
-
-        if (data.get("dimensions") instanceof List) {
-            metric.setDimensions((List<String>) data.get("dimensions"));
+        // 【关键修改】从 definition 对象中读取 businessProcess（解析时设置的值），禁止从前端顶层字段读取
+        // 这样可以防止前端篡改 businessProcess，保证数据一致性
+        String businessProcess = null;
+        if (data.get("definition") instanceof Map) {
+            Map<String, Object> definition = (Map<String, Object>) data.get("definition");
+            businessProcess = (String) definition.get("business_process");
         }
-
-        if (data.get("filterConditions") instanceof Map) {
-            metric.setFilterConditions((Map<String, Object>) data.get("filterConditions"));
+        metric.setBusinessProcess(businessProcess);
+        System.out.println("[SqlPasteController.convertToExtractedMetric] 指标 " + metric.getName() + 
+            " 从definition读取的 businessProcess: " + businessProcess);
+        
+        // 同样，其他字段也从 definition 中读取
+        if (data.get("definition") instanceof Map) {
+            Map<String, Object> definition = (Map<String, Object>) data.get("definition");
+            String aggFunction = (String) definition.get("aggregation_function");
+            String aggField = (String) definition.get("aggregation_field");
+            System.out.println("[SqlPasteController.convertToExtractedMetric] 指标 " + metric.getName() + 
+                " 从definition读取 aggregation_function: " + aggFunction + ", aggregation_field: " + aggField + ", description: " + metric.getDescription());
+            metric.setAggregationFunction(aggFunction);
+            metric.setAggregationField(aggField);
+            System.out.println("[SqlPasteController.convertToExtractedMetric] 设置后 aggregationField: " + metric.getAggregationField());
+            metric.setAtomicMetricId((String) definition.get("atomic_metric_id"));
+            metric.setTimeDimension((String) definition.get("time_dimension"));
+            metric.setTimeGranularity((String) definition.get("time_granularity"));
+            
+            if (definition.get("dimensions") instanceof List) {
+                metric.setDimensions((List<String>) definition.get("dimensions"));
+            }
+            if (definition.get("filter_conditions") instanceof Map) {
+                metric.setFilterConditions((Map<String, Object>) definition.get("filter_conditions"));
+            }
+            if (definition.get("comparison_type") instanceof List) {
+                metric.setComparisonType((List<String>) definition.get("comparison_type"));
+            }
+            metric.setDerivedFormula((String) definition.get("derived_formula"));
+            if (definition.get("base_metric_ids") instanceof List) {
+                metric.setBaseMetricIds((List<String>) definition.get("base_metric_ids"));
+            }
+            if (definition.get("status") != null) {
+                metric.setStatus((String) definition.get("status"));
+            }
         }
-
-        if (data.get("comparisonType") instanceof List) {
-            metric.setComparisonType((List<String>) data.get("comparisonType"));
-        }
-
-        metric.setDerivedFormula((String) data.get("derivedFormula"));
-
-        if (data.get("baseMetricIds") instanceof List) {
-            metric.setBaseMetricIds((List<String>) data.get("baseMetricIds"));
-        }
-
-        metric.setStatus((String) data.get("status"));
 
         return metric;
     }

@@ -87,6 +87,7 @@ public class MetricValidator {
 
     /**
      * 验证原子指标
+     * 原子指标：直接映射物理字段，不需要聚合函数
      */
     private void validateAtomicMetric(ExtractedMetric metric, ValidationResult result) {
         // 验证业务过程对象类型是否存在
@@ -100,13 +101,8 @@ public class MetricValidator {
             }
         }
 
-        // 验证聚合函数
-        if (metric.getAggregationFunction() == null || metric.getAggregationFunction().isEmpty()) {
-            result.addError("MISSING_AGGREGATION_FUNCTION", "原子指标必须指定聚合函数");
-        } else if (!isValidAggregationFunction(metric.getAggregationFunction())) {
-            result.addError("INVALID_AGGREGATION_FUNCTION", "不支持的聚合函数: " + metric.getAggregationFunction() + 
-                "，可选值: " + String.join(", ", VALID_AGGREGATION_FUNCTIONS));
-        }
+        // 原子指标不需要聚合函数（直接从物理字段取值）
+        // 如果有聚合函数也接受（兼容旧数据）
 
         // 验证指标名称
         if (metric.getName() == null || metric.getName().isEmpty()) {
@@ -132,10 +128,15 @@ public class MetricValidator {
         if (metric.getAtomicMetricId() == null || metric.getAtomicMetricId().isEmpty()) {
             result.addError("MISSING_ATOMIC_METRIC", "派生指标必须引用原子指标");
         } else {
-            try {
-                atomicMetricService.getAtomicMetric(metric.getAtomicMetricId());
-            } catch (Exception e) {
-                result.addError("ATOMIC_METRIC_NOT_FOUND", "引用的原子指标不存在: " + metric.getAtomicMetricId());
+            // 检查是否为新生成的ID（新指标在保存前验证时跳过数据库查询）
+            if (isNewlyGeneratedId(metric.getAtomicMetricId())) {
+                result.addInfo("ATOMIC_METRIC_NEW", "原子指标为新提取，保存后将在数据库中验证");
+            } else {
+                try {
+                    atomicMetricService.getAtomicMetric(metric.getAtomicMetricId());
+                } catch (Exception e) {
+                    result.addError("ATOMIC_METRIC_NOT_FOUND", "引用的原子指标不存在: " + metric.getAtomicMetricId());
+                }
             }
         }
 
@@ -201,10 +202,15 @@ public class MetricValidator {
         } else {
             // 验证所有引用的指标都存在
             for (String metricId : metric.getBaseMetricIds()) {
-                try {
-                    metricService.getMetricDefinition(metricId);
-                } catch (Exception e) {
-                    result.addError("BASE_METRIC_NOT_FOUND", "引用的基础指标不存在: " + metricId);
+                // 检查是否为新生成的ID（新指标在保存前验证时跳过数据库查询）
+                if (isNewlyGeneratedId(metricId)) {
+                    result.addInfo("BASE_METRIC_NEW", "基础指标为新提取，保存后将在数据库中验证");
+                } else {
+                    try {
+                        metricService.getMetricDefinition(metricId);
+                    } catch (Exception e) {
+                        result.addError("BASE_METRIC_NOT_FOUND", "引用的基础指标不存在: " + metricId);
+                    }
                 }
             }
         }
@@ -213,6 +219,18 @@ public class MetricValidator {
         if (metric.getName() == null || metric.getName().isEmpty()) {
             result.addWarning("MISSING_NAME", "建议提供指标名称");
         }
+    }
+
+    /**
+     * 判断是否为新生成的ID（UUID格式）
+     * 新提取的指标使用随机UUID，在保存前验证时应跳过数据库查询
+     */
+    private boolean isNewlyGeneratedId(String id) {
+        if (id == null || id.isEmpty()) {
+            return false;
+        }
+        // UUID格式: 8-4-4-4-12 的十六进制字符串
+        return id.matches("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$");
     }
 
     /**
@@ -310,6 +328,10 @@ public class MetricValidator {
         atomic.setAggregationField(extracted.getAggregationField());
         atomic.setUnit(extracted.getUnit());
         atomic.setStatus(extracted.getStatus() != null ? extracted.getStatus() : "active");
+        
+        System.out.println("[MetricValidator.convertToAtomicMetric] 指标 " + atomic.getName() + 
+            " 转换后: aggregationField=" + atomic.getAggregationField() + 
+            ", description=" + atomic.getDescription());
         return atomic;
     }
 

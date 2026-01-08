@@ -46,10 +46,18 @@ public class MappingService {
         return instanceStorage.searchInstances("mapping", filters);
     }
 
-    public List<Map<String, Object>> getMappingsByTable(String tableId) throws IOException {
+    public List<Map<String, Object>> getMappingsByTable(String tableNameOrId) throws IOException {
         Map<String, Object> filters = new HashMap<>();
-        filters.put("table_id", tableId);
-        return instanceStorage.searchInstances("mapping", filters);
+        // 先尝试按table_name查询
+        filters.put("table_name", tableNameOrId);
+        List<Map<String, Object>> result = instanceStorage.searchInstances("mapping", filters);
+        // 如果没找到，再尝试按table_id查询
+        if (result.isEmpty()) {
+            filters.clear();
+            filters.put("table_id", tableNameOrId);
+            result = instanceStorage.searchInstances("mapping", filters);
+        }
+        return result;
     }
 
     public void updateMapping(String mappingId, Map<String, String> columnPropertyMappings, String primaryKeyColumn) throws IOException {

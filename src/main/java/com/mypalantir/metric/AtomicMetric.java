@@ -46,6 +46,9 @@ public class AtomicMetric {
         if (aggregationFunction != null) {
             map.put("aggregation_function", aggregationFunction);
         }
+        if (aggregationField != null) {
+            map.put("aggregation_field", aggregationField);
+        }
         if (status != null) {
             map.put("status", status);
         }
@@ -55,9 +58,6 @@ public class AtomicMetric {
         }
         if (description != null) {
             map.put("description", description);
-        }
-        if (aggregationField != null) {
-            map.put("aggregation_field", aggregationField);
         }
         if (unit != null) {
             map.put("unit", unit);

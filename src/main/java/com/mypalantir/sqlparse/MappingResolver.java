@@ -30,7 +30,7 @@ public class MappingResolver {
     /**
      * 将 SQL 解析结果与系统映射关系进行对齐
      */
-    public MappingAlignmentResult alignWithMappings(SqlParser.SqlParseResult sqlResult) {
+    public MappingAlignmentResult alignWithMappings(CalciteSqlParseResult sqlResult) {
         MappingAlignmentResult result = new MappingAlignmentResult();
 
         List<FieldMapping> fieldMappings = new ArrayList<>();
@@ -39,24 +39,52 @@ public class MappingResolver {
         Map<String, String> tableToObjectMap = new HashMap<>();
         List<JoinPath> joinPaths = new ArrayList<>();
 
-        // 1. 建立表到对象类型的映射
-        Map<String, SqlParser.TableReference> tableMap = buildTableMap(sqlResult);
-        Map<String, DataSourceMapping> mappingsByTable = loadMappingsForTables(tableMap.keySet());
+        System.out.println("[MappingResolver] ========== 开始映射对齐 ==========");
+        System.out.println("[MappingResolver] SQL解析结果:");
+        System.out.println("  - 表数量: " + sqlResult.getTables().size());
+        System.out.println("  - SELECT字段数量: " + sqlResult.getSelectFields().size());
+        System.out.println("  - WHERE条件数量: " + sqlResult.getWhereConditions().size());
+        System.out.println("  - GROUP BY字段数量: " + sqlResult.getGroupByFields().size());
+        System.out.println("  - 聚合字段数量: " + sqlResult.getAggregations().size());
 
-        for (Map.Entry<String, SqlParser.TableReference> entry : tableMap.entrySet()) {
+        // 1. 建立表到对象类型的映射
+        Map<String, CalciteSqlParseResult.TableReference> tableMap = buildTableMap(sqlResult);
+        System.out.println("[MappingResolver] 表映射:");
+        for (Map.Entry<String, CalciteSqlParseResult.TableReference> entry : tableMap.entrySet()) {
+            System.out.println("  - key: " + entry.getKey() + ", tableName: " + entry.getValue().getTableName() + ", alias: " + entry.getValue().getAlias());
+        }
+        
+        Map<String, DataSourceMapping> mappingsByTable = loadMappingsForTables(tableMap.keySet());
+        System.out.println("[MappingResolver] 加载的映射配置数量: " + mappingsByTable.size());
+        for (Map.Entry<String, DataSourceMapping> entry : mappingsByTable.entrySet()) {
+            DataSourceMapping mapping = entry.getValue();
+            System.out.println("  - key: " + entry.getKey() + ", objectType: " + mapping.getObjectType() + ", tableName: " + mapping.getTableName());
+            System.out.println("    列映射: " + mapping.getColumnPropertyMappings());
+        }
+
+        for (Map.Entry<String, CalciteSqlParseResult.TableReference> entry : tableMap.entrySet()) {
             String tableKey = entry.getKey();
-            SqlParser.TableReference table = entry.getValue();
+            CalciteSqlParseResult.TableReference table = entry.getValue();
 
             DataSourceMapping mapping = mappingsByTable.get(tableKey.toLowerCase());
             if (mapping != null) {
                 tableToObjectMap.put(tableKey, mapping.getObjectType());
                 involvedObjectTypes.add(mapping.getObjectType());
                 result.setMappingId(mapping.getId());
+                System.out.println("[MappingResolver] 表 '" + tableKey + "' 映射到对象类型: " + mapping.getObjectType());
+            } else {
+                System.out.println("[MappingResolver] 警告: 表 '" + tableKey + "' 未找到映射配置");
             }
         }
 
         // 2. 处理 SELECT 字段的映射
-        for (SqlParser.SelectField selectField : sqlResult.getSelectFields()) {
+        System.out.println("[MappingResolver] 开始处理SELECT字段映射:");
+        for (int i = 0; i < sqlResult.getSelectFields().size(); i++) {
+            CalciteSqlParseResult.SelectField selectField = sqlResult.getSelectFields().get(i);
+            System.out.println("  [" + i + "] rawExpression=" + selectField.getRawExpression() + 
+                ", fieldName=" + selectField.getFieldName() + ", alias=" + selectField.getAlias() + 
+                ", isAggregated=" + selectField.isAggregated() + ", aggregationType=" + selectField.getAggregationType());
+            
             FieldMapping fieldMapping = resolveFieldMapping(
                 selectField,
                 tableMap,
@@ -64,17 +92,25 @@ public class MappingResolver {
                 mappingsByTable
             );
 
+            if (fieldMapping != null) {
+                System.out.println("    -> sqlField=" + fieldMapping.getSqlField() + ", objectType=" + fieldMapping.getObjectType() + 
+                    ", objectProperty=" + fieldMapping.getObjectProperty() + ", confidence=" + fieldMapping.getConfidence());
+            }
+
             if (fieldMapping != null && fieldMapping.getConfidence() == MappingConfidence.HIGH) {
                 fieldMappings.add(fieldMapping);
+                System.out.println("    -> 添加到fieldMappings (HIGH confidence)");
             } else if (fieldMapping != null) {
                 unmappedFields.add(createUnmappedField(selectField, fieldMapping));
+                System.out.println("    -> 添加到unmappedFields (非HIGH confidence)");
             } else {
                 unmappedFields.add(createUnmappedField(selectField, null));
+                System.out.println("    -> 添加到unmappedFields (映射为null)");
             }
         }
 
         // 3. 处理 WHERE 条件中的字段映射
-        for (SqlParser.WhereCondition condition : sqlResult.getWhereConditions()) {
+        for (CalciteSqlParseResult.WhereCondition condition : sqlResult.getWhereConditions()) {
             FieldMapping fieldMapping = resolveWhereFieldMapping(
                 condition,
                 tableMap,
@@ -125,12 +161,52 @@ public class MappingResolver {
      * 根据表名查找对应的映射关系
      */
     public List<DataSourceMapping> findMappingsByTable(String tableName) {
+        System.out.println("[MappingResolver] findMappingsByTable: tableName=" + tableName);
         try {
+            // 尝试多种大小写组合
             List<Map<String, Object>> mappings = mappingService.getMappingsByTable(tableName);
+            if (mappings.isEmpty()) {
+                System.out.println("[MappingResolver] 第一次查询为空，尝试大写表名: " + tableName.toUpperCase());
+                mappings = mappingService.getMappingsByTable(tableName.toUpperCase());
+            }
+            if (mappings.isEmpty()) {
+                System.out.println("[MappingResolver] 大小写精确查询都为空，尝试获取所有映射进行大小写不敏感匹配");
+                mappings = findAllMappingsCaseInsensitive(tableName);
+            }
+            
+            System.out.println("[MappingResolver] getMappingsByTable 返回数量: " + mappings.size());
+            for (Map<String, Object> m : mappings) {
+                System.out.println("[MappingResolver]   - mapping: id=" + m.get("id") + 
+                    ", object_type=" + m.get("object_type") + 
+                    ", table_name=" + m.get("table_name"));
+            }
             return mappings.stream()
                 .map(DataSourceMapping::new)
                 .collect(Collectors.toList());
         } catch (Exception e) {
+            System.out.println("[MappingResolver] findMappingsByTable 异常: " + e.getMessage());
+            return Collections.emptyList();
+        }
+    }
+    
+    /**
+     * 获取所有映射并进行大小写不敏感匹配
+     */
+    private List<Map<String, Object>> findAllMappingsCaseInsensitive(String tableName) {
+        try {
+            List<Map<String, Object>> allMappings = instanceStorage.searchInstances("mapping", new HashMap<>());
+            String targetName = tableName.toLowerCase();
+            List<Map<String, Object>> matched = new ArrayList<>();
+            for (Map<String, Object> m : allMappings) {
+                String storedTableName = (String) m.get("table_name");
+                if (storedTableName != null && storedTableName.equalsIgnoreCase(targetName)) {
+                    matched.add(m);
+                }
+            }
+            System.out.println("[MappingResolver] 大小写不敏感匹配结果: " + matched.size());
+            return matched;
+        } catch (Exception e) {
+            System.out.println("[MappingResolver] findAllMappingsCaseInsensitive 异常: " + e.getMessage());
             return Collections.emptyList();
         }
     }
@@ -177,10 +253,10 @@ public class MappingResolver {
     /**
      * 构建表映射表
      */
-    private Map<String, SqlParser.TableReference> buildTableMap(SqlParser.SqlParseResult sqlResult) {
-        Map<String, SqlParser.TableReference> tableMap = new HashMap<>();
+    private Map<String, CalciteSqlParseResult.TableReference> buildTableMap(CalciteSqlParseResult sqlResult) {
+        Map<String, CalciteSqlParseResult.TableReference> tableMap = new HashMap<>();
 
-        for (SqlParser.TableReference table : sqlResult.getTables()) {
+        for (CalciteSqlParseResult.TableReference table : sqlResult.getTables()) {
             tableMap.put(table.getTableName().toLowerCase(), table);
             if (table.getAlias() != null) {
                 tableMap.put(table.getAlias().toLowerCase(), table);
@@ -194,18 +270,25 @@ public class MappingResolver {
      * 加载表的映射关系
      */
     private Map<String, DataSourceMapping> loadMappingsForTables(Set<String> tableNames) {
+        System.out.println("[MappingResolver] loadMappingsForTables: 输入tableNames=" + tableNames);
         Map<String, DataSourceMapping> result = new HashMap<>();
 
         for (String tableName : tableNames) {
+            System.out.println("[MappingResolver] 处理表名: " + tableName);
             List<DataSourceMapping> mappings = findMappingsByTable(tableName);
+            System.out.println("[MappingResolver]   -> 找到映射数量: " + mappings.size());
             for (DataSourceMapping mapping : mappings) {
+                System.out.println("[MappingResolver]   -> 添加映射: tableName=" + tableName + ", objectType=" + mapping.getObjectType());
                 result.put(tableName.toLowerCase(), mapping);
                 if (mapping.getTableName() != null) {
+                    System.out.println("[MappingResolver]   -> 同时添加表名映射: " + mapping.getTableName().toLowerCase());
                     result.put(mapping.getTableName().toLowerCase(), mapping);
+                    result.put(mapping.getTableName().toUpperCase(), mapping);
                 }
             }
         }
 
+        System.out.println("[MappingResolver] loadMappingsForTables 完成: result.size=" + result.size());
         return result;
     }
 
@@ -213,18 +296,24 @@ public class MappingResolver {
      * 解析 SELECT 字段的映射
      */
     private FieldMapping resolveFieldMapping(
-            SqlParser.SelectField selectField,
-            Map<String, SqlParser.TableReference> tableMap,
+            CalciteSqlParseResult.SelectField selectField,
+            Map<String, CalciteSqlParseResult.TableReference> tableMap,
             Map<String, String> tableToObjectMap,
             Map<String, DataSourceMapping> mappingsByTable) {
 
         FieldMapping fieldMapping = new FieldMapping();
         String rawExpression = selectField.getRawExpression();
-        fieldMapping.setSqlField(rawExpression);
+        // 对于聚合字段，sqlField应设置为物理字段名（不含聚合函数），以便后续匹配
+        // 例如：COUNT(ID) AS count_star -> sqlField = ID
+        String fieldName = selectField.getFieldName();
+        if (selectField.isAggregated() && fieldName != null && !"*".equals(fieldName)) {
+            fieldMapping.setSqlField(fieldName);
+        } else {
+            fieldMapping.setSqlField(rawExpression);
+        }
 
         // 提取表别名和字段名
         String tableAlias = selectField.getTableAlias();
-        String fieldName = selectField.getFieldName();
 
         // 如果没有显式的表别名，尝试从表达式中提取
         if (tableAlias == null && rawExpression.contains(".")) {
@@ -237,13 +326,13 @@ public class MappingResolver {
         // 确定表名
         String tableName = null;
         if (tableAlias != null) {
-            SqlParser.TableReference table = tableMap.get(tableAlias.toLowerCase());
+            CalciteSqlParseResult.TableReference table = tableMap.get(tableAlias.toLowerCase());
             if (table != null) {
                 tableName = table.getTableName();
             }
         } else {
             // 使用主表
-            for (SqlParser.TableReference table : tableMap.values()) {
+            for (CalciteSqlParseResult.TableReference table : tableMap.values()) {
                 if (table.isMainTable()) {
                     tableName = table.getTableName();
                     break;
@@ -298,8 +387,8 @@ public class MappingResolver {
      * 解析 WHERE 字段的映射
      */
     private FieldMapping resolveWhereFieldMapping(
-            SqlParser.WhereCondition condition,
-            Map<String, SqlParser.TableReference> tableMap,
+            CalciteSqlParseResult.WhereCondition condition,
+            Map<String, CalciteSqlParseResult.TableReference> tableMap,
             Map<String, String> tableToObjectMap,
             Map<String, DataSourceMapping> mappingsByTable) {
 
@@ -312,7 +401,7 @@ public class MappingResolver {
 
         String tableName = null;
         if (tableAlias != null) {
-            SqlParser.TableReference table = tableMap.get(tableAlias.toLowerCase());
+            CalciteSqlParseResult.TableReference table = tableMap.get(tableAlias.toLowerCase());
             if (table != null) {
                 tableName = table.getTableName();
             }
@@ -354,7 +443,7 @@ public class MappingResolver {
      */
     private FieldMapping resolveGroupByFieldMapping(
             String groupByField,
-            Map<String, SqlParser.TableReference> tableMap,
+            Map<String, CalciteSqlParseResult.TableReference> tableMap,
             Map<String, String> tableToObjectMap,
             Map<String, DataSourceMapping> mappingsByTable) {
 
@@ -370,7 +459,7 @@ public class MappingResolver {
 
         String tableName = null;
         if (tableAlias != null) {
-            SqlParser.TableReference table = tableMap.get(tableAlias.toLowerCase());
+            CalciteSqlParseResult.TableReference table = tableMap.get(tableAlias.toLowerCase());
             if (table != null) {
                 tableName = table.getTableName();
             }
@@ -410,7 +499,7 @@ public class MappingResolver {
     /**
      * 创建未映射字段记录
      */
-    private UnmappedField createUnmappedField(SqlParser.SelectField selectField, FieldMapping mapping) {
+    private UnmappedField createUnmappedField(CalciteSqlParseResult.SelectField selectField, FieldMapping mapping) {
         UnmappedField unmapped = new UnmappedField();
         unmapped.setSqlExpression(selectField.getRawExpression());
         unmapped.setFieldType("SELECT");
@@ -429,7 +518,7 @@ public class MappingResolver {
     /**
      * 创建 WHERE 未映射字段记录
      */
-    private UnmappedField createUnmappedField(SqlParser.WhereCondition condition, FieldMapping mapping) {
+    private UnmappedField createUnmappedField(CalciteSqlParseResult.WhereCondition condition, FieldMapping mapping) {
         UnmappedField unmapped = new UnmappedField();
         unmapped.setSqlExpression(condition.getField() + " " + condition.getOperator() + " " + condition.getValue());
         unmapped.setFieldType("WHERE");
@@ -466,13 +555,13 @@ public class MappingResolver {
      * 分析 JOIN 路径
      */
     private List<JoinPath> analyzeJoinPaths(
-            List<SqlParser.JoinInfo> joins,
+            List<CalciteSqlParseResult.JoinInfo> joins,
             Map<String, String> tableToObjectMap,
             Map<String, DataSourceMapping> mappingsByTable) {
 
         List<JoinPath> joinPaths = new ArrayList<>();
 
-        for (SqlParser.JoinInfo join : joins) {
+        for (CalciteSqlParseResult.JoinInfo join : joins) {
             JoinPath path = new JoinPath();
             path.setJoinType(join.getJoinType());
             path.setJoinedTable(join.getJoinedTable());
@@ -635,7 +724,7 @@ public class MappingResolver {
         private String sqlExpression;
         private String fieldType;
         private boolean aggregated;
-        private SqlParser.AggregationType aggregationType;
+        private String aggregationType;
         private String tableAlias;
         private String suggestedObjectType;
         private MappingConfidence confidence = MappingConfidence.LOW;
@@ -647,8 +736,8 @@ public class MappingResolver {
         public void setFieldType(String fieldType) { this.fieldType = fieldType; }
         public boolean isAggregated() { return aggregated; }
         public void setAggregated(boolean aggregated) { this.aggregated = aggregated; }
-        public SqlParser.AggregationType getAggregationType() { return aggregationType; }
-        public void setAggregationType(SqlParser.AggregationType aggregationType) { this.aggregationType = aggregationType; }
+        public String getAggregationType() { return aggregationType; }
+        public void setAggregationType(String aggregationType) { this.aggregationType = aggregationType; }
         public String getTableAlias() { return tableAlias; }
         public void setTableAlias(String tableAlias) { this.tableAlias = tableAlias; }
         public String getSuggestedObjectType() { return suggestedObjectType; }

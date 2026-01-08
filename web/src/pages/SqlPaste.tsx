@@ -1,14 +1,16 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { metricApi, type SqlPasteParseResult, type ExtractedMetric, type MetricValidation, type SemanticAlignment } from '../api/metric';
+import { useWorkspace } from '../WorkspaceContext';
 
 const SqlPastePage: React.FC = () => {
   const navigate = useNavigate();
+  const { selectedWorkspaceId } = useWorkspace();
   const [sql, setSql] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
   const [result, setResult] = useState<SqlPasteParseResult | null>(null);
   const [selectedMetrics, setSelectedMetrics] = useState<Set<number>>(new Set());
-  const [enableLLM, setEnableLLM] = useState<boolean>(true);
+  const [enableLLM, setEnableLLM] = useState<boolean>(false);
   const [saveLoading, setSaveLoading] = useState<boolean>(false);
   const [saveResult, setSaveResult] = useState<any>(null);
   const [validateLoading, setValidateLoading] = useState<boolean>(false);
@@ -24,7 +26,7 @@ const SqlPastePage: React.FC = () => {
     setLoading(true);
     setSaveResult(null);
     try {
-      const parseResult = await metricApi.parseAndExtractSql(sql, { enableLLM });
+      const parseResult = await metricApi.parseAndExtractSql(sql, { enableLLM, workspaceId: selectedWorkspaceId || undefined });
       setResult(parseResult);
       
       // 默认选中所有指标
@@ -87,32 +89,73 @@ const SqlPastePage: React.FC = () => {
         try {
           let validateResult;
           
+          // 获取字段
+          const businessProcess = metric.definition.businessProcess || metric.definition.business_process;
+          const aggregationFunction = metric.definition.aggregationFunction || metric.definition.aggregation_function;
+          const aggregationField = metric.definition.aggregationField || metric.definition.aggregation_field;
+          
+          // 根据指标类型进行验证
           if (metric.category === 'ATOMIC') {
-            // 验证原子指标
+            // 原子指标：只需验证业务过程，不需要聚合函数
+            if (!businessProcess) {
+              throw new Error('缺少业务过程对象类型');
+            }
+            // 原子指标不需要 aggregationFunction（直接从物理字段取值）
+            
             validateResult = await metricApi.validateAtomicMetric({
+              id: metric.id || metric.suggestedId,
               name: metric.name,
               display_name: metric.displayName,
               description: metric.description,
-              business_process: metric.definition.businessProcess || metric.definition.business_process,
-              aggregation_function: metric.definition.aggregationFunction || metric.definition.aggregation_function,
-              aggregation_field: metric.definition.aggregationField || metric.definition.aggregation_field,
+              business_process: businessProcess,
+              aggregation_function: aggregationFunction || undefined,
+              aggregation_field: aggregationField || '*',
               unit: metric.unit,
               status: 'active'
             });
-          } else {
-            // 验证派生指标/复合指标
+          } else if (metric.category === 'DERIVED') {
+            // 派生指标：需要聚合函数
+            if (!businessProcess) {
+              throw new Error('缺少业务过程对象类型');
+            }
+            if (!aggregationFunction) {
+              throw new Error('缺少聚合函数');
+            }
+            
             validateResult = await metricApi.validateMetricDefinition({
+              id: metric.id || metric.suggestedId,
               name: metric.name,
               display_name: metric.displayName,
               description: metric.description,
-              metric_type: metric.category.toLowerCase() as 'derived' | 'composite',
+              metric_type: 'derived',
               atomic_metric_id: metric.definition.atomicMetricId || metric.definition.atomic_metric_id,
               time_dimension: metric.definition.timeDimension || metric.definition.time_dimension,
               time_granularity: (metric.definition.timeGranularity || metric.definition.time_granularity) as 'day' | 'week' | 'month' | 'quarter' | 'year' | undefined,
               dimensions: metric.definition.dimensions,
               filter_conditions: metric.definition.filterConditions || metric.definition.filter_conditions,
-              derived_formula: metric.definition.derivedFormula || metric.definition.derived_formula,
-              base_metric_ids: metric.definition.baseMetricIds || metric.definition.base_metric_ids,
+              derived_formula: undefined,
+              base_metric_ids: undefined,
+              unit: metric.unit,
+              status: 'active'
+            });
+          } else {
+            // 复合指标：不需要聚合函数，需要公式和基础指标
+            const derivedFormula = metric.definition.derivedFormula || metric.definition.derived_formula;
+            const baseMetricIds = metric.definition.baseMetricIds || metric.definition.base_metric_ids;
+            
+            validateResult = await metricApi.validateMetricDefinition({
+              id: metric.id || metric.suggestedId,
+              name: metric.name,
+              display_name: metric.displayName,
+              description: metric.description,
+              metric_type: 'composite',
+              atomic_metric_id: undefined,
+              time_dimension: undefined,
+              time_granularity: undefined,
+              dimensions: undefined,
+              filter_conditions: undefined,
+              derived_formula: derivedFormula,
+              base_metric_ids: baseMetricIds,
               unit: metric.unit,
               status: 'active'
             });
@@ -177,7 +220,7 @@ const SqlPastePage: React.FC = () => {
 
     setSaveLoading(true);
     try {
-      const saveResult = await metricApi.saveExtractedMetrics(metricsToSave, true);
+      const saveResult = await metricApi.saveExtractedMetrics(metricsToSave, true, [], selectedWorkspaceId ? [selectedWorkspaceId] : []);
       setSaveResult(saveResult);
       
       if (saveResult.success) {

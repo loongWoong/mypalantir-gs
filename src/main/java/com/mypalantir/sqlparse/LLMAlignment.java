@@ -31,7 +31,7 @@ public class LLMAlignment {
      * 对 SQL 解析结果进行语义增强
      */
     public SemanticAlignmentResult enhanceSemantic(
-            SqlParser.SqlParseResult sqlResult,
+            CalciteSqlParseResult sqlResult,
             MappingResolver.MappingAlignmentResult mappingResult,
             List<ObjectType> objectTypes) throws LLMException {
         
@@ -87,7 +87,7 @@ public class LLMAlignment {
     /**
      * 识别 SQL 中的业务指标名称
      */
-    public String identifyMetricName(SqlParser.AggregationInfo aggregation, List<ObjectType> objectTypes) throws LLMException {
+    public String identifyMetricName(CalciteSqlParseResult.AggregationInfo aggregation, List<ObjectType> objectTypes) throws LLMException {
         try {
             String systemPrompt = buildMetricNameIdentificationPrompt(objectTypes);
             String userPrompt = buildMetricNameUserPrompt(aggregation);
@@ -130,11 +130,11 @@ public class LLMAlignment {
     /**
      * 构建表元数据信息
      */
-    private String buildTableMetadata(SqlParser.SqlParseResult sqlResult) {
+    private String buildTableMetadata(CalciteSqlParseResult sqlResult) {
         StringBuilder metadata = new StringBuilder();
         metadata.append("## 物理表结构\n\n");
 
-        for (SqlParser.TableReference table : sqlResult.getTables()) {
+        for (CalciteSqlParseResult.TableReference table : sqlResult.getTables()) {
             metadata.append(String.format("### 表: %s", table.getTableName()));
             if (table.getAlias() != null) {
                 metadata.append(String.format(" (别名: %s)", table.getAlias()));
@@ -283,7 +283,7 @@ public class LLMAlignment {
     /**
      * 构建用户提示词
      */
-    private String buildUserPrompt(SqlParser.SqlParseResult sqlResult, MappingResolver.MappingAlignmentResult mappingResult) {
+    private String buildUserPrompt(CalciteSqlParseResult sqlResult, MappingResolver.MappingAlignmentResult mappingResult) {
         StringBuilder prompt = new StringBuilder();
         prompt.append("## SQL 查询语句\n\n");
         prompt.append(sqlResult.getOriginalSql());
@@ -299,7 +299,7 @@ public class LLMAlignment {
 
         if (!sqlResult.getAggregations().isEmpty()) {
             prompt.append("- 聚合字段: ");
-            for (SqlParser.AggregationInfo agg : sqlResult.getAggregations()) {
+            for (CalciteSqlParseResult.AggregationInfo agg : sqlResult.getAggregations()) {
                 prompt.append(String.format("%s(%s) ", agg.getType(), agg.getField()));
             }
             prompt.append("\n");
@@ -313,7 +313,7 @@ public class LLMAlignment {
 
         if (!sqlResult.getWhereConditions().isEmpty()) {
             prompt.append("- 过滤条件: ");
-            for (SqlParser.WhereCondition cond : sqlResult.getWhereConditions()) {
+            for (CalciteSqlParseResult.WhereCondition cond : sqlResult.getWhereConditions()) {
                 prompt.append(String.format("%s %s %s ", cond.getField(), cond.getOperator(), cond.getValue()));
             }
             prompt.append("\n");
@@ -388,7 +388,7 @@ public class LLMAlignment {
     /**
      * 构建指标名称识别用户提示词
      */
-    private String buildMetricNameUserPrompt(SqlParser.AggregationInfo aggregation) {
+    private String buildMetricNameUserPrompt(CalciteSqlParseResult.AggregationInfo aggregation) {
         return String.format("""
             ## 聚合信息
             - 聚合函数: %s
@@ -595,15 +595,15 @@ public class LLMAlignment {
     /**
      * 后处理结果
      */
-    private void postProcessResult(SemanticAlignmentResult result, SqlParser.SqlParseResult sqlResult) {
+    private void postProcessResult(SemanticAlignmentResult result, CalciteSqlParseResult sqlResult) {
         // 为没有推荐指标的聚合字段设置默认值
-        for (SqlParser.AggregationInfo agg : sqlResult.getAggregations()) {
+        for (CalciteSqlParseResult.AggregationInfo agg : sqlResult.getAggregations()) {
             if (!result.getMetrics().stream().anyMatch(m -> m.getSqlField().equals(agg.getExpression()))) {
                 SemanticMetric defaultMetric = new SemanticMetric();
                 defaultMetric.setSqlField(agg.getExpression());
                 defaultMetric.setBusinessMeaning(agg.getField());
                 defaultMetric.setRecommendedName(generateDefaultMetricName(agg));
-                defaultMetric.setAggregationType(agg.getType().name());
+                defaultMetric.setAggregationType(agg.getType());
                 defaultMetric.setSuggestedMetricType("ATOMIC");
                 defaultMetric.setConfidence(0.7);
                 result.getMetrics().add(defaultMetric);
@@ -611,7 +611,7 @@ public class LLMAlignment {
         }
 
         // 为没有分析的时间条件设置默认值
-        for (SqlParser.TimeCondition timeCond : sqlResult.getTimeConditions()) {
+        for (CalciteSqlParseResult.TimeCondition timeCond : sqlResult.getTimeConditions()) {
             if (result.getTimeAnalysis() == null) {
                 TimeAnalysis timeAnalysis = new TimeAnalysis();
                 timeAnalysis.setTimeField(timeCond.getField());
@@ -624,8 +624,8 @@ public class LLMAlignment {
     /**
      * 生成默认指标名称
      */
-    private String generateDefaultMetricName(SqlParser.AggregationInfo agg) {
-        String aggType = agg.getType().name().toLowerCase();
+    private String generateDefaultMetricName(CalciteSqlParseResult.AggregationInfo agg) {
+        String aggType = agg.getType().toLowerCase();
         String fieldName = agg.getField() != null ? agg.getField() : "count";
         return aggType + "_" + fieldName;
     }

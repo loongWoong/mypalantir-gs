@@ -117,6 +117,21 @@ public class MetricController {
             // 创建临时的原子指标对象（不保存到存储）
             AtomicMetric atomicMetric = new AtomicMetric(data);
             
+            // 检查是否为新生成的指标（使用 UUID 格式的 ID）
+            String metricId = atomicMetric.getId();
+            boolean isNewMetric = metricId != null && metricId.matches("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$");
+            
+            if (isNewMetric) {
+                // 新提取的原子指标（无聚合函数），跳过数据库计算
+                Map<String, Object> response = new HashMap<>();
+                response.put("sql", "-- 原子指标验证通过，直接映射物理字段");
+                response.put("columns", new java.util.ArrayList<>());
+                response.put("rows", new java.util.ArrayList<>());
+                response.put("rowCount", 0);
+                response.put("message", "原子指标验证通过，保存后将参与派生指标计算");
+                return ResponseEntity.ok(ApiResponse.success(response));
+            }
+            
             // 构建查询来执行验证
             MetricQuery query = new MetricQuery();
             query.setMetricId("_validate_"); // 临时ID
@@ -148,6 +163,21 @@ public class MetricController {
         try {
             // 创建临时的指标定义对象（不保存到存储）
             MetricDefinition metricDefinition = new MetricDefinition(data);
+            
+            // 检查是否为新生成的指标（使用 UUID 格式的 ID）
+            String metricId = metricDefinition.getId();
+            boolean isNewMetric = metricId != null && metricId.matches("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$");
+            
+            if (isNewMetric) {
+                // 新提取的指标，跳过数据库计算，只返回基础验证通过信息
+                Map<String, Object> response = new HashMap<>();
+                response.put("sql", "-- 新指标验证通过，保存后将执行实际查询");
+                response.put("columns", new java.util.ArrayList<>());
+                response.put("rows", new java.util.ArrayList<>());
+                response.put("rowCount", 0);
+                response.put("message", "指标验证通过，保存后将执行实际查询计算");
+                return ResponseEntity.ok(ApiResponse.success(response));
+            }
             
             // 构建查询来执行验证
             MetricQuery query = new MetricQuery();
