@@ -30,6 +30,17 @@ const CompositeMetricBuilder: React.FC<Props> = ({ onCancel, onSuccess, editMode
   
   // 添加一个标志位，记录是否已经完成初始化回显
   const [isInitialized, setIsInitialized] = useState<boolean>(false);
+  
+  // 验证相关状态
+  const [validating, setValidating] = useState(false);
+  const [validationResult, setValidationResult] = useState<{
+    sql: string;
+    columns: string[];
+    rows: Record<string, any>[];
+    rowCount: number;
+  } | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const [showValidationResult, setShowValidationResult] = useState(false);
 
   useEffect(() => {
     loadBaseMetrics();
@@ -195,6 +206,11 @@ const CompositeMetricBuilder: React.FC<Props> = ({ onCancel, onSuccess, editMode
         requestData.workspace_ids = [selectedWorkspaceId];
       }
 
+      // 编辑模式下需要添加ID
+      if (editMode && initialData) {
+        requestData.id = initialData.id;
+      }
+
       if (editMode && initialData) {
         // 编辑模式：调用更新API
         await metricApi.updateMetricDefinition(initialData.id, requestData);
@@ -211,6 +227,63 @@ const CompositeMetricBuilder: React.FC<Props> = ({ onCancel, onSuccess, editMode
     }
   };
 
+  // 验证复合指标
+  const handleValidate = async () => {
+    // 验证必填字段
+    if (!formula || formula.trim().length === 0) {
+      alert('请输入公式');
+      return;
+    }
+    if (usedMetricIds.length === 0) {
+      alert('公式中至少包含一个指标');
+      return;
+    }
+
+    setValidating(true);
+    setValidationError(null);
+    setValidationResult(null);
+    try {
+      // 将公式中的名称转换为ID
+      const formulaWithIds = convertFormulaNamesToIds(formula);
+      
+      const metricDefinition: Partial<MetricDefinition> = {
+        name: name || '_validate_',
+        display_name: displayName,
+        description,
+        metric_type: 'composite',
+        base_metric_ids: usedMetricIds,
+        derived_formula: formulaWithIds,
+        unit: unit || undefined,
+        status: 'active',
+      };
+
+      // 调用验证 API
+      const result = await metricApi.validateMetricDefinition(metricDefinition);
+      console.log('复合指标验证结果:', result);
+      
+      // 如果 columns 为 null，从 rows 中提取列名
+      if (!result.columns && result.rows && result.rows.length > 0) {
+        result.columns = Object.keys(result.rows[0]);
+        console.log('从 rows 提取的 columns:', result.columns);
+      }
+      
+      setValidationResult(result);
+      setShowValidationResult(true);
+    } catch (error: any) {
+      console.error('Validation failed:', error);
+      let errorMessage = '验证失败';
+      if (error.response?.data?.message) {
+        errorMessage += ': ' + error.response.data.message;
+      } else if (error.message) {
+        errorMessage += ': ' + error.message;
+      }
+      setValidationError(errorMessage);
+      setShowValidationResult(true);
+    } finally {
+      setValidating(false);
+    }
+  };
+
   return (
     <div className="max-w-7xl mx-auto">
       <div className="bg-white rounded-lg shadow-lg p-6">
@@ -221,14 +294,32 @@ const CompositeMetricBuilder: React.FC<Props> = ({ onCancel, onSuccess, editMode
           </div>
           <div className="flex space-x-3">
             <button
+              onClick={handleValidate}
+              disabled={validating || !formula || usedMetricIds.length === 0}
+              className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:bg-gray-400 transition-colors flex items-center gap-2"
+            >
+              {validating ? (
+                <>
+                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  验证中...
+                </>
+              ) : (
+                '验证指标'
+              )}
+            </button>
+            <button
               onClick={onCancel}
               className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+              disabled={validating}
             >
               取消
             </button>
             <button
               onClick={handleSave}
-              disabled={!name || usedMetricIds.length === 0 || !formula}
+              disabled={validating || !name || usedMetricIds.length === 0 || !formula}
               className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:bg-gray-300"
             >
               {editMode ? '保存修改' : '保存指标'}
@@ -416,6 +507,105 @@ const CompositeMetricBuilder: React.FC<Props> = ({ onCancel, onSuccess, editMode
             </div>
           </div>
         </div>
+
+        {/* 验证结果展示区域 */}
+        {showValidationResult && (
+          <div className="mt-6 bg-white rounded-lg shadow-lg p-6 border border-gray-200">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">验证结果</h3>
+              <button
+                onClick={() => setShowValidationResult(false)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {validationError ? (
+              <div className="bg-red-50 border border-red-200 rounded p-4">
+                <div className="flex items-start">
+                  <svg className="w-5 h-5 text-red-500 mt-0.5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                  </svg>
+                  <div>
+                    <p className="text-sm font-medium text-red-800">验证失败</p>
+                    <p className="text-sm text-red-700 mt-1">{validationError}</p>
+                  </div>
+                </div>
+              </div>
+            ) : validationResult ? (
+              <div className="space-y-4">
+                {/* SQL 展示 */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-sm font-medium text-gray-700">执行的 SQL</label>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(validationResult.sql);
+                        alert('SQL 已复制到剪贴板');
+                      }}
+                      className="text-xs px-2 py-1 bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
+                    >
+                      复制 SQL
+                    </button>
+                  </div>
+                  <pre className="text-xs text-gray-800 bg-gray-50 p-3 rounded border border-gray-300 overflow-x-auto font-mono">
+                    {validationResult.sql}
+                  </pre>
+                </div>
+
+                {/* 查询结果展示 */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-sm font-medium text-gray-700">
+                      查询结果 ({validationResult.rowCount} 条记录)
+                    </label>
+                  </div>
+                  
+                  {validationResult.rows && validationResult.rows.length > 0 ? (
+                    <div className="overflow-x-auto border border-gray-300 rounded max-h-96 overflow-y-auto">
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            {(validationResult.columns || []).map((col, idx) => (
+                              <th
+                                key={idx}
+                                className="px-4 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider"
+                              >
+                                {col}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {validationResult.rows.map((row, rowIdx) => (
+                            <tr key={rowIdx} className="hover:bg-gray-50">
+                              {(validationResult.columns || []).map((col, colIdx) => (
+                                <td key={colIdx} className="px-4 py-2 text-sm text-gray-900">
+                                  {row[col] !== undefined && row[col] !== null
+                                    ? typeof row[col] === 'object'
+                                      ? JSON.stringify(row[col])
+                                      : String(row[col])
+                                    : '-'}
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="bg-gray-50 border border-gray-200 rounded p-4 text-center">
+                      <p className="text-sm text-gray-600">无查询结果</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : null}
+          </div>
+        )}
       </div>
     </div>
   );

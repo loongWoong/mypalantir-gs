@@ -136,6 +136,38 @@ export const metricApi = {
     return response.data.data;
   },
 
+  // 验证原子指标
+  validateAtomicMetric: async (metric: Partial<AtomicMetric>): Promise<{
+    sql: string;
+    columns: string[];
+    rows: Record<string, any>[];
+    rowCount: number;
+  }> => {
+    const response = await apiClient.post<ApiResponse<{
+      sql: string;
+      columns: string[];
+      rows: Record<string, any>[];
+      rowCount: number;
+    }>>('/metrics/atomic-metrics/validate', metric);
+    return response.data.data;
+  },
+
+  // 验证指标定义（派生指标/复合指标）
+  validateMetricDefinition: async (definition: Partial<MetricDefinition>): Promise<{
+    sql: string;
+    columns: string[];
+    rows: Record<string, any>[];
+    rowCount: number;
+  }> => {
+    const response = await apiClient.post<ApiResponse<{
+      sql: string;
+      columns: string[];
+      rows: Record<string, any>[];
+      rowCount: number;
+    }>>('/metrics/definitions/validate', definition);
+    return response.data.data;
+  },
+
   // 指标定义管理
   createMetricDefinition: async (definition: Partial<MetricDefinition>): Promise<{ id: string }> => {
     const response = await apiClient.post<ApiResponse<{ id: string }>>('/metrics/definitions', definition);

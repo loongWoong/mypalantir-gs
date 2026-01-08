@@ -107,6 +107,70 @@ public class MetricController {
         }
     }
 
+    /**
+     * 验证原子指标 - 预执行查询并返回 SQL 和结果
+     * 用于在创建指标前验证指标定义是否正确
+     */
+    @PostMapping("/atomic-metrics/validate")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> validateAtomicMetric(@RequestBody Map<String, Object> data) {
+        try {
+            // 创建临时的原子指标对象（不保存到存储）
+            AtomicMetric atomicMetric = new AtomicMetric(data);
+            
+            // 构建查询来执行验证
+            MetricQuery query = new MetricQuery();
+            query.setMetricId("_validate_"); // 临时ID
+            
+            // 执行查询获取结果（包含 SQL 和数据）
+            MetricResult result = metricCalculator.calculateAtomicMetric(atomicMetric, query);
+            
+            // 构建响应
+            Map<String, Object> response = new HashMap<>();
+            response.put("sql", result.getSql());
+            response.put("columns", result.getColumns());
+            response.put("rows", result.getResults());
+            response.put("rowCount", result.getResults() != null ? result.getResults().size() : 0);
+            
+            return ResponseEntity.ok(ApiResponse.success(response));
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(ApiResponse.error(400, "验证失败: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * 验证指标定义（派生指标/复合指标） - 预执行查询并返回 SQL 和结果
+     * 用于在创建指标前验证指标定义是否正确
+     */
+    @PostMapping("/definitions/validate")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> validateMetricDefinition(@RequestBody Map<String, Object> data) {
+        try {
+            // 创建临时的指标定义对象（不保存到存储）
+            MetricDefinition metricDefinition = new MetricDefinition(data);
+            
+            // 构建查询来执行验证
+            MetricQuery query = new MetricQuery();
+            query.setMetricId("_validate_"); // 临时ID
+            
+            // 执行查询获取结果（包含 SQL 和数据）
+            MetricResult result = metricCalculator.calculateMetric(metricDefinition, query);
+            
+            // 构建响应
+            Map<String, Object> response = new HashMap<>();
+            response.put("sql", result.getSql());
+            response.put("columns", result.getColumns());
+            response.put("rows", result.getResults());
+            response.put("rowCount", result.getResults() != null ? result.getResults().size() : 0);
+            
+            return ResponseEntity.ok(ApiResponse.success(response));
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(ApiResponse.error(400, "验证失败: " + e.getMessage()));
+        }
+    }
+
     // ==================== 指标定义 API ====================
 
     @PostMapping("/definitions")
