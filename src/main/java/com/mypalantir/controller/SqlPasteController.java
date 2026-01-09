@@ -6,6 +6,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -118,7 +120,11 @@ public class SqlPasteController {
                     .body(ApiResponse.error(400, "SQL 语句不能为空"));
             }
 
-            ValidationOnlyResult result = sqlPasteMetricService.validateOnly(sql);
+            @SuppressWarnings("unchecked")
+            List<Integer> metricIndices = request.containsKey("metricIndices") ?
+                (List<Integer>) request.get("metricIndices") : null;
+
+            ValidationOnlyResult result = sqlPasteMetricService.validateOnly(sql, metricIndices);
             ValidationOnlyResultDTO dto = convertToValidationResultDTO(result);
 
             return ResponseEntity.ok(ApiResponse.success(dto));
@@ -126,6 +132,107 @@ public class SqlPasteController {
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(ApiResponse.error(500, "验证失败: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * 测试端点 - 验证后端是否能接收请求
+     */
+    @PostMapping("/test-verify")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> testVerifyMetrics(
+            @RequestBody Object requestBody) {
+        System.out.println("[SqlPasteController.testVerifyMetrics] ===== 收到测试验证请求 =====");
+        System.out.println("[SqlPasteController.testVerifyMetrics] 请求体: " + requestBody);
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("received", true);
+        response.put("requestType", requestBody.getClass().getSimpleName());
+        response.put("timestamp", System.currentTimeMillis());
+
+        if (requestBody instanceof List) {
+            @SuppressWarnings("unchecked")
+            List<?> list = (List<?>) requestBody;
+            response.put("itemCount", list.size());
+        }
+
+        return ResponseEntity.ok(ApiResponse.success(response));
+    }
+
+    /**
+     * 验证指标 - 基于选定指标组装SQL并执行查询
+     */
+    @PostMapping("/verify-metrics")
+    public ResponseEntity<ApiResponse<MetricVerificationResultDTO>> verifyMetrics(
+            @RequestBody Object requestBody) {
+        System.out.println("[SqlPasteController.verifyMetrics] ===== 收到验证指标请求 =====");
+        System.out.println("[SqlPasteController.verifyMetrics] 请求体类型: " + requestBody.getClass().getSimpleName());
+        System.out.println("[SqlPasteController.verifyMetrics] 请求体内容: " + requestBody);
+
+        try {
+            List<Map<String, Object>> metricsData = null;
+
+            // 处理不同的请求格式
+            if (requestBody instanceof List) {
+                // 前端直接发送指标数组
+                @SuppressWarnings("unchecked")
+                List<Map<String, Object>> directMetrics = (List<Map<String, Object>>) requestBody;
+                metricsData = directMetrics;
+                System.out.println("[SqlPasteController.verifyMetrics] 收到直接指标数组，数量: " + metricsData.size());
+                if (!metricsData.isEmpty()) {
+                    System.out.println("[SqlPasteController.verifyMetrics] 第一个指标示例: " + metricsData.get(0));
+                }
+            } else if (requestBody instanceof Map) {
+                // 前端发送包装在metrics字段中的数据
+                @SuppressWarnings("unchecked")
+                Map<String, Object> request = (Map<String, Object>) requestBody;
+                @SuppressWarnings("unchecked")
+                List<Map<String, Object>> wrappedMetrics = (List<Map<String, Object>>) request.get("metrics");
+                metricsData = wrappedMetrics;
+                System.out.println("[SqlPasteController.verifyMetrics] 收到包装指标数据，数量: " + (metricsData != null ? metricsData.size() : 0));
+                if (metricsData != null && !metricsData.isEmpty()) {
+                    System.out.println("[SqlPasteController.verifyMetrics] 第一个指标示例: " + metricsData.get(0));
+                }
+            } else {
+                System.out.println("[SqlPasteController.verifyMetrics] 不支持的请求体类型: " + requestBody.getClass().getSimpleName());
+                return ResponseEntity.badRequest()
+                    .body(ApiResponse.error(400, "不支持的请求体格式"));
+            }
+
+            if (metricsData == null || metricsData.isEmpty()) {
+                System.out.println("[SqlPasteController.verifyMetrics] 指标列表为空");
+                return ResponseEntity.badRequest()
+                    .body(ApiResponse.error(400, "指标列表不能为空"));
+            }
+
+            // 转换指标数据
+            List<ExtractedMetric> metrics = metricsData.stream()
+                .map(this::convertToExtractedMetric)
+                .collect(Collectors.toList());
+
+            System.out.println("[SqlPasteController.verifyMetrics] 转换后的指标数量: " + metrics.size());
+            for (ExtractedMetric metric : metrics) {
+                System.out.println("[SqlPasteController.verifyMetrics] 指标: " + metric.getName() +
+                    ", category=" + metric.getCategory() +
+                    ", aggregationFunction=" + metric.getAggregationFunction() +
+                    ", businessProcess=" + metric.getBusinessProcess());
+            }
+
+            // 调用验证服务
+            System.out.println("[SqlPasteController.verifyMetrics] 开始调用验证服务...");
+            MetricVerificationResult result = sqlPasteMetricService.verifyMetrics(metrics);
+            System.out.println("[SqlPasteController.verifyMetrics] 验证服务调用完成，结果: 总数=" +
+                result.getTotalCount() + ", 成功=" + result.getSuccessCount() + ", 失败=" + result.getErrorCount());
+
+            MetricVerificationResultDTO dto = convertToVerificationResultDTO(result);
+            System.out.println("[SqlPasteController.verifyMetrics] 返回响应，状态码: 200");
+
+            return ResponseEntity.ok(ApiResponse.success(dto));
+
+        } catch (Exception e) {
+            System.err.println("[SqlPasteController.verifyMetrics] 处理请求失败: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(ApiResponse.error(500, "指标验证失败: " + e.getMessage()));
         }
     }
 
@@ -768,5 +875,112 @@ public class SqlPasteController {
         public void setSuggestions(List<String> suggestions) { this.suggestions = suggestions; }
         public boolean isAllValid() { return allValid; }
         public void setAllValid(boolean allValid) { this.allValid = allValid; }
+    }
+
+    /**
+     * 指标验证结果
+     */
+    public static class MetricVerificationResult {
+        private List<MetricVerificationItem> verificationItems = new ArrayList<>();
+        private int totalCount;
+        private int successCount;
+        private int errorCount;
+
+        public List<MetricVerificationItem> getVerificationItems() { return verificationItems; }
+        public void setVerificationItems(List<MetricVerificationItem> verificationItems) { this.verificationItems = verificationItems; }
+        public int getTotalCount() { return totalCount; }
+        public void setTotalCount(int totalCount) { this.totalCount = totalCount; }
+        public int getSuccessCount() { return successCount; }
+        public void setSuccessCount(int successCount) { this.successCount = successCount; }
+        public int getErrorCount() { return errorCount; }
+        public void setErrorCount(int errorCount) { this.errorCount = errorCount; }
+    }
+
+    /**
+     * 单个指标验证项
+     */
+    public static class MetricVerificationItem {
+        private String metricId;
+        private String metricName;
+        private String generatedSql;
+        private boolean sqlValid;
+        private String queryResult;
+        private String status;
+
+        public String getMetricId() { return metricId; }
+        public void setMetricId(String metricId) { this.metricId = metricId; }
+        public String getMetricName() { return metricName; }
+        public void setMetricName(String metricName) { this.metricName = metricName; }
+        public String getGeneratedSql() { return generatedSql; }
+        public void setGeneratedSql(String generatedSql) { this.generatedSql = generatedSql; }
+        public boolean isSqlValid() { return sqlValid; }
+        public void setSqlValid(boolean sqlValid) { this.sqlValid = sqlValid; }
+        public String getQueryResult() { return queryResult; }
+        public void setQueryResult(String queryResult) { this.queryResult = queryResult; }
+        public String getStatus() { return status; }
+        public void setStatus(String status) { this.status = status; }
+    }
+
+    public static class MetricVerificationResultDTO {
+        private List<MetricVerificationItemDTO> verificationItems;
+        private int totalCount;
+        private int successCount;
+        private int errorCount;
+
+        public List<MetricVerificationItemDTO> getVerificationItems() { return verificationItems; }
+        public void setVerificationItems(List<MetricVerificationItemDTO> verificationItems) { this.verificationItems = verificationItems; }
+        public int getTotalCount() { return totalCount; }
+        public void setTotalCount(int totalCount) { this.totalCount = totalCount; }
+        public int getSuccessCount() { return successCount; }
+        public void setSuccessCount(int successCount) { this.successCount = successCount; }
+        public int getErrorCount() { return errorCount; }
+        public void setErrorCount(int errorCount) { this.errorCount = errorCount; }
+    }
+
+    public static class MetricVerificationItemDTO {
+        private String metricId;
+        private String metricName;
+        private String generatedSql;
+        private boolean sqlValid;
+        private String queryResult;
+        private String status;
+
+        public String getMetricId() { return metricId; }
+        public void setMetricId(String metricId) { this.metricId = metricId; }
+        public String getMetricName() { return metricName; }
+        public void setMetricName(String metricName) { this.metricName = metricName; }
+        public String getGeneratedSql() { return generatedSql; }
+        public void setGeneratedSql(String generatedSql) { this.generatedSql = generatedSql; }
+        public boolean isSqlValid() { return sqlValid; }
+        public void setSqlValid(boolean sqlValid) { this.sqlValid = sqlValid; }
+        public String getQueryResult() { return queryResult; }
+        public void setQueryResult(String queryResult) { this.queryResult = queryResult; }
+        public String getStatus() { return status; }
+        public void setStatus(String status) { this.status = status; }
+    }
+
+    /**
+     * 转换验证结果
+     */
+    private MetricVerificationResultDTO convertToVerificationResultDTO(MetricVerificationResult result) {
+        MetricVerificationResultDTO dto = new MetricVerificationResultDTO();
+        dto.setVerificationItems(result.getVerificationItems().stream()
+            .map(this::convertToVerificationItemDTO)
+            .collect(Collectors.toList()));
+        dto.setTotalCount(result.getTotalCount());
+        dto.setSuccessCount(result.getSuccessCount());
+        dto.setErrorCount(result.getErrorCount());
+        return dto;
+    }
+
+    private MetricVerificationItemDTO convertToVerificationItemDTO(MetricVerificationItem item) {
+        MetricVerificationItemDTO dto = new MetricVerificationItemDTO();
+        dto.setMetricId(item.getMetricId());
+        dto.setMetricName(item.getMetricName());
+        dto.setGeneratedSql(item.getGeneratedSql());
+        dto.setSqlValid(item.isSqlValid());
+        dto.setQueryResult(item.getQueryResult());
+        dto.setStatus(item.getStatus());
+        return dto;
     }
 }

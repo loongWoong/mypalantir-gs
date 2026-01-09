@@ -399,9 +399,12 @@ export const metricApi = {
     return response.data.data;
   },
 
-  // 仅验证指标定义
-  validateExtractedMetrics: async (sql: string): Promise<ValidationOnlyResult> => {
-    const response = await apiClient.post<ApiResponse<ValidationOnlyResult>>('/sql-paste/validate', { sql });
+  // 仅验证指标定义（支持选择性验证）
+  validateExtractedMetrics: async (sql: string, metricIndices?: number[]): Promise<ValidationOnlyResult> => {
+    const response = await apiClient.post<ApiResponse<ValidationOnlyResult>>('/sql-paste/validate', {
+      sql,
+      metricIndices: metricIndices || undefined,
+    });
     return response.data.data;
   },
 };

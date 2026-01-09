@@ -13,8 +13,9 @@ const SqlPastePage: React.FC = () => {
   const [enableLLM, setEnableLLM] = useState<boolean>(false);
   const [saveLoading, setSaveLoading] = useState<boolean>(false);
   const [saveResult, setSaveResult] = useState<any>(null);
-  const [validateLoading, setValidateLoading] = useState<boolean>(false);
-  const [validateResults, setValidateResults] = useState<Map<number, any>>(new Map());
+   const [validateLoading, setValidateLoading] = useState<boolean>(false);
+   const [validateResults, setValidateResults] = useState<Map<number, any>>(new Map());
+   const [singleValidateLoading, setSingleValidateLoading] = useState<Map<number, boolean>>(new Map());
 
   const handleParse = async () => {
     if (!sql.trim()) {
@@ -79,97 +80,27 @@ const SqlPastePage: React.FC = () => {
     const newValidateResults = new Map<number, any>();
 
     try {
-      // 遍历选中的指标进行验证
-      for (const index of Array.from(selectedMetrics)) {
-        const metric = result.extractedMetrics[index];
-        
-        try {
-          let validateResult;
-          
-          // 获取字段
-          const businessProcess = metric.definition.businessProcess || metric.definition.business_process;
-          const aggregationFunction = metric.definition.aggregationFunction || metric.definition.aggregation_function;
-          const aggregationField = metric.definition.aggregationField || metric.definition.aggregation_field;
-          
-          // 根据指标类型进行验证
-          if (metric.category === 'ATOMIC') {
-            // 原子指标：只需验证业务过程，不需要聚合函数
-            if (!businessProcess) {
-              throw new Error('缺少业务过程对象类型');
-            }
-            // 原子指标不需要 aggregationFunction（直接从物理字段取值）
-            
-            validateResult = await metricApi.validateAtomicMetric({
-              id: metric.suggestedId,
-              name: metric.name,
-              display_name: metric.displayName,
-              description: metric.description,
-              business_process: businessProcess,
-              aggregation_function: aggregationFunction || undefined,
-              aggregation_field: aggregationField || '*',
-              unit: metric.unit,
-              status: 'active'
-            });
-          } else if (metric.category === 'DERIVED') {
-            // 派生指标：需要聚合函数
-            if (!businessProcess) {
-              throw new Error('缺少业务过程对象类型');
-            }
-            if (!aggregationFunction) {
-              throw new Error('缺少聚合函数');
-            }
-            
-            validateResult = await metricApi.validateMetricDefinition({
-              id: metric.suggestedId,
-              name: metric.name,
-              display_name: metric.displayName,
-              description: metric.description,
-              metric_type: 'derived',
-              atomic_metric_id: metric.definition.atomicMetricId || metric.definition.atomic_metric_id,
-              time_dimension: metric.definition.timeDimension || metric.definition.time_dimension,
-              time_granularity: (metric.definition.timeGranularity || metric.definition.time_granularity) as 'day' | 'week' | 'month' | 'quarter' | 'year' | undefined,
-              dimensions: metric.definition.dimensions,
-              filter_conditions: metric.definition.filterConditions || metric.definition.filter_conditions,
-              derived_formula: undefined,
-              base_metric_ids: undefined,
-              unit: metric.unit,
-              status: 'active'
-            });
-          } else {
-            // 复合指标：不需要聚合函数，需要公式和基础指标
-            const derivedFormula = metric.definition.derivedFormula || metric.definition.derived_formula;
-            const baseMetricIds = metric.definition.baseMetricIds || metric.definition.base_metric_ids;
-            
-            validateResult = await metricApi.validateMetricDefinition({
-              id: metric.suggestedId,
-              name: metric.name,
-              display_name: metric.displayName,
-              description: metric.description,
-              metric_type: 'composite',
-              atomic_metric_id: undefined,
-              time_dimension: undefined,
-              time_granularity: undefined,
-              dimensions: undefined,
-              filter_conditions: undefined,
-              derived_formula: derivedFormula,
-              base_metric_ids: baseMetricIds,
-              unit: metric.unit,
-              status: 'active'
-            });
-          }
-          
+      const indices = Array.from(selectedMetrics);
+      const validateResult = await metricApi.validateExtractedMetrics(sql, indices);
+
+      indices.forEach((index, i) => {
+        const validation = validateResult.validations[i];
+        if (validation) {
           newValidateResults.set(index, {
-            success: true,
-            ...validateResult
+            success: validation.valid,
+            errors: validation.errors,
+            warnings: validation.warnings,
+            errorCount: validation.errorCount,
+            warningCount: validation.warningCount,
           });
-        } catch (error: any) {
+        } else {
           newValidateResults.set(index, {
             success: false,
-            error: error.message || '验证失败'
+            error: '未找到验证结果',
           });
         }
-      }
-      
+      });
+
       setValidateResults(newValidateResults);
     } catch (error) {
       console.error('验证过程失败:', error);
@@ -179,7 +110,52 @@ const SqlPastePage: React.FC = () => {
     }
   };
 
-  const handleSave = async () => {
+  const handleSingleValidate = async (index: number) => {
+    if (!result) return;
+
+    console.log('Starting single validation for metric', index);
+    setSingleValidateLoading(prev => new Map(prev.set(index, true)));
+    const newValidateResults = new Map(validateResults);
+
+    try {
+      const validateResult = await metricApi.validateExtractedMetrics(sql, [index]);
+      const validation = validateResult.validations[0];
+
+      if (validation) {
+        newValidateResults.set(index, {
+          success: validation.valid,
+          errors: validation.errors,
+          warnings: validation.warnings,
+          errorCount: validation.errorCount,
+          warningCount: validation.warningCount,
+        });
+      } else {
+        newValidateResults.set(index, {
+          success: false,
+          error: '未找到验证结果',
+        });
+      }
+
+      setValidateResults(newValidateResults);
+      console.log('Single validation success for metric', index);
+    } catch (error: any) {
+      console.error('Single validation failed for metric', index, error);
+      newValidateResults.set(index, {
+        success: false,
+        error: error.message || '验证失败'
+      });
+      setValidateResults(newValidateResults);
+    } finally {
+      setSingleValidateLoading(prev => {
+        const newMap = new Map(prev);
+        newMap.delete(index);
+        return newMap;
+      });
+      console.log('Single validation finished for metric', index);
+    }
+  };
+
+   const handleSave = async () => {
     if (!result || selectedMetrics.size === 0) {
       alert('请选择要保存的指标');
       return;
@@ -403,18 +379,32 @@ const SqlPastePage: React.FC = () => {
                         }`}
                         onClick={() => toggleMetric(index)}
                       >
-                        <div className="flex items-start space-x-4">
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={(e) => {
-                              e.stopPropagation();
-                              toggleMetric(index);
-                            }}
-                            className="mt-1 h-4 w-4 text-blue-600 rounded"
-                          />
-                          
-                          <div className="flex-1">
+                         <div className="flex items-start space-x-4">
+                           <input
+                             type="checkbox"
+                             checked={isSelected}
+                             onChange={(e) => {
+                               e.stopPropagation();
+                               toggleMetric(index);
+                             }}
+                             className="mt-1 h-4 w-4 text-blue-600 rounded"
+                           />
+
+                           <div className="flex-1">
+                             <div className="flex justify-end mb-2">
+                               <button
+                                 onClick={(e) => {
+                                   e.stopPropagation();
+                                   handleSingleValidate(index);
+                                 }}
+                                 disabled={singleValidateLoading.get(index) || false}
+                                 className={`px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors ${
+                                   singleValidateLoading.get(index) ? 'opacity-50 cursor-not-allowed' : ''
+                                 }`}
+                               >
+                                 {singleValidateLoading.get(index) ? '验证中...' : '验证'}
+                               </button>
+                             </div>
                             <div className="flex items-center space-x-3 mb-2">
                               <span className={`px-2 py-1 rounded text-xs font-medium ${categoryInfo.color}`}>
                                 {categoryInfo.text}
@@ -495,18 +485,14 @@ const SqlPastePage: React.FC = () => {
                                       </svg>
                                       <span className="font-medium">验证通过</span>
                                     </div>
-                                    {validateResults.get(index)?.sql && (
-                                      <div>
-                                        <p className="text-xs text-gray-500 mb-1">生成的 SQL:</p>
-                                        <code className="text-xs bg-white p-2 rounded block overflow-x-auto">
-                                          {validateResults.get(index)?.sql}
-                                        </code>
+                                    {(validateResults.get(index)?.warnings?.length ?? 0) > 0 && (
+                                      <div className="space-y-1">
+                                        {validateResults.get(index)?.warnings?.map((w: any, i: number) => (
+                                          <p key={i} className="text-sm text-yellow-600">
+                                            ⚠️ {w.message}
+                                          </p>
+                                        ))}
                                       </div>
-                                    )}
-                                    {validateResults.get(index)?.rowCount !== undefined && (
-                                      <p className="text-xs text-gray-600">
-                                        查询结果: {validateResults.get(index)?.rowCount} 条记录
-                                      </p>
                                     )}
                                   </div>
                                 ) : (
@@ -516,7 +502,15 @@ const SqlPastePage: React.FC = () => {
                                     </svg>
                                     <div>
                                       <p className="font-medium">验证失败</p>
-                                      <p className="text-sm mt-1">{validateResults.get(index)?.error}</p>
+                                      {validateResults.get(index)?.errors?.length ? (
+                                        <div className="mt-1 space-y-1">
+                                          {validateResults.get(index)?.errors?.map((e: any, i: number) => (
+                                            <p key={i} className="text-sm">{e.message}</p>
+                                          ))}
+                                        </div>
+                                      ) : (
+                                        <p className="text-sm mt-1">{validateResults.get(index)?.error}</p>
+                                      )}
                                     </div>
                                   </div>
                                 )}

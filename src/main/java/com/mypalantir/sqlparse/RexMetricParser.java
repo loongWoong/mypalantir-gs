@@ -75,7 +75,10 @@ public class RexMetricParser {
 
         if (lineage.getAggregationFunction() != null) {
             metric.setAggregationFunction(convertAggregationFunction(lineage.getAggregationFunction()));
-            if (!lineage.getSources().isEmpty()) {
+            // 优先使用 lineage 中已经解析的 aggregationField（如从 CASE 中提取的）
+            if (lineage.getAggregationField() != null) {
+                metric.setAggregationField(lineage.getAggregationField());
+            } else if (!lineage.getSources().isEmpty()) {
                 metric.setAggregationField(lineage.getSources().get(0).getSourceColumn());
             }
         }
@@ -84,13 +87,26 @@ public class RexMetricParser {
             switch (lineage.getTransformType()) {
                 case "IFNULL":
                     metric.setDescription("派生指标: IFNULL 空值填充");
-                    metric.setFilterConditions(parseIfnullCondition(lineage.getRexNode()));
+                    if (lineage.getFilterCondition() != null) {
+                        metric.setFilterConditions(lineage.getFilterCondition());
+                    } else {
+                        metric.setFilterConditions(parseIfnullCondition(lineage.getRexNode()));
+                    }
                     break;
                 case "CASE":
                     metric.setDescription("派生指标: CASE WHEN 条件分支");
+                    if (lineage.getFilterCondition() != null) {
+                        metric.setFilterConditions(lineage.getFilterCondition());
+                    }
                     break;
                 case "AGGREGATION":
                     metric.setDescription("派生指标: " + lineage.getAggregationFunction() + " 聚合");
+                    break;
+                case "AGGREGATION_WITH_CASE":
+                    metric.setDescription("派生指标: " + lineage.getAggregationFunction() + "(CASE WHEN 条件聚合)");
+                    if (lineage.getFilterCondition() != null) {
+                        metric.setFilterConditions(lineage.getFilterCondition());
+                    }
                     break;
             }
         } else if (lineage.getSources().size() == 1 && lineage.getSources().get(0).getTransformations().isEmpty()) {
@@ -220,5 +236,110 @@ public class RexMetricParser {
         }
 
         return sql.toString();
+    }
+
+    /**
+     * Generate equivalent SQL from lineage information for indicator verification
+     */
+    public String generateEquivalentSqlFromLineage(RexNodeLineageExtractor.ColumnLineage lineage, String baseTableName) {
+        if (lineage.getSources().isEmpty()) {
+            return null;
+        }
+
+        StringBuilder sql = new StringBuilder();
+        sql.append("SELECT ");
+
+        // Build the expression based on transform type and sources
+        String expression = buildExpressionFromLineage(lineage);
+        sql.append(expression).append(" AS ").append(lineage.getOutputName());
+
+        sql.append("\nFROM ").append(baseTableName);
+
+        // Add WHERE conditions based on filter conditions
+        if (lineage.getFilterCondition() != null && !lineage.getFilterCondition().isEmpty()) {
+            sql.append("\nWHERE 1=1");
+
+            // Handle CASE WHEN conditions
+            if ("CASE".equals(lineage.getTransformType())) {
+                @SuppressWarnings("unchecked")
+                List<Map<String, Object>> caseBranches = (List<Map<String, Object>>) lineage.getFilterCondition().get("case_branches");
+                if (caseBranches != null && !caseBranches.isEmpty()) {
+                    for (Map<String, Object> branch : caseBranches) {
+                        String condition = (String) branch.get("condition");
+                        if (condition != null && condition.contains("PAYTYPE")) {
+                            sql.append("\n    AND ").append(condition);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Add GROUP BY if it's an aggregation
+        if (lineage.getAggregationFunction() != null) {
+            sql.append("\nGROUP BY ");
+            // This would need more context about the GROUP BY fields
+            // For now, we'll add a comment
+            sql.append("/* GROUP BY fields need to be determined from context */");
+        }
+
+        return sql.toString();
+    }
+
+    private String buildExpressionFromLineage(RexNodeLineageExtractor.ColumnLineage lineage) {
+        if (lineage.getTransformType() == null) {
+            // Direct column reference
+            if (!lineage.getSources().isEmpty()) {
+                RexNodeLineageExtractor.ColumnSource source = lineage.getSources().get(0);
+                return source.getSourceColumn();
+            }
+            return lineage.getOutputName();
+        }
+
+        switch (lineage.getTransformType()) {
+            case "IFNULL":
+                if (lineage.getFilterCondition() != null) {
+                    String innerExpr = (String) lineage.getFilterCondition().get("_inner_expression");
+                    String defaultValue = (String) lineage.getFilterCondition().get("_null_default_value");
+                    if (innerExpr != null && defaultValue != null) {
+                        return "IFNULL(" + innerExpr + ", " + defaultValue + ")";
+                    }
+                }
+                return "IFNULL(" + lineage.getOutputName() + ", 0)";
+
+            case "CASE":
+                if (lineage.getFilterCondition() != null) {
+                    @SuppressWarnings("unchecked")
+                    List<Map<String, Object>> caseBranches = (List<Map<String, Object>>) lineage.getFilterCondition().get("case_branches");
+                    if (caseBranches != null && !caseBranches.isEmpty()) {
+                        StringBuilder caseExpr = new StringBuilder("CASE");
+                        for (Map<String, Object> branch : caseBranches) {
+                            String condition = (String) branch.get("condition");
+                            String result = (String) branch.get("result");
+                            if (condition != null && result != null) {
+                                caseExpr.append(" WHEN ").append(condition).append(" THEN ").append(result);
+                            }
+                        }
+                        String elseResult = (String) lineage.getFilterCondition().get("_else_result");
+                        if (elseResult != null) {
+                            caseExpr.append(" ELSE ").append(elseResult);
+                        }
+                        caseExpr.append(" END");
+                        return caseExpr.toString();
+                    }
+                }
+                return "CASE WHEN " + lineage.getOutputName() + " THEN 1 ELSE 0 END";
+
+            case "AGGREGATION":
+                if (lineage.getAggregationFunction() != null && !lineage.getSources().isEmpty()) {
+                    RexNodeLineageExtractor.ColumnSource source = lineage.getSources().get(0);
+                    return lineage.getAggregationFunction() + "(" +
+                           (lineage.getTransformType().equals("CASE") ? lineage.getRexNode() : source.getSourceColumn()) +
+                           ")";
+                }
+                return lineage.getAggregationFunction() + "(" + lineage.getOutputName() + ")";
+
+            default:
+                return lineage.getOutputName();
+        }
     }
 }

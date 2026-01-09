@@ -14,10 +14,38 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
+import java.sql.SQLException;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+
+// 导入 SqlPasteController 中的验证结果类
+import static com.mypalantir.controller.SqlPasteController.MetricVerificationResult;
+import static com.mypalantir.controller.SqlPasteController.MetricVerificationItem;
+
+/**
+ * SQL执行结果
+ */
+class SqlExecutionResult {
+    private boolean successful;
+    private String resultMessage;
+    private String errorMessage;
+    private int rowCount;
+
+    public boolean isSuccessful() { return successful; }
+    public void setSuccessful(boolean successful) { this.successful = successful; }
+    public String getResultMessage() { return resultMessage; }
+    public void setResultMessage(String resultMessage) { this.resultMessage = resultMessage; }
+    public String getErrorMessage() { return errorMessage; }
+    public void setErrorMessage(String errorMessage) { this.errorMessage = errorMessage; }
+    public int getRowCount() { return rowCount; }
+    public void setRowCount(int rowCount) { this.rowCount = rowCount; }
+}
 
 /**
  * SQL 粘贴指标提取主服务
@@ -35,6 +63,7 @@ public class SqlPasteMetricService {
     private final AtomicMetricService atomicMetricService;
     private final MetricService metricService;
     private final DatabaseMetadataService databaseMetadataService;
+    private final DatabaseService databaseService;
     private final LLMService llmService;
     private final Loader loader;
     private final MappingService mappingService;
@@ -58,6 +87,7 @@ public class SqlPasteMetricService {
             AtomicMetricService atomicMetricService,
             MetricService metricService,
             DatabaseMetadataService databaseMetadataService,
+            DatabaseService databaseService,
             LLMService llmService,
             Loader loader,
             MappingService mappingService,
@@ -75,6 +105,7 @@ public class SqlPasteMetricService {
         this.atomicMetricService = atomicMetricService;
         this.metricService = metricService;
         this.databaseMetadataService = databaseMetadataService;
+        this.databaseService = databaseService;
         this.llmService = llmService;
         this.loader = loader;
         this.mappingService = mappingService;
@@ -262,20 +293,305 @@ public class SqlPasteMetricService {
     /**
      * 仅验证指标定义
      */
-    public ValidationOnlyResult validateOnly(String sql) {
+    public ValidationOnlyResult validateOnly(String sql, List<Integer> metricIndices) {
         SqlPasteParseResult parseResult = parseAndExtract(sql, new SqlPasteOptions());
 
         ValidationOnlyResult result = new ValidationOnlyResult();
         result.setOriginalSql(sql);
-        result.setExtractedMetrics(parseResult.getExtractedMetrics());
-        result.setValidations(parseResult.getValidations());
+
+        List<ExtractedMetric> allMetrics = parseResult.getExtractedMetrics();
+        List<MetricValidator.ValidationResult> allValidations = parseResult.getValidations();
+
+        if (metricIndices != null && !metricIndices.isEmpty()) {
+            List<ExtractedMetric> filteredMetrics = new ArrayList<>();
+            List<MetricValidator.ValidationResult> filteredValidations = new ArrayList<>();
+
+            for (Integer index : metricIndices) {
+                if (index >= 0 && index < allMetrics.size()) {
+                    filteredMetrics.add(allMetrics.get(index));
+                    if (index < allValidations.size()) {
+                        filteredValidations.add(allValidations.get(index));
+                    }
+                }
+            }
+
+            result.setExtractedMetrics(filteredMetrics);
+            result.setValidations(filteredValidations);
+        } else {
+            result.setExtractedMetrics(allMetrics);
+            result.setValidations(allValidations);
+        }
+
         result.setSuggestions(parseResult.getSuggestions());
 
-        boolean allValid = parseResult.getValidations().stream()
+        boolean allValid = result.getValidations().stream()
             .allMatch(v -> !v.hasErrors());
         result.setAllValid(allValid);
 
         return result;
+    }
+
+    /**
+     * 验证指标 - 基于选定指标组装SQL并执行查询
+     */
+    public MetricVerificationResult verifyMetrics(List<ExtractedMetric> metrics) {
+        logger.info("[verifyMetrics] 开始验证指标，数量: {}", metrics.size());
+
+        MetricVerificationResult result = new MetricVerificationResult();
+        List<MetricVerificationItem> verificationItems = new ArrayList<>();
+
+        for (ExtractedMetric metric : metrics) {
+            MetricVerificationItem item = new MetricVerificationItem();
+            item.setMetricName(metric.getName());
+            item.setMetricId(metric.getId());
+
+            try {
+                // 组装验证SQL
+                String verificationSql = generateVerificationSql(metric);
+                item.setGeneratedSql(verificationSql);
+
+                // 执行真实的SQL查询
+                SqlExecutionResult executionResult = executeSqlQuery(verificationSql);
+                item.setSqlValid(executionResult.isSuccessful());
+
+                if (executionResult.isSuccessful()) {
+                    item.setQueryResult(executionResult.getResultMessage());
+                    item.setStatus("SUCCESS");
+                } else {
+                    item.setQueryResult("查询失败: " + executionResult.getErrorMessage());
+                    item.setStatus("EXECUTION_ERROR");
+                }
+
+                logger.info("[verifyMetrics] 指标 {} 验证完成: {}, 结果: {}", metric.getName(), item.getStatus(), executionResult.getResultMessage());
+
+            } catch (Exception e) {
+                logger.error("[verifyMetrics] 指标 {} 验证失败: {}", metric.getName(), e.getMessage());
+                item.setStatus("ERROR");
+                item.setQueryResult("验证失败: " + e.getMessage());
+            }
+
+            verificationItems.add(item);
+        }
+
+        result.setVerificationItems(verificationItems);
+        result.setTotalCount(metrics.size());
+        result.setSuccessCount((int) verificationItems.stream().filter(item -> "SUCCESS".equals(item.getStatus())).count());
+        result.setErrorCount((int) verificationItems.stream().filter(item -> "ERROR".equals(item.getStatus()) || "SQL_ERROR".equals(item.getStatus())).count());
+
+        logger.info("[verifyMetrics] 验证完成，总数: {}, 成功: {}, 失败: {}",
+            result.getTotalCount(), result.getSuccessCount(), result.getErrorCount());
+
+        return result;
+    }
+
+    /**
+     * 生成验证SQL
+     */
+    private String generateVerificationSql(ExtractedMetric metric) {
+        StringBuilder sql = new StringBuilder();
+        sql.append("SELECT ");
+
+        // 从指标的源信息中推断表名
+        String tableName = inferTableNameFromMetric(metric);
+        if (tableName == null) {
+            throw new IllegalArgumentException("无法推断表名，指标: " + metric.getName());
+        }
+
+        // 构建选择表达式
+        if (metric.getAggregationFunction() != null && metric.getAggregationField() != null) {
+            // 有聚合函数的情况
+            sql.append(metric.getAggregationFunction()).append("(");
+            sql.append(metric.getAggregationField()).append(") AS ").append(metric.getName());
+        } else if (metric.getDerivedFormula() != null) {
+            // 有派生公式的情况
+            sql.append(metric.getDerivedFormula()).append(" AS ").append(metric.getName());
+        } else if (metric.getSourceSql() != null && !metric.getSourceSql().isEmpty()) {
+            // 有源SQL的情况（可能是列名）
+            sql.append(metric.getSourceSql()).append(" AS ").append(metric.getName());
+        } else {
+            // 默认情况，假设是简单列名
+            logger.warn("[generateVerificationSql] 指标 {} 没有聚合函数、派生公式或源SQL，使用默认查询", metric.getName());
+            sql.append(metric.getName());
+        }
+
+        sql.append("\nFROM ").append(tableName);
+
+        // 添加WHERE条件
+        List<String> whereConditions = new ArrayList<>();
+
+        // 从filterConditions添加条件
+        if (metric.getFilterConditions() != null) {
+            for (Map.Entry<String, Object> entry : metric.getFilterConditions().entrySet()) {
+                String key = entry.getKey();
+                if (!key.startsWith("_") && entry.getValue() != null) {
+                    if (key.contains("paytype_condition")) {
+                        whereConditions.add((String) entry.getValue());
+                    } else if (key.contains("condition")) {
+                        // 处理各种条件
+                        whereConditions.add((String) entry.getValue());
+                    } else if (entry.getValue() instanceof String) {
+                        whereConditions.add(key + " = '" + entry.getValue() + "'");
+                    } else {
+                        whereConditions.add(key + " = " + entry.getValue());
+                    }
+                }
+            }
+        }
+
+        // 添加基本过滤条件（如时间范围等）
+        if (metric.getTimeDimension() != null) {
+            whereConditions.add(metric.getTimeDimension() + " >= '2024-01-01'");
+        }
+
+        // 对于聚合查询，添加 LIMIT 避免返回过多数据
+        if (metric.getAggregationFunction() != null) {
+            whereConditions.add("1=1 LIMIT 1");
+        }
+
+        if (!whereConditions.isEmpty()) {
+            sql.append("\nWHERE ").append(String.join(" AND ", whereConditions));
+        }
+
+        // 添加GROUP BY（对于聚合指标）
+        if (metric.getAggregationFunction() != null && metric.getDimensions() != null && !metric.getDimensions().isEmpty()) {
+            sql.append("\nGROUP BY ").append(String.join(", ", metric.getDimensions()));
+        }
+
+        String finalSql = sql.toString();
+        logger.info("[generateVerificationSql] 为指标 {} 生成验证SQL: {}", metric.getName(), finalSql);
+        return finalSql;
+    }
+
+    /**
+     * 从指标信息推断表名
+     */
+    private String inferTableNameFromMetric(ExtractedMetric metric) {
+        // 从源信息中提取表名
+        if (metric.getSources() != null && !metric.getSources().isEmpty()) {
+            String tableName = metric.getSources().get(0).getSourceTable();
+            if (tableName != null) {
+                return tableName;
+            }
+        }
+
+        // 从businessProcess推断
+        if (metric.getBusinessProcess() != null) {
+            // 简单的映射逻辑
+            switch (metric.getBusinessProcess().toLowerCase()) {
+                case "exclearresultcash":
+                    return "TBL_EXCLEARRESULTCASH";
+                case "tollstation":
+                    return "TBL_TOLLSTATION";
+                default:
+                    return "TBL_" + metric.getBusinessProcess().toUpperCase();
+            }
+        }
+
+        // 默认表名
+        return "TBL_DEFAULT";
+    }
+
+    /**
+     * 执行SQL查询
+     */
+    private SqlExecutionResult executeSqlQuery(String sql) {
+        SqlExecutionResult result = new SqlExecutionResult();
+
+        try {
+            // 获取默认数据库ID
+            String databaseId = databaseService.getOrCreateDefaultDatabase();
+
+            // 获取数据库连接（复用DatabaseMetadataService的连接逻辑）
+            Connection conn = getDatabaseConnection(databaseId);
+            if (conn == null) {
+                result.setSuccessful(false);
+                result.setErrorMessage("无法获取数据库连接");
+                return result;
+            }
+
+            try (PreparedStatement stmt = conn.prepareStatement(sql);
+                 ResultSet rs = stmt.executeQuery()) {
+
+                // 获取结果集元数据
+                ResultSetMetaData metaData = rs.getMetaData();
+                int columnCount = metaData.getColumnCount();
+
+                // 统计行数
+                int rowCount = 0;
+                while (rs.next()) {
+                    rowCount++;
+                    // 限制只处理前几行，避免大数据量问题
+                    if (rowCount >= 10) {
+                        break;
+                    }
+                }
+
+                result.setSuccessful(true);
+                result.setRowCount(rowCount);
+
+                if (columnCount == 1 && rowCount == 1) {
+                    // 单值结果
+                    rs.beforeFirst();
+                    if (rs.next()) {
+                        Object value = rs.getObject(1);
+                        result.setResultMessage("查询成功，返回值: " + value);
+                    }
+                } else {
+                    // 多列或多行结果
+                    result.setResultMessage("查询成功，返回 " + rowCount + " 行数据，" + columnCount + " 列");
+                }
+
+            } finally {
+                if (conn != null && !conn.isClosed()) {
+                    conn.close();
+                }
+            }
+
+        } catch (SQLException e) {
+            logger.error("[executeSqlQuery] SQL执行失败: {}", e.getMessage(), e);
+            result.setSuccessful(false);
+            result.setErrorMessage("SQL执行错误: " + e.getMessage());
+        } catch (IOException e) {
+            logger.error("[executeSqlQuery] 获取数据库连接失败: {}", e.getMessage(), e);
+            result.setSuccessful(false);
+            result.setErrorMessage("数据库连接错误: " + e.getMessage());
+        } catch (Exception e) {
+            logger.error("[executeSqlQuery] 未知错误: {}", e.getMessage(), e);
+            result.setSuccessful(false);
+            result.setErrorMessage("执行失败: " + e.getMessage());
+        }
+
+        return result;
+    }
+
+    /**
+     * 获取数据库连接（复用DatabaseMetadataService的逻辑）
+     */
+    private Connection getDatabaseConnection(String databaseId) throws IOException, SQLException {
+        // 使用反射或直接调用DatabaseMetadataService的方法
+        // 由于DatabaseMetadataService是private方法，我们需要复制其连接逻辑
+        try {
+            java.lang.reflect.Method method = DatabaseMetadataService.class.getDeclaredMethod("getConnectionForDatabase", String.class);
+            method.setAccessible(true);
+            return (Connection) method.invoke(databaseMetadataService, databaseId);
+        } catch (Exception e) {
+            logger.error("[getDatabaseConnection] 无法获取数据库连接: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * 检查SQL语法是否有效（简化版）
+     */
+    private boolean isSqlSyntacticallyValid(String sql) {
+        // 基本的语法检查
+        if (sql == null || sql.trim().isEmpty()) {
+            return false;
+        }
+
+        // 检查是否有基本的SELECT结构
+        String upperSql = sql.toUpperCase();
+        return upperSql.contains("SELECT") && upperSql.contains("FROM");
     }
 
     /**

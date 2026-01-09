@@ -137,6 +137,7 @@ public class RexNodeLineageExtractor {
     private void extractAllLineages(RelNode relNode, RexMetricParseResult result) {
         logger.info("[RexNodeLineageExtractor] 开始递归提取血缘, 节点类型: {}", relNode.getClass().getSimpleName());
 
+        // Handle different root node types
         if (relNode instanceof Project) {
             extractProjectLineage((Project) relNode, result);
         } else if (relNode instanceof Aggregate) {
@@ -151,8 +152,14 @@ public class RexNodeLineageExtractor {
             extractFilterLineage((Filter) relNode, result);
         } else {
             logger.warn("[RexNodeLineageExtractor] 未处理的节点类型: {}", relNode.getClass().getSimpleName());
+            // For unhandled types, try to extract from inputs recursively
+            for (RelNode input : relNode.getInputs()) {
+                extractAllLineages(input, result);
+            }
+            return;
         }
 
+        // Always recursively process inputs to handle nested structures
         for (RelNode input : relNode.getInputs()) {
             extractAllLineages(input, result);
         }
@@ -217,6 +224,9 @@ public class RexNodeLineageExtractor {
             columnLineage.setRexNodeType("AGGREGATE_CALL");
             columnLineage.setDistinct(aggCall.isDistinct());
 
+            // 解析聚合调用中的表达式，特别是 CASE WHEN 情况
+            parseAggregateCallExpression(aggCall, aggregate, columnLineage, mq);
+
             List<RelColumnOrigin> origins = traceAggCallOrigins(aggCall, aggregate, mq);
             for (RelColumnOrigin origin : origins) {
                 ColumnSource source = resolveColumnOrigin(origin, aggregate, mq);
@@ -256,6 +266,106 @@ public class RexNodeLineageExtractor {
         }
 
         return allOrigins;
+    }
+
+    /**
+     * 解析聚合调用中的表达式，特别是处理 SUM(CASE WHEN ...) 这样的情况
+     */
+    private void parseAggregateCallExpression(AggregateCall aggCall, Aggregate aggregate,
+                                             ColumnLineage columnLineage, RelMetadataQuery mq) {
+        List<Integer> argList = aggCall.getArgList();
+        if (argList.isEmpty()) {
+            return;
+        }
+
+        // 获取聚合函数的参数表达式
+        RelNode input = aggregate.getInput(0);
+        if (input instanceof Project) {
+            Project project = (Project) input;
+            List<? extends RexNode> projects = project.getProjects();
+
+            for (Integer argIndex : argList) {
+                if (argIndex >= 0 && argIndex < projects.size()) {
+                    RexNode rexNode = projects.get(argIndex);
+
+                    // 如果参数是 CASE 表达式，解析其中的条件和字段
+                    if (rexNode instanceof RexCall) {
+                        RexCall call = (RexCall) rexNode;
+                        if (call.getOperator() instanceof org.apache.calcite.sql.fun.SqlCaseOperator) {
+                            parseCaseInAggregate(call, columnLineage, project, mq);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * 解析聚合中的 CASE 表达式，如 SUM(CASE WHEN PAYTYPE = 6 THEN AMOUNT END)
+     */
+    private void parseCaseInAggregate(RexCall caseCall, ColumnLineage columnLineage,
+                                     Project project, RelMetadataQuery mq) {
+        List<RexNode> operands = caseCall.getOperands();
+        if (operands.size() < 3) return;
+
+        Map<String, Object> filterConditions = new HashMap<>();
+        List<Map<String, Object>> caseBranches = new ArrayList<>();
+
+        // 解析 CASE WHEN 条件和结果
+        for (int i = 0; i < operands.size() - 1; i += 2) {
+            if (i + 1 < operands.size()) {
+                RexNode condition = operands.get(i);
+                RexNode result = operands.get(i + 1);
+
+                Map<String, Object> branch = new HashMap<>();
+                branch.put("condition", condition.toString());
+                branch.put("result", result.toString());
+                caseBranches.add(branch);
+
+                // 提取 PAYTYPE 条件
+                if (condition.toString().contains("PAYTYPE")) {
+                    String conditionStr = condition.toString();
+                    if (conditionStr.contains("=")) {
+                        String[] parts = conditionStr.split("=");
+                        if (parts.length == 2) {
+                            String value = parts[1].trim();
+                            try {
+                                int payTypeValue = Integer.parseInt(value);
+                                filterConditions.put("paytype_" + payTypeValue, true);
+                                filterConditions.put("paytype_condition", "PAYTYPE = " + payTypeValue);
+                            } catch (NumberFormatException e) {
+                                filterConditions.put("paytype_condition", conditionStr);
+                            }
+                        }
+                    }
+                }
+
+                // 从结果中提取聚合字段
+                if (result instanceof RexInputRef) {
+                    int resultIndex = ((RexInputRef) result).getIndex();
+                    Set<RelColumnOrigin> origins = mq.getColumnOrigins(project.getInput(), resultIndex);
+                    if (origins != null && !origins.isEmpty()) {
+                        RelColumnOrigin origin = origins.iterator().next();
+                        String fieldName = origin.getOriginTable().getRowType()
+                            .getFieldList().get(origin.getOriginColumnOrdinal()).getName();
+                        columnLineage.setAggregationField(fieldName);
+                        logger.info("[parseCaseInAggregate] 从 CASE 结果提取聚合字段: {}", fieldName);
+                    }
+                }
+            }
+        }
+
+        // 处理 ELSE 子句
+        if (operands.size() % 2 == 1) {
+            RexNode elseResult = operands.get(operands.size() - 1);
+            filterConditions.put("_else_result", elseResult.toString());
+        }
+
+        filterConditions.put("case_branches", caseBranches);
+        filterConditions.put("_case_type", "conditional_aggregation");
+
+        columnLineage.setFilterCondition(filterConditions);
+        columnLineage.setTransformType("AGGREGATION_WITH_CASE");
     }
 
      private List<RelColumnOrigin> traceThroughInputs(RelNode node, int columnIndex, RelMetadataQuery mq) {
@@ -316,6 +426,14 @@ public class RexNodeLineageExtractor {
         int leftFieldCount = join.getLeft().getRowType().getFieldCount();
         int totalFieldCount = join.getRowType().getFieldCount();
 
+        // Extract join conditions as dimensions
+        RexNode condition = join.getCondition();
+        if (condition != null) {
+            Map<String, Object> joinConditions = extractJoinConditions(condition);
+            result.getJoinConditions().putAll(joinConditions);
+            logger.info("[RexNodeLineageExtractor] Join 条件: {}", joinConditions);
+        }
+
         for (int i = 0; i < totalFieldCount; i++) {
             String outputName = join.getRowType().getFieldList().get(i).getName();
             ColumnLineage columnLineage = new ColumnLineage();
@@ -343,6 +461,65 @@ public class RexNodeLineageExtractor {
 
             result.getColumnLineages().add(columnLineage);
         }
+    }
+
+    /**
+     * Extract join conditions for dimensional analysis
+     */
+    private Map<String, Object> extractJoinConditions(RexNode condition) {
+        Map<String, Object> conditions = new HashMap<>();
+
+        if (condition instanceof RexCall) {
+            RexCall call = (RexCall) condition;
+            String opName = call.getOperator().getName().toUpperCase();
+
+            if ("AND".equals(opName) || "OR".equals(opName)) {
+                // Multiple conditions
+                List<Map<String, Object>> subConditions = new ArrayList<>();
+                for (RexNode operand : call.getOperands()) {
+                    if (operand instanceof RexCall) {
+                        Map<String, Object> subCond = extractJoinConditions(operand);
+                        if (!subCond.isEmpty()) {
+                            subConditions.add(subCond);
+                        }
+                    }
+                }
+                conditions.put("operator", opName);
+                conditions.put("conditions", subConditions);
+            } else if ("=".equals(opName) && call.getOperands().size() == 2) {
+                // Equality join condition
+                RexNode left = call.getOperands().get(0);
+                RexNode right = call.getOperands().get(1);
+
+                conditions.put("type", "equality");
+                conditions.put("left", left.toString());
+                conditions.put("right", right.toString());
+                conditions.put("operator", "=");
+
+                // Extract field names for dimensional analysis
+                String leftField = extractFieldNameFromRexNode(left);
+                String rightField = extractFieldNameFromRexNode(right);
+                if (leftField != null && rightField != null) {
+                    conditions.put("left_field", leftField);
+                    conditions.put("right_field", rightField);
+                }
+            }
+        }
+
+        return conditions;
+    }
+
+    private String extractFieldNameFromRexNode(RexNode node) {
+        if (node instanceof RexInputRef) {
+            // This would need more context to resolve to actual field names
+            return "field_" + ((RexInputRef) node).getIndex();
+        } else if (node instanceof RexCall) {
+            RexCall call = (RexCall) node;
+            if (call.getOperands().size() == 1 && call.getOperands().get(0) instanceof RexInputRef) {
+                return "field_" + ((RexInputRef) call.getOperands().get(0)).getIndex();
+            }
+        }
+        return node.toString();
     }
 
     private void extractUnionLineage(Union union, RexMetricParseResult result) {
@@ -452,16 +629,80 @@ public class RexNodeLineageExtractor {
     }
 
     private String expandTableAlias(String tableName, RelNode context, RelMetadataQuery mq) {
+        // First check if it's in our alias map
         if (tableAliasMap.containsKey(tableName)) {
             RelNode aliasedNode = tableAliasMap.get(tableName);
-            return findRealTableName(aliasedNode);
+            String realTable = findRealTableName(aliasedNode);
+            if (realTable != null) {
+                logger.debug("[expandTableAlias] 别名展开: {} -> {} (from alias map)", tableName, realTable);
+                return realTable;
+            }
         }
 
+        // Check if it's already a real table
         if (isRealTable(tableName)) {
             return tableName;
         }
 
-        return findTableInContext(tableName, context, mq);
+        // Try to resolve through the RelNode tree
+        String resolved = findTableInContext(tableName, context, mq);
+        if (resolved != null && !resolved.equals(tableName)) {
+            logger.debug("[expandTableAlias] 上下文解析: {} -> {}", tableName, resolved);
+            return resolved;
+        }
+
+        // For subquery aliases like 'A', 'B', try to resolve through parent context
+        if (context != null && Character.isLetter(tableName.charAt(0))) {
+            String contextualResult = resolveAliasThroughRelTree(tableName, context);
+            if (contextualResult != null) {
+                logger.debug("[expandTableAlias] 关系树解析: {} -> {}", tableName, contextualResult);
+                return contextualResult;
+            }
+        }
+
+        logger.debug("[expandTableAlias] 无法解析别名: {}", tableName);
+        return tableName;
+    }
+
+    /**
+     * Resolve alias by traversing the RelNode tree to find subqueries
+     */
+    private String resolveAliasThroughRelTree(String alias, RelNode root) {
+        // Look for Project nodes that might represent subqueries with aliases
+        return findAliasInRelTree(alias, root, new HashSet<>());
+    }
+
+    private String findAliasInRelTree(String targetAlias, RelNode node, Set<RelNode> visited) {
+        if (visited.contains(node)) {
+            return null;
+        }
+        visited.add(node);
+
+        // Check if this node has the alias we're looking for
+        if (node instanceof Project) {
+            Project project = (Project) node;
+            // The alias might be defined at a higher level in the tree
+            // For now, we'll look at the inputs
+        }
+
+        // Check inputs recursively
+        for (RelNode input : node.getInputs()) {
+            if (input instanceof Project || input instanceof Aggregate) {
+                // This might be a subquery that defines our alias
+                String result = findAliasInRelTree(targetAlias, input, visited);
+                if (result != null) {
+                    return result;
+                }
+            } else if (input instanceof TableScan) {
+                TableScan scan = (TableScan) input;
+                String tableName = scan.getTable().getQualifiedName().toString();
+                // If we find a table scan, it might be what the alias refers to
+                // This is a heuristic - in complex queries, we need more context
+                logger.debug("[findAliasInRelTree] Found table scan: {}", tableName);
+            }
+        }
+
+        return null;
     }
 
     private String findTableInContext(String tableName, RelNode context, RelMetadataQuery mq) {
@@ -532,8 +773,10 @@ public class RexNodeLineageExtractor {
                 String opName = call.getOperator().getName().toUpperCase();
                 if ("IFNULL".equals(opName)) {
                     columnLineage.setTransformType("IFNULL");
+                    parseIfnullExpression(call, columnLineage);
                  } else if (call.getOperator() instanceof org.apache.calcite.sql.fun.SqlCaseOperator) {
                      columnLineage.setTransformType("CASE");
+                     parseCaseExpression(call, columnLineage);
                  } else if (call.getOperator() instanceof org.apache.calcite.sql.fun.SqlSumAggFunction ||
                             call.getOperator() instanceof org.apache.calcite.sql.fun.SqlCountAggFunction ||
                             call.getOperator() instanceof org.apache.calcite.sql.fun.SqlAvgAggFunction) {
@@ -546,10 +789,78 @@ public class RexNodeLineageExtractor {
          };
          shuttle.apply(rexNode);
 
-         return columnLineage;
-    }
+          return columnLineage;
+     }
 
-    private RelNode convertToRelNode(SqlSelect sqlSelect, String sql) {
+     /**
+      * Parse IFNULL expression to extract null handling information
+      */
+     private void parseIfnullExpression(RexCall call, ColumnLineage columnLineage) {
+         if (call.getOperands().size() >= 2) {
+             Map<String, Object> filterConditions = new HashMap<>();
+             filterConditions.put("_is_null_filled", true);
+             filterConditions.put("_null_default_value", call.getOperands().get(1).toString());
+             filterConditions.put("_inner_expression", call.getOperands().get(0).toString());
+             columnLineage.setFilterCondition(filterConditions);
+         }
+     }
+
+     /**
+      * Parse CASE WHEN expression to extract filter conditions
+      */
+     private void parseCaseExpression(RexCall call, ColumnLineage columnLineage) {
+         List<RexNode> operands = call.getOperands();
+         if (operands.size() < 3) return; // CASE must have at least WHEN, THEN, ELSE
+
+         Map<String, Object> filterConditions = new HashMap<>();
+         List<Map<String, Object>> caseBranches = new ArrayList<>();
+
+         // CASE WHEN condition1 THEN result1 WHEN condition2 THEN result2 ... ELSE default END
+         // Operands: [condition1, result1, condition2, result2, ..., default]
+
+         for (int i = 0; i < operands.size() - 1; i += 2) {
+             if (i + 1 < operands.size()) {
+                 RexNode condition = operands.get(i);
+                 RexNode result = operands.get(i + 1);
+
+                 Map<String, Object> branch = new HashMap<>();
+                 branch.put("condition", condition.toString());
+                 branch.put("result", result.toString());
+                 caseBranches.add(branch);
+
+                 // For the specific case of PAYTYPE = value, extract as filter condition
+                 if (condition.toString().contains("PAYTYPE")) {
+                     String conditionStr = condition.toString();
+                     if (conditionStr.contains("=")) {
+                         String[] parts = conditionStr.split("=");
+                         if (parts.length == 2) {
+                             String value = parts[1].trim();
+                             try {
+                                 int payTypeValue = Integer.parseInt(value);
+                                 filterConditions.put("paytype_" + payTypeValue, true);
+                                 filterConditions.put("paytype_condition", "PAYTYPE = " + payTypeValue);
+                             } catch (NumberFormatException e) {
+                                 filterConditions.put("paytype_condition", conditionStr);
+                             }
+                         }
+                     }
+                 }
+             }
+         }
+
+         // Handle ELSE clause if present
+         if (operands.size() % 2 == 1) {
+             RexNode elseResult = operands.get(operands.size() - 1);
+             filterConditions.put("_else_result", elseResult.toString());
+         }
+
+         filterConditions.put("case_branches", caseBranches);
+         filterConditions.put("_case_type", "conditional_branch");
+
+         columnLineage.setFilterCondition(filterConditions);
+     }
+
+     private RelNode convertToRelNode(SqlSelect sqlSelect, String sql) {
         try {
             CalciteSchema schema = CalciteSchema.createRootSchema(true);
 
@@ -615,6 +926,7 @@ public class RexNodeLineageExtractor {
         private RelNode relNode;
         private List<ColumnLineage> columnLineages = new ArrayList<>();
         private String error;
+        private Map<String, Object> joinConditions = new HashMap<>();
 
         public String getOriginalSql() { return originalSql; }
         public void setOriginalSql(String originalSql) { this.originalSql = originalSql; }
@@ -626,6 +938,8 @@ public class RexNodeLineageExtractor {
         public void setColumnLineages(List<ColumnLineage> columnLineages) { this.columnLineages = columnLineages; }
         public String getError() { return error; }
         public void setError(String error) { this.error = error; }
+        public Map<String, Object> getJoinConditions() { return joinConditions; }
+        public void setJoinConditions(Map<String, Object> joinConditions) { this.joinConditions = joinConditions; }
     }
 
     public static class ColumnLineage {
@@ -635,6 +949,7 @@ public class RexNodeLineageExtractor {
         private RexNode rexNode;
         private String transformType;
         private String aggregationFunction;
+        private String aggregationField;
         private boolean distinct;
         private Map<String, Object> filterCondition;
         private List<ColumnSource> sources = new ArrayList<>();
@@ -651,6 +966,8 @@ public class RexNodeLineageExtractor {
         public void setTransformType(String transformType) { this.transformType = transformType; }
         public String getAggregationFunction() { return aggregationFunction; }
         public void setAggregationFunction(String aggregationFunction) { this.aggregationFunction = aggregationFunction; }
+        public String getAggregationField() { return aggregationField; }
+        public void setAggregationField(String aggregationField) { this.aggregationField = aggregationField; }
         public boolean isDistinct() { return distinct; }
         public void setDistinct(boolean distinct) { this.distinct = distinct; }
         public Map<String, Object> getFilterCondition() { return filterCondition; }
