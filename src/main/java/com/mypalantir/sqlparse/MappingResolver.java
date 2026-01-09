@@ -567,6 +567,11 @@ public class MappingResolver {
             path.setJoinedTable(join.getJoinedTable());
             path.setOnCondition(join.getOnCondition());
 
+            // 空值校验：跳过未解析的 JOIN
+            if (join.getJoinedTable() == null || join.getJoinedTable().trim().isEmpty()) {
+                continue;
+            }
+
             // 尝试解析关联的对象类型
             String tableName = join.getJoinedTable().split("\\s+")[0];
             DataSourceMapping mapping = mappingsByTable.get(tableName.toLowerCase());

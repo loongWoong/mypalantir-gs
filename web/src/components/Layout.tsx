@@ -11,8 +11,7 @@ import {
   PlusIcon,
   PencilIcon,
   ChevronDownIcon,
-  SparklesIcon,
-  CodeBracketIcon
+  SparklesIcon
 } from '@heroicons/react/24/outline';
 import type { ObjectType, LinkType } from '../api/client';
 import { schemaApi } from '../api/client';
@@ -243,7 +242,7 @@ export default function Layout({ children }: LayoutProps) {
               Natural Language Query
             </Link>
 
-            <Link
+            {/* <Link
               to="/sql-paste"
               className={`flex items-center px-3 py-2 rounded-lg mb-2 ${
                 isActive('/sql-paste')
@@ -253,7 +252,7 @@ export default function Layout({ children }: LayoutProps) {
             >
               <CodeBracketIcon className="w-5 h-5 mr-3" />
               SQL 指标提取
-            </Link>
+            </Link> */}
 
             {!loading && (
               <>

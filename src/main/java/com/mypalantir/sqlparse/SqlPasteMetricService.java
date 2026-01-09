@@ -38,6 +38,12 @@ public class SqlPasteMetricService {
     private final LLMService llmService;
     private final Loader loader;
     private final MappingService mappingService;
+    
+    // 新增：复杂SQL解析组件
+    private final ComplexSqlStructureAnalyzer complexSqlAnalyzer;
+    private final ReportMetricExtractor reportMetricExtractor;
+    private final MultiDimensionAggregationHandler multiDimensionHandler;
+    private final SqlLayerIntegrator sqlLayerIntegrator;
 
     public SqlPasteMetricService(
             CalciteSqlParser sqlParser,
@@ -49,7 +55,11 @@ public class SqlPasteMetricService {
             DatabaseMetadataService databaseMetadataService,
             LLMService llmService,
             Loader loader,
-            MappingService mappingService) {
+            MappingService mappingService,
+            ComplexSqlStructureAnalyzer complexSqlAnalyzer,
+            ReportMetricExtractor reportMetricExtractor,
+            MultiDimensionAggregationHandler multiDimensionHandler,
+            SqlLayerIntegrator sqlLayerIntegrator) {
         this.sqlParser = sqlParser;
         this.mappingResolver = mappingResolver;
         this.llmAlignment = llmAlignment;
@@ -60,6 +70,10 @@ public class SqlPasteMetricService {
         this.llmService = llmService;
         this.loader = loader;
         this.mappingService = mappingService;
+        this.complexSqlAnalyzer = complexSqlAnalyzer;
+        this.reportMetricExtractor = reportMetricExtractor;
+        this.multiDimensionHandler = multiDimensionHandler;
+        this.sqlLayerIntegrator = sqlLayerIntegrator;
     }
 
     /**
@@ -113,9 +127,25 @@ public class SqlPasteMetricService {
                 result.setSemanticResult(semanticResult);
             }
 
-            // 步骤 5: 提取指标
+            // 步骤 5: 提取指标（增强：检测复杂SQL结构）
             logger.info("步骤 5: 提取指标");
-            List<ExtractedMetric> extractedMetrics = extractMetrics(parseResult, alignmentResult, semanticResult);
+            
+            // 5.1: 分析SQL结构类型
+            ComplexSqlStructureAnalyzer.SqlStructureType structureType = 
+                complexSqlAnalyzer.analyzeStructure(sql);
+            logger.info("SQL结构类型: {}", structureType);
+            
+            List<ExtractedMetric> extractedMetrics;
+            
+            // 5.2: 根据结构类型选择提取策略
+            if (structureType == ComplexSqlStructureAnalyzer.SqlStructureType.MULTI_LAYER_REPORT) {
+                logger.info("使用多层报表SQL提取策略");
+                extractedMetrics = extractMetricsForComplexReport(sql, parseResult, alignmentResult);
+            } else {
+                logger.info("使用标准提取策略");
+                extractedMetrics = extractMetrics(parseResult, alignmentResult, semanticResult);
+            }
+            
             result.setExtractedMetrics(extractedMetrics);
             logger.info("提取完成，找到 {} 个指标", extractedMetrics.size());
 
@@ -345,6 +375,63 @@ public class SqlPasteMetricService {
 
         logger.info("[extractMetrics] 提取完成，共 {} 个指标", metrics.size());
         return metrics;
+    }
+    
+    /**
+     * 提取复杂报表SQL的指标（新增方法）
+     */
+    private List<ExtractedMetric> extractMetricsForComplexReport(
+            String sql,
+            CalciteSqlParseResult parseResult,
+            MappingResolver.MappingAlignmentResult alignmentResult) {
+        
+        logger.info("[extractMetricsForComplexReport] 开始使用复杂报表提取策略");
+        
+        try {
+            // 步骤1: 提取SQL层级结构
+            List<ComplexSqlStructureAnalyzer.SqlLayer> layers = complexSqlAnalyzer.extractLayers(sql);
+            logger.info("[extractMetricsForComplexReport] 提取到 {} 层SQL结构", layers.size());
+            
+            // 步骤2: 分层提取指标（原子→派生→复合）
+            ReportMetricExtractor.LayeredMetrics layeredMetrics = 
+                reportMetricExtractor.extractByLayer(layers);
+            logger.info("[extractMetricsForComplexReport] 分层提取完成: 原子={}, 派生={}, 复合={}",
+                layeredMetrics.getAtomics().size(),
+                layeredMetrics.getDerived().size(),
+                layeredMetrics.getComposite().size());
+            
+            // 步骤3: 处理多维度聚合（如payment_type维度）
+            if (!layers.isEmpty()) {
+                List<ExtractedMetric> dimensionalizedMetrics = 
+                    multiDimensionHandler.processAllDimensionalizedMetrics(
+                        layeredMetrics.getAtomics(), 
+                        layers.get(0));
+                
+                if (!dimensionalizedMetrics.isEmpty()) {
+                    logger.info("[extractMetricsForComplexReport] 生成 {} 个维度化指标", 
+                        dimensionalizedMetrics.size());
+                    // 替换原有的原子指标为维度化指标
+                    layeredMetrics.setAtomics(dimensionalizedMetrics);
+                }
+            }
+            
+            // 步骤4: 整合层级，建立依赖关系
+            SqlLayerIntegrator.IntegratedMetrics integratedMetrics = 
+                sqlLayerIntegrator.integrate(layeredMetrics, layers, alignmentResult);
+            logger.info("[extractMetricsForComplexReport] 整合完成，共 {} 个指标",
+                integratedMetrics.getAllMetrics().size());
+            
+            // 步骤5: 返回所有指标
+            return integratedMetrics.getAllMetrics();
+            
+        } catch (Exception e) {
+            logger.error("[extractMetricsForComplexReport] 复杂报表提取失败: {}", e.getMessage(), e);
+            logger.info("[extractMetricsForComplexReport] 降级到标准提取策略");
+            
+            // 失败时降级到标准提取
+            LLMAlignment.SemanticAlignmentResult semanticResult = createDefaultSemanticResult(parseResult);
+            return extractMetrics(parseResult, alignmentResult, semanticResult);
+        }
     }
 
     /**

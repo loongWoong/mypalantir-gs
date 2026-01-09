@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { metricApi, type SqlPasteParseResult, type ExtractedMetric, type MetricValidation, type SemanticAlignment } from '../api/metric';
+import { metricApi, type SqlPasteParseResult, type ExtractedMetric, type MetricValidation } from '../api/metric';
 import { useWorkspace } from '../WorkspaceContext';
 
 const SqlPastePage: React.FC = () => {
@@ -15,7 +15,6 @@ const SqlPastePage: React.FC = () => {
   const [saveResult, setSaveResult] = useState<any>(null);
   const [validateLoading, setValidateLoading] = useState<boolean>(false);
   const [validateResults, setValidateResults] = useState<Map<number, any>>(new Map());
-  const [showValidateResults, setShowValidateResults] = useState<boolean>(false);
 
   const handleParse = async () => {
     if (!sql.trim()) {
@@ -47,7 +46,6 @@ const SqlPastePage: React.FC = () => {
     setSelectedMetrics(new Set());
     setSaveResult(null);
     setValidateResults(new Map());
-    setShowValidateResults(false);
   }
 
   const toggleMetric = (index: number) => {
@@ -78,7 +76,6 @@ const SqlPastePage: React.FC = () => {
     }
 
     setValidateLoading(true);
-    setShowValidateResults(true);
     const newValidateResults = new Map<number, any>();
 
     try {
@@ -103,7 +100,7 @@ const SqlPastePage: React.FC = () => {
             // 原子指标不需要 aggregationFunction（直接从物理字段取值）
             
             validateResult = await metricApi.validateAtomicMetric({
-              id: metric.id || metric.suggestedId,
+              id: metric.suggestedId,
               name: metric.name,
               display_name: metric.displayName,
               description: metric.description,
@@ -123,7 +120,7 @@ const SqlPastePage: React.FC = () => {
             }
             
             validateResult = await metricApi.validateMetricDefinition({
-              id: metric.id || metric.suggestedId,
+              id: metric.suggestedId,
               name: metric.name,
               display_name: metric.displayName,
               description: metric.description,
@@ -144,7 +141,7 @@ const SqlPastePage: React.FC = () => {
             const baseMetricIds = metric.definition.baseMetricIds || metric.definition.base_metric_ids;
             
             validateResult = await metricApi.validateMetricDefinition({
-              id: metric.id || metric.suggestedId,
+              id: metric.suggestedId,
               name: metric.name,
               display_name: metric.displayName,
               description: metric.description,

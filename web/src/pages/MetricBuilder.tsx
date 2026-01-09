@@ -14,7 +14,7 @@ const MetricBuilder: React.FC = () => {
   const metricTypeParam = searchParams.get('type') as MetricType;
   
   const [selectedType, setSelectedType] = useState<MetricType>(metricTypeParam);
-  const [editMode, setEditMode] = useState<boolean>(!!metricId);
+  const editMode = !!metricId;
   const [atomicMetricData, setAtomicMetricData] = useState<AtomicMetric | null>(null);
   const [metricDefinitionData, setMetricDefinitionData] = useState<MetricDefinition | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
