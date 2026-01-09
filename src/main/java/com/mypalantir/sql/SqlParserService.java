@@ -129,7 +129,10 @@ public class SqlParserService {
 
         // 递归处理子查询 - 支持多层嵌套
         List<SqlNodeTree> children = new ArrayList<>();
-        children.addAll(extractSubqueries(select, level + 1, visited));
+        System.out.println("[Level " + level + "] 开始提取子查询, from=" + (select.getFrom() != null ? select.getFrom().getClass().getSimpleName() : "null"));
+        List<SqlNodeTree> subqueries = extractSubqueries(select, level + 1, visited);
+        System.out.println("[Level " + level + "] 提取到 " + subqueries.size() + " 个子查询");
+        children.addAll(subqueries);
 
         // 处理WHERE中的相关子查询
         if (select.getWhere() != null) {
@@ -185,6 +188,7 @@ public class SqlParserService {
                 seenTables.add(tableName.toLowerCase());
                 TableReference table = new TableReference(tableName, null);
                 tables.add(table);
+                System.out.println("[extractTablesRecursive] 添加表: " + tableName);
             }
         } else if (node instanceof SqlSelect) {
             // 子查询: SELECT (...) AS alias
@@ -193,23 +197,33 @@ public class SqlParserService {
             subqueryRef.setSubquery(subSelect.toString());
             subqueryRef.setJoinType("FROM_SUBQUERY");
             tables.add(subqueryRef);
+            System.out.println("[extractTablesRecursive] 发现子查询");
         } else if (node instanceof SqlBasicCall) {
             SqlBasicCall call = (SqlBasicCall) node;
             String operator = call.getOperator().getKind().toString();
+            System.out.println("[extractTablesRecursive] SqlBasicCall, operator=" + operator + ", operandCount=" + call.operandCount());
 
             if ("JOIN".equals(operator) || "INNER".equals(operator) ||
                 "LEFT".equals(operator) || "RIGHT".equals(operator) ||
                 "FULL".equals(operator) || "CROSS".equals(operator)) {
-                // JOIN 结构
-                for (int i = 0; i < call.operandCount() - 1; i++) {
+                // JOIN 结构：遍历所有操作数
+                for (int i = 0; i < call.operandCount(); i++) {
                     SqlNode operand = call.operand(i);
                     if (operand != null) {
+                        // 检查是否是ON条件
+                        if (operand instanceof SqlBasicCall) {
+                            SqlBasicCall operandCall = (SqlBasicCall) operand;
+                            String opKind = operandCall.getOperator().getKind().toString();
+                            if ("ON".equals(opKind)) {
+                                continue; // 跳过ON条件
+                            }
+                        }
                         extractTablesRecursive(operand, tables, level, seenTables);
                     }
                 }
             } else if ("AS".equals(operator)) {
                 // 别名结构: table AS alias 或 (SELECT ...) AS alias
-                if (call.operandCount() >= 1) {
+                if (call.operandCount() >= 2) {
                     SqlNode leftOperand = call.operand(0);
                     if (leftOperand instanceof SqlSelect) {
                         // 子查询别名
@@ -218,6 +232,7 @@ public class SqlParserService {
                         TableReference subqueryRef = new TableReference("SUBQUERY_" + level, alias);
                         subqueryRef.setSubquery(subSelect.toString());
                         tables.add(subqueryRef);
+                        System.out.println("[extractTablesRecursive] 发现(SELECT ...) AS " + alias);
                     } else {
                         extractTablesRecursive(leftOperand, tables, level, seenTables);
                         // 设置最后一个表的别名
@@ -493,9 +508,34 @@ public class SqlParserService {
     }
 
     private void scanForSubqueriesInFrom(SqlNode node, int level, List<SqlNodeTree> subqueries, Set<String> visited) {
-        if (node == null) return;
+        if (node == null) {
+            System.out.println("[scanForSubqueriesInFrom] node is null, return");
+            return;
+        }
+
+        System.out.println("[scanForSubqueriesInFrom] level=" + level + ", node class=" + node.getClass().getSimpleName());
+
+        // 处理 SqlJoin 类型（JOIN 操作的独立类）
+        if (node instanceof SqlJoin) {
+            SqlJoin join = (SqlJoin) node;
+            System.out.println("[scanForSubqueriesInFrom] 发现SqlJoin, 遍历左右操作数");
+            // 处理左操作数
+            SqlNode leftNode = join.getLeft();
+            if (leftNode != null) {
+                System.out.println("[scanForSubqueriesInFrom] 处理左操作数: " + leftNode.getClass().getSimpleName());
+                scanForSubqueriesInFrom(leftNode, level, subqueries, visited);
+            }
+            // 处理右操作数
+            SqlNode rightNode = join.getRight();
+            if (rightNode != null) {
+                System.out.println("[scanForSubqueriesInFrom] 处理右操作数: " + rightNode.getClass().getSimpleName());
+                scanForSubqueriesInFrom(rightNode, level, subqueries, visited);
+            }
+            return;
+        }
 
         if (node instanceof SqlSelect) {
+            System.out.println("[scanForSubqueriesInFrom] 发现SqlSelect子查询");
             SqlSelect subSelect = (SqlSelect) node;
             SqlNodeTree subTree = buildSelectTree(subSelect, level, visited);
             subTree.setType("SUBQUERY");
@@ -505,16 +545,33 @@ public class SqlParserService {
         } else if (node instanceof SqlBasicCall) {
             SqlBasicCall call = (SqlBasicCall) node;
             String operator = call.getOperator().getKind().toString();
+            System.out.println("[scanForSubqueriesInFrom] SqlBasicCall, operator=" + operator + ", operandCount=" + call.operandCount());
 
             if ("JOIN".equals(operator) || "INNER".equals(operator) ||
-                "LEFT".equals(operator) || "RIGHT".equals(operator)) {
-                for (int i = 0; i < call.operandCount() - 1; i++) {
-                    scanForSubqueriesInFrom(call.operand(i), level, subqueries, visited);
+                "LEFT".equals(operator) || "RIGHT".equals(operator) ||
+                "FULL".equals(operator) || "CROSS".equals(operator)) {
+                // JOIN结构：遍历所有操作数，包括左表、右表和ON条件
+                for (int i = 0; i < call.operandCount(); i++) {
+                    SqlNode operand = call.operand(i);
+                    if (operand != null) {
+                        // 如果是ON条件，需要递归处理其子节点
+                        if (operand instanceof SqlBasicCall) {
+                            SqlBasicCall operandCall = (SqlBasicCall) operand;
+                            String opKind = operandCall.getOperator().getKind().toString();
+                            if ("ON".equals(opKind)) {
+                                // ON条件不作为子查询处理
+                                System.out.println("[scanForSubqueriesInFrom] 跳过ON条件");
+                                continue;
+                            }
+                        }
+                        scanForSubqueriesInFrom(operand, level, subqueries, visited);
+                    }
                 }
             } else if ("AS".equals(operator)) {
-                if (call.operandCount() >= 1) {
+                if (call.operandCount() >= 2) {
                     SqlNode leftOperand = call.operand(0);
                     if (leftOperand instanceof SqlSelect) {
+                        System.out.println("[scanForSubqueriesInFrom] 发现(SELECT ...) AS结构");
                         SqlSelect subSelect = (SqlSelect) leftOperand;
                         SqlNodeTree subTree = buildSelectTree(subSelect, level, visited);
                         subTree.setType("SUBQUERY");
@@ -522,14 +579,18 @@ public class SqlParserService {
                         subTree.setDescription("FROM子句子查询 #" + subqueries.size());
                         subqueries.add(subTree);
                     } else {
+                        System.out.println("[scanForSubqueriesInFrom] AS左边不是SqlSelect, 继续递归");
                         scanForSubqueriesInFrom(leftOperand, level, subqueries, visited);
                     }
                 }
             } else {
+                System.out.println("[scanForSubqueriesInFrom] 其他操作符, 遍历所有操作数");
                 for (SqlNode operand : call.getOperandList()) {
                     scanForSubqueriesInFrom(operand, level, subqueries, visited);
                 }
             }
+        } else {
+            System.out.println("[scanForSubqueriesInFrom] 未知节点类型: " + node.getClass().getSimpleName());
         }
     }
 

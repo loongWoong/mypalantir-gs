@@ -9,8 +9,8 @@ const SqlParsePage: React.FC<SqlParsePageProps> = ({ initialSql = '' }) => {
   const [sql, setSql] = useState(initialSql);
   const [result, setResult] = useState<SqlParseResult | null>(null);
   const [loading, setLoading] = useState(false);
-  const [expandedLevels, setExpandedLevels] = useState<Set<number>>(new Set([0]));
-  const [selectedLevel, setSelectedLevel] = useState<number>(0);
+  const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
+  const [selectedNodeId, setSelectedNodeId] = useState<string>('');
 
   const handleParse = async () => {
     if (!sql.trim()) return;
@@ -25,8 +25,8 @@ const SqlParsePage: React.FC<SqlParsePageProps> = ({ initialSql = '' }) => {
       const data = await response.json();
       setResult(data);
       if (data.success) {
-        setExpandedLevels(new Set([0]));
-        setSelectedLevel(0);
+        setExpandedNodes(new Set());
+        setSelectedNodeId(data.tree?.id || '');
       }
     } catch (error) {
       console.error('解析失败:', error);
@@ -35,13 +35,13 @@ const SqlParsePage: React.FC<SqlParsePageProps> = ({ initialSql = '' }) => {
     }
   };
 
-  const toggleLevel = useCallback((level: number) => {
-    setExpandedLevels(prev => {
+  const toggleNode = useCallback((nodeId: string) => {
+    setExpandedNodes(prev => {
       const newSet = new Set(prev);
-      if (newSet.has(level)) {
-        newSet.delete(level);
+      if (newSet.has(nodeId)) {
+        newSet.delete(nodeId);
       } else {
-        newSet.add(level);
+        newSet.add(nodeId);
       }
       return newSet;
     });
@@ -49,19 +49,19 @@ const SqlParsePage: React.FC<SqlParsePageProps> = ({ initialSql = '' }) => {
 
   const expandAll = useCallback(() => {
     if (!result?.tree) return;
-    const allLevels = new Set<number>();
-    collectAllLevels(result.tree, 0, allLevels);
-    setExpandedLevels(allLevels);
+    const allNodeIds = new Set<string>();
+    collectAllNodeIds(result.tree, allNodeIds);
+    setExpandedNodes(allNodeIds);
   }, [result]);
 
   const collapseAll = useCallback(() => {
-    setExpandedLevels(new Set([0]));
+    setExpandedNodes(new Set());
   }, []);
 
-  const collectAllLevels = (node: SqlNodeTree, currentLevel: number, levels: Set<number>) => {
-    levels.add(currentLevel);
+  const collectAllNodeIds = (node: SqlNodeTree, nodeIds: Set<string>) => {
+    nodeIds.add(node.id);
     if (node.children) {
-      node.children.forEach(child => collectAllLevels(child, currentLevel + 1, levels));
+      node.children.forEach(child => collectAllNodeIds(child, nodeIds));
     }
   };
 
@@ -69,6 +69,7 @@ const SqlParsePage: React.FC<SqlParsePageProps> = ({ initialSql = '' }) => {
     const levels: SelectLevel[] = [];
 
     const levelData: SelectLevel = {
+      id: node.id,
       level,
       node,
       type: level === 0 ? 'ROOT' : (node.tables.length === 0 && node.fields.length === 0 ? 'SUBQUERY' : 'SELECT'),
@@ -97,6 +98,7 @@ const SqlParsePage: React.FC<SqlParsePageProps> = ({ initialSql = '' }) => {
   };
 
   interface SelectLevel {
+    id: string;
     level: number;
     node: SqlNodeTree;
     type: string;
@@ -188,19 +190,19 @@ const SqlParsePage: React.FC<SqlParsePageProps> = ({ initialSql = '' }) => {
             </div>
             {getSelectLevels().map((levelData) => (
               <LevelCard
-                key={levelData.level}
+                key={levelData.id}
                 levelData={levelData}
-                isExpanded={expandedLevels.has(levelData.level)}
-                isSelected={selectedLevel === levelData.level}
-                onToggle={() => toggleLevel(levelData.level)}
-                onSelect={() => setSelectedLevel(levelData.level)}
+                isExpanded={expandedNodes.has(levelData.id)}
+                isSelected={selectedNodeId === levelData.id}
+                onToggle={() => toggleNode(levelData.id)}
+                onSelect={() => setSelectedNodeId(levelData.id)}
               />
             ))}
           </div>
 
           <div style={{ background: '#f9fafb', borderRadius: '8px', padding: '16px', height: '600px', overflow: 'auto' }}>
-            <h3 style={{ margin: '0 0 16px 0', fontSize: '14px', color: '#374151' }}>血缘详情 - Level {selectedLevel}</h3>
-            <LineagePanel level={getSelectLevels().find(l => l.level === selectedLevel)} lineages={result?.lineage || []} />
+            <h3 style={{ margin: '0 0 16px 0', fontSize: '14px', color: '#374151' }}>血缘详情 - {selectedNodeId ? getSelectLevels().find(l => l.id === selectedNodeId)?.level : '未选择'}</h3>
+            <LineagePanel level={getSelectLevels().find(l => l.id === selectedNodeId)} lineages={result?.lineage || []} />
           </div>
         </div>
       )}
@@ -238,6 +240,7 @@ const LevelCard: React.FC<{
   onSelect: () => void;
 }> = ({ levelData, isExpanded, isSelected, onToggle, onSelect }) => {
   const hasChildren = levelData.children.length > 0;
+  const displayChildren = levelData.children;
 
   return (
     <div style={{ marginBottom: '8px' }}>
@@ -279,7 +282,7 @@ const LevelCard: React.FC<{
         </span>
       </div>
 
-      {isExpanded && (
+      {isExpanded && hasChildren && (
         <div style={{
           marginTop: '6px',
           marginLeft: '28px',
@@ -338,6 +341,46 @@ const LevelCard: React.FC<{
               </div>
             </div>
           )}
+
+          {levelData.whereCondition && (
+            <div style={{ marginBottom: '8px' }}>
+              <div style={{ fontSize: '11px', color: '#6b7280', marginBottom: '4px', fontWeight: 500 }}>WHERE</div>
+              <div style={{ fontSize: '11px', color: '#374151', wordBreak: 'break-all' }}>
+                {levelData.whereCondition.length > 100 ? levelData.whereCondition.substring(0, 100) + '...' : levelData.whereCondition}
+              </div>
+            </div>
+          )}
+
+          <div style={{ marginTop: '12px', paddingTop: '10px', borderTop: '1px solid #e5e7eb' }}>
+            <div style={{ fontSize: '11px', color: '#6b7280', marginBottom: '8px', fontWeight: 500 }}>
+              子查询 ({displayChildren.length})
+            </div>
+            {displayChildren.map((child, idx) => (
+              <div key={idx} style={{
+                padding: '8px 10px',
+                background: '#f9fafb',
+                borderRadius: '4px',
+                marginBottom: '6px',
+                fontSize: '11px'
+              }}>
+                <span style={{
+                  padding: '2px 6px',
+                  background: getTypeColor('SUBQUERY'),
+                  color: 'white',
+                  borderRadius: '3px',
+                  marginRight: '8px'
+                }}>
+                  L{levelData.level + 1}
+                </span>
+                <span style={{ color: '#374151' }}>
+                  {child.alias || 'SUBQUERY'}
+                </span>
+                <span style={{ marginLeft: 'auto', color: '#9ca3af' }}>
+                  {child.tables?.length || 0}表 / {child.fields?.length || 0}字段
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>
@@ -427,6 +470,7 @@ const LineagePanel: React.FC<{ level?: SelectLevel; lineages: FieldLineage[] }> 
 };
 
 interface SelectLevel {
+  id: string;
   level: number;
   node: SqlNodeTree;
   type: string;
