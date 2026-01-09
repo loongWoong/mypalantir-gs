@@ -12,7 +12,7 @@ import {
   PencilIcon,
   ChevronDownIcon,
   SparklesIcon,
-  CodeBracketIcon
+
 } from '@heroicons/react/24/outline';
 import type { ObjectType, LinkType } from '../api/client';
 import { schemaApi } from '../api/client';
@@ -243,17 +243,7 @@ export default function Layout({ children }: LayoutProps) {
               Natural Language Query
             </Link>
 
-            <Link
-              to="/sql-paste"
-              className={`flex items-center px-3 py-2 rounded-lg mb-2 ${
-                isActive('/sql-paste')
-                  ? 'bg-blue-50 text-blue-700'
-                  : 'text-gray-700 hover:bg-gray-100'
-              }`}
-            >
-              <CodeBracketIcon className="w-5 h-5 mr-3" />
-              SQL 指标提取
-            </Link>
+
 
             {!loading && (
               <>
@@ -333,7 +323,7 @@ export default function Layout({ children }: LayoutProps) {
             {location.pathname.startsWith('/metrics') && '指标管理'}
             {location.pathname === '/query' && 'Query Builder'}
             {location.pathname === '/natural-language-query' && 'Natural Language Query'}
-            {location.pathname === '/sql-paste' && 'SQL 粘贴指标提取'}
+
           </h2>
         </header>
 

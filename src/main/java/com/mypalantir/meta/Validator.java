@@ -7,7 +7,7 @@ public class Validator {
     private final OntologySchema schema;
     private static final Pattern NAME_PATTERN = Pattern.compile("^[\\p{L}][\\p{L}\\p{N}_]*$");
     private static final Set<String> VALID_DATA_TYPES = Set.of(
-        "string", "int", "long", "float", "bool", "date", "datetime", "json", "array"
+        "string", "int", "long", "float", "double", "bigdecimal", "bool", "date", "datetime", "json", "array"
     );
     private static final Set<String> VALID_CARDINALITIES = Set.of(
         "one-to-one", "one-to-many", "many-to-one", "many-to-many"
@@ -205,7 +205,7 @@ public class Validator {
                     }
                 }
             }
-        } else if ("int".equals(dataType) || "integer".equals(dataType) || "long".equals(dataType) || "float".equals(dataType)) {
+        } else if ("int".equals(dataType) || "integer".equals(dataType) || "long".equals(dataType) || "float".equals(dataType) || "double".equals(dataType) || "bigdecimal".equals(dataType)) {
             if (constraints.containsKey("min") && constraints.containsKey("max")) {
                 Object minObj = constraints.get("min");
                 Object maxObj = constraints.get("max");

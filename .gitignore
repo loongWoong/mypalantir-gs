@@ -51,6 +51,7 @@ logs/
 ehthumbs.db
 Thumbs.db
 Desktop.ini
+nul
 
 # Web UI
 web/node_modules/
