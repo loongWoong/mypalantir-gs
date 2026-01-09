@@ -12,7 +12,7 @@ import MetricBrowser from './pages/MetricBrowser';
 import MetricBuilder from './pages/MetricBuilder';
 import MetricDetail from './pages/MetricDetail';
 import NaturalLanguageQuery from './pages/NaturalLanguageQuery';
-import SqlPastePage from './pages/SqlPaste';
+
 
 function App() {
   return (
@@ -32,7 +32,7 @@ function App() {
           <Route path="/metrics/builder" element={<MetricBuilder />} />
           <Route path="/metrics/:id" element={<MetricDetail />} />
           <Route path="/natural-language-query" element={<NaturalLanguageQuery />} />
-          <Route path="/sql-paste" element={<SqlPastePage />} />
+
         </Routes>
       </Layout>
     </BrowserRouter>
