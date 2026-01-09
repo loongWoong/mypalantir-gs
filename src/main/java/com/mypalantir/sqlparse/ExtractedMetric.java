@@ -1,6 +1,7 @@
 package com.mypalantir.sqlparse;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * 提取的指标数据模型
@@ -41,6 +42,10 @@ public class ExtractedMetric {
 
     private String unit;
     private String status = "active";
+
+    private List<ColumnSource> sources = new ArrayList<>();
+    private String transformType;
+    private String rexNodeType;
 
     public ExtractedMetric() {
     }
@@ -94,6 +99,32 @@ public class ExtractedMetric {
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
 
+    public List<ColumnSource> getSources() { return sources; }
+    public void setSources(List<ColumnSource> sources) { this.sources = sources; }
+    public String getTransformType() { return transformType; }
+    public void setTransformType(String transformType) { this.transformType = transformType; }
+    public String getRexNodeType() { return rexNodeType; }
+    public void setRexNodeType(String rexNodeType) { this.rexNodeType = rexNodeType; }
+
+    public static class ColumnSource {
+        private String sourceTable;
+        private String sourceColumn;
+        private int columnOrdinal;
+        private List<String> transformations = new ArrayList<>();
+        private String fullLineage;
+
+        public String getSourceTable() { return sourceTable; }
+        public void setSourceTable(String sourceTable) { this.sourceTable = sourceTable; }
+        public String getSourceColumn() { return sourceColumn; }
+        public void setSourceColumn(String sourceColumn) { this.sourceColumn = sourceColumn; }
+        public int getColumnOrdinal() { return columnOrdinal; }
+        public void setColumnOrdinal(int columnOrdinal) { this.columnOrdinal = columnOrdinal; }
+        public List<String> getTransformations() { return transformations; }
+        public void setTransformations(List<String> transformations) { this.transformations = transformations; }
+        public String getFullLineage() { return fullLineage; }
+        public void setFullLineage(String fullLineage) { this.fullLineage = fullLineage; }
+    }
+
     public Map<String, Object> toAtomicMetricMap() {
         Map<String, Object> map = new HashMap<>();
         if (id != null) map.put("id", id);
@@ -126,6 +157,20 @@ public class ExtractedMetric {
         if (baseMetricIds != null) map.put("base_metric_ids", baseMetricIds);
         if (unit != null) map.put("unit", unit);
         map.put("status", status);
+        if (transformType != null) map.put("transform_type", transformType);
+        if (rexNodeType != null) map.put("rex_node_type", rexNodeType);
+        if (sources != null && !sources.isEmpty()) {
+            List<Map<String, Object>> sourceList = sources.stream().map(s -> {
+                Map<String, Object> sm = new HashMap<>();
+                if (s.getSourceTable() != null) sm.put("source_table", s.getSourceTable());
+                if (s.getSourceColumn() != null) sm.put("source_column", s.getSourceColumn());
+                sm.put("column_ordinal", s.getColumnOrdinal());
+                if (s.getTransformations() != null) sm.put("transformations", s.getTransformations());
+                if (s.getFullLineage() != null) sm.put("full_lineage", s.getFullLineage());
+                return sm;
+            }).collect(Collectors.toList());
+            map.put("column_sources", sourceList);
+        }
         return map;
     }
 }

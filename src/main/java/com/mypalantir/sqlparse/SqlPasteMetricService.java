@@ -44,6 +44,11 @@ public class SqlPasteMetricService {
     private final ReportMetricExtractor reportMetricExtractor;
     private final MultiDimensionAggregationHandler multiDimensionHandler;
     private final SqlLayerIntegrator sqlLayerIntegrator;
+    // 新增：LEFT JOIN 报表处理器
+    private final ReportJoinMetricHandler reportJoinMetricHandler;
+    // 新增：RexNode 血缘解析组件
+    private final RexNodeLineageExtractor rexNodeLineageExtractor;
+    private final RexMetricParser rexMetricParser;
 
     public SqlPasteMetricService(
             CalciteSqlParser sqlParser,
@@ -59,7 +64,10 @@ public class SqlPasteMetricService {
             ComplexSqlStructureAnalyzer complexSqlAnalyzer,
             ReportMetricExtractor reportMetricExtractor,
             MultiDimensionAggregationHandler multiDimensionHandler,
-            SqlLayerIntegrator sqlLayerIntegrator) {
+            SqlLayerIntegrator sqlLayerIntegrator,
+            ReportJoinMetricHandler reportJoinMetricHandler,
+            RexNodeLineageExtractor rexNodeLineageExtractor,
+            RexMetricParser rexMetricParser) {
         this.sqlParser = sqlParser;
         this.mappingResolver = mappingResolver;
         this.llmAlignment = llmAlignment;
@@ -74,6 +82,9 @@ public class SqlPasteMetricService {
         this.reportMetricExtractor = reportMetricExtractor;
         this.multiDimensionHandler = multiDimensionHandler;
         this.sqlLayerIntegrator = sqlLayerIntegrator;
+        this.reportJoinMetricHandler = reportJoinMetricHandler;
+        this.rexNodeLineageExtractor = rexNodeLineageExtractor;
+        this.rexMetricParser = rexMetricParser;
     }
 
     /**
@@ -130,20 +141,34 @@ public class SqlPasteMetricService {
             // 步骤 5: 提取指标（增强：检测复杂SQL结构）
             logger.info("步骤 5: 提取指标");
             
-            // 5.1: 分析SQL结构类型
-            ComplexSqlStructureAnalyzer.SqlStructureType structureType = 
-                complexSqlAnalyzer.analyzeStructure(sql);
-            logger.info("SQL结构类型: {}", structureType);
-            
             List<ExtractedMetric> extractedMetrics;
             
-            // 5.2: 根据结构类型选择提取策略
-            if (structureType == ComplexSqlStructureAnalyzer.SqlStructureType.MULTI_LAYER_REPORT) {
-                logger.info("使用多层报表SQL提取策略");
-                extractedMetrics = extractMetricsForComplexReport(sql, parseResult, alignmentResult);
+            // 5.1: 优先使用 RexNode 血缘解析（最精确）
+            logger.info("步骤 5.1: 使用 RexNode 血缘解析");
+            extractedMetrics = extractMetricsByRex(sql, parseResult, alignmentResult);
+            
+            if (!extractedMetrics.isEmpty()) {
+                logger.info("RexNode 解析成功，提取到 {} 个指标", extractedMetrics.size());
             } else {
-                logger.info("使用标准提取策略");
-                extractedMetrics = extractMetrics(parseResult, alignmentResult, semanticResult);
+                // 5.2: 回退到 LEFT JOIN 报表解析
+                logger.info("步骤 5.2: RexNode 解析无结果，回退到 LEFT JOIN 报表解析");
+                if (reportJoinMetricHandler.isJoinReportStructure(sql)) {
+                    logger.info("使用 LEFT JOIN 报表提取策略");
+                    extractedMetrics = extractMetricsForJoinReport(sql, parseResult, alignmentResult);
+                } else {
+                    // 5.3: 继续回退到复杂报表解析
+                    ComplexSqlStructureAnalyzer.SqlStructureType structureType = 
+                        complexSqlAnalyzer.analyzeStructure(sql);
+                    logger.info("SQL结构类型: {}", structureType);
+                    
+                    if (structureType == ComplexSqlStructureAnalyzer.SqlStructureType.MULTI_LAYER_REPORT) {
+                        logger.info("使用多层报表SQL提取策略");
+                        extractedMetrics = extractMetricsForComplexReport(sql, parseResult, alignmentResult);
+                    } else {
+                        logger.info("使用标准提取策略");
+                        extractedMetrics = extractMetrics(parseResult, alignmentResult, semanticResult);
+                    }
+                }
             }
             
             result.setExtractedMetrics(extractedMetrics);
@@ -429,6 +454,96 @@ public class SqlPasteMetricService {
             logger.info("[extractMetricsForComplexReport] 降级到标准提取策略");
             
             // 失败时降级到标准提取
+            LLMAlignment.SemanticAlignmentResult semanticResult = createDefaultSemanticResult(parseResult);
+             return extractMetrics(parseResult, alignmentResult, semanticResult);
+         }
+     }
+
+    /**
+     * 使用 RexNode 血缘解析提取指标（首选策略）
+     */
+    private List<ExtractedMetric> extractMetricsByRex(
+            String sql,
+            CalciteSqlParseResult parseResult,
+            MappingResolver.MappingAlignmentResult alignmentResult) {
+        
+        logger.info("[extractMetricsByRex] 开始 RexNode 血缘解析");
+        
+        try {
+            RexNodeLineageExtractor.RexMetricParseResult rexResult = rexMetricParser.parse(sql);
+            
+            if (rexResult.getError() != null) {
+                logger.warn("[extractMetricsByRex] RexNode 解析失败: {}", rexResult.getError());
+                return Collections.emptyList();
+            }
+            
+            logger.info("[extractMetricsByRex] RexNode 解析成功，列数: {}", rexResult.getColumnLineages().size());
+            
+            List<ExtractedMetric> metrics = rexMetricParser.extractMetrics(rexResult);
+            
+            // 设置业务过程（从映射中获取）
+            for (ExtractedMetric metric : metrics) {
+                if (metric.getBusinessProcess() == null && !alignmentResult.getInvolvedObjectTypes().isEmpty()) {
+                    metric.setBusinessProcess(alignmentResult.getInvolvedObjectTypes().get(0));
+                }
+                
+                logger.info("[extractMetricsByRex] 指标: name={}, category={}, sources={}",
+                    metric.getName(), metric.getCategory(), metric.getSources().size());
+                
+                if (metric.getSources() != null && !metric.getSources().isEmpty()) {
+                    for (ExtractedMetric.ColumnSource source : metric.getSources()) {
+                        logger.info("[extractMetricsByRex]   血缘: {} -> {}.{} [{}]",
+                            metric.getName(), source.getSourceTable(), source.getSourceColumn(), source.getFullLineage());
+                    }
+                }
+            }
+            
+            return metrics;
+            
+        } catch (Exception e) {
+            logger.error("[extractMetricsByRex] RexNode 解析异常: {}", e.getMessage(), e);
+            return Collections.emptyList();
+        }
+    }
+    
+    /**
+     * 提取 LEFT JOIN 报表的指标（新增方法）
+     */
+    private List<ExtractedMetric> extractMetricsForJoinReport(
+            String sql,
+            CalciteSqlParseResult parseResult,
+            MappingResolver.MappingAlignmentResult alignmentResult) {
+        
+        logger.info("[extractMetricsForJoinReport] 开始使用 LEFT JOIN 报表提取策略");
+        
+        try {
+            // 使用 ReportJoinMetricHandler 处理
+            ReportJoinMetricHandler.JoinReportMetrics joinMetrics = 
+                reportJoinMetricHandler.processJoinReport(sql);
+            
+            if (joinMetrics.getError() != null) {
+                logger.error("[extractMetricsForJoinReport] 处理失败: {}", joinMetrics.getError());
+                logger.info("[extractMetricsForJoinReport] 降级到标准提取策略");
+                LLMAlignment.SemanticAlignmentResult semanticResult = createDefaultSemanticResult(parseResult);
+                return extractMetrics(parseResult, alignmentResult, semanticResult);
+            }
+            
+            logger.info("[extractMetricsForJoinReport] 提取完成，共 {} 个指标", 
+                joinMetrics.getAllMetrics().size());
+            
+            // 设置指标的业务过程（从映射中获取）
+            for (ExtractedMetric metric : joinMetrics.getAllMetrics()) {
+                if (metric.getBusinessProcess() == null && !alignmentResult.getInvolvedObjectTypes().isEmpty()) {
+                    metric.setBusinessProcess(alignmentResult.getInvolvedObjectTypes().get(0));
+                }
+            }
+            
+            return joinMetrics.getAllMetrics();
+            
+        } catch (Exception e) {
+            logger.error("[extractMetricsForJoinReport] LEFT JOIN 报表提取失败: {}", e.getMessage(), e);
+            logger.info("[extractMetricsForJoinReport] 降级到标准提取策略");
+            
             LLMAlignment.SemanticAlignmentResult semanticResult = createDefaultSemanticResult(parseResult);
             return extractMetrics(parseResult, alignmentResult, semanticResult);
         }
