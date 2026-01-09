@@ -68,43 +68,18 @@ const SqlParsePage: React.FC<SqlParsePageProps> = ({ initialSql = '' }) => {
   const flattenSelectLevels = useCallback((node: SqlNodeTree, level: number): SelectLevel[] => {
     const levels: SelectLevel[] = [];
 
-    let displayType = level === 0 ? 'ROOT' : (node.type === 'SUBQUERY_PARENT' ? node.alias : (node.tables.length === 0 && node.fields.length === 0 ? 'SUBQUERY' : 'SELECT'));
-    let displayTables = node.tables || [];
-    let displayFields = node.fields || [];
-    let displayExpressions = node.expressions || [];
-    let displayWhere = node.whereCondition || null;
-    let displayGroupBy = node.groupBy || [];
-    let displayOrderBy = node.orderBy || [];
-
-    // For SUBQUERY_PARENT, inherit data from the deepest SELECT child
-    if (node.type === 'SUBQUERY_PARENT' && node.children && node.children.length > 0) {
-      let current = node;
-      while (current.children && current.children.length === 1 && current.children[0].type === 'SUBQUERY_PARENT') {
-        current = current.children[0];
-      }
-      if (current.children && current.children.length === 1 && current.children[0].type !== 'SUBQUERY_PARENT') {
-        const selectNode = current.children[0];
-        displayTables = selectNode.tables || [];
-        displayFields = selectNode.fields || [];
-        displayExpressions = selectNode.expressions || [];
-        displayWhere = selectNode.whereCondition;
-        displayGroupBy = selectNode.groupBy || [];
-        displayOrderBy = selectNode.orderBy || [];
-      }
-    }
-
     const levelData: SelectLevel = {
       id: node.id,
       level,
       node,
-      type: displayType,
-      tables: displayTables,
-      fields: displayFields,
-      expressions: displayExpressions,
-      children: node.children || [],
-      groupBy: displayGroupBy,
-      whereCondition: displayWhere,
-      orderBy: displayOrderBy
+      type: level === 0 ? 'ROOT' : (node.type === 'SUBQUERY_PARENT' ? node.alias : (node.tables.length === 0 && node.fields.length === 0 ? 'SUBQUERY' : 'SELECT')),
+      tables: (node as any).tables || [],
+      fields: (node as any).fields || [],
+      expressions: (node as any).expressions || [],
+      children: (node as any).children || [],
+      groupBy: (node as any).groupBy || [],
+      whereCondition: (node as any).whereCondition || null,
+      orderBy: (node as any).orderBy || []
     };
     levels.push(levelData);
 

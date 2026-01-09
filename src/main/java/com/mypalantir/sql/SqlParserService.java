@@ -140,6 +140,20 @@ public class SqlParserService {
         }
 
         node.setChildren(children);
+
+        // For SUBQUERY_PARENT, inherit fields and other info from the deepest SELECT
+        if ("SUBQUERY_PARENT".equals(node.getType())) {
+            SqlNodeTree deepestSelect = findDeepestSelect(node);
+            if (deepestSelect != null) {
+                node.setFields(deepestSelect.getFields());
+                node.setTables(deepestSelect.getTables());
+                node.setExpressions(deepestSelect.getExpressions());
+                node.setWhereCondition(deepestSelect.getWhereCondition());
+                node.setGroupBy(deepestSelect.getGroupBy());
+                node.setOrderBy(deepestSelect.getOrderBy());
+            }
+        }
+
         visited.remove(nodeId);
 
         return node;
@@ -802,5 +816,20 @@ public class SqlParserService {
         if (upper.contains("SUBSTR(") || upper.contains("SUBSTRING(")) return "SUBSTR";
         if (upper.contains("CONCAT(")) return "CONCAT";
         return "AGGREGATE";
+    }
+
+    /**
+     * 查找最深层的SELECT节点
+     */
+    private SqlNodeTree findDeepestSelect(SqlNodeTree node) {
+        if (node.getChildren() == null || node.getChildren().isEmpty()) {
+            return null;
+        }
+        SqlNodeTree child = node.getChildren().get(0);
+        if ("SUBQUERY_PARENT".equals(child.getType())) {
+            return findDeepestSelect(child);
+        } else {
+            return child;
+        }
     }
 }
