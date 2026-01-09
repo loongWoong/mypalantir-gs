@@ -68,18 +68,43 @@ const SqlParsePage: React.FC<SqlParsePageProps> = ({ initialSql = '' }) => {
   const flattenSelectLevels = useCallback((node: SqlNodeTree, level: number): SelectLevel[] => {
     const levels: SelectLevel[] = [];
 
+    let displayType = level === 0 ? 'ROOT' : (node.type === 'SUBQUERY_PARENT' ? node.alias : (node.tables.length === 0 && node.fields.length === 0 ? 'SUBQUERY' : 'SELECT'));
+    let displayTables = node.tables || [];
+    let displayFields = node.fields || [];
+    let displayExpressions = node.expressions || [];
+    let displayWhere = node.whereCondition || null;
+    let displayGroupBy = node.groupBy || [];
+    let displayOrderBy = node.orderBy || [];
+
+    // For SUBQUERY_PARENT, inherit data from the deepest SELECT child
+    if (node.type === 'SUBQUERY_PARENT' && node.children && node.children.length > 0) {
+      let current = node;
+      while (current.children && current.children.length === 1 && current.children[0].type === 'SUBQUERY_PARENT') {
+        current = current.children[0];
+      }
+      if (current.children && current.children.length === 1 && current.children[0].type !== 'SUBQUERY_PARENT') {
+        const selectNode = current.children[0];
+        displayTables = selectNode.tables || [];
+        displayFields = selectNode.fields || [];
+        displayExpressions = selectNode.expressions || [];
+        displayWhere = selectNode.whereCondition;
+        displayGroupBy = selectNode.groupBy || [];
+        displayOrderBy = selectNode.orderBy || [];
+      }
+    }
+
     const levelData: SelectLevel = {
       id: node.id,
       level,
       node,
-      type: level === 0 ? 'ROOT' : (node.tables.length === 0 && node.fields.length === 0 ? 'SUBQUERY' : 'SELECT'),
-      tables: node.tables || [],
-      fields: node.fields || [],
-      expressions: node.expressions || [],
+      type: displayType,
+      tables: displayTables,
+      fields: displayFields,
+      expressions: displayExpressions,
       children: node.children || [],
-      groupBy: node.groupBy || [],
-      whereCondition: node.whereCondition || null,
-      orderBy: node.orderBy || []
+      groupBy: displayGroupBy,
+      whereCondition: displayWhere,
+      orderBy: displayOrderBy
     };
     levels.push(levelData);
 
@@ -275,7 +300,7 @@ const LevelCard: React.FC<{
           L{levelData.level}
         </span>
         <span style={{ fontSize: '13px', fontWeight: 500, color: '#374151' }}>
-          {levelData.type}
+          {levelData.node.type === 'SUBQUERY_PARENT' ? levelData.node.alias : levelData.type}
         </span>
         <span style={{ marginLeft: 'auto', fontSize: '11px', color: '#9ca3af' }}>
           {levelData.tables.length}表 / {levelData.fields.length}字段
@@ -411,7 +436,7 @@ const LineagePanel: React.FC<{ level?: SelectLevel; lineages: FieldLineage[] }> 
           <span style={{ padding: '2px 8px', background: getTypeColor(level.type), color: 'white', borderRadius: '4px', fontSize: '11px', marginRight: '8px' }}>
             Level {level.level}
           </span>
-          <span style={{ fontWeight: 600, color: '#374151' }}>{level.type}</span>
+          <span style={{ fontWeight: 600, color: '#374151' }}>{level.node.type === 'SUBQUERY_PARENT' ? level.node.alias : level.type}</span>
         </div>
         {level.tables.length > 0 && (
           <div style={{ fontSize: '11px', color: '#6b7280' }}>

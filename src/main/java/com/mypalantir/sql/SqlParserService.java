@@ -570,14 +570,30 @@ public class SqlParserService {
             } else if ("AS".equals(operator)) {
                 if (call.operandCount() >= 2) {
                     SqlNode leftOperand = call.operand(0);
+                    SqlNode rightOperand = call.operand(1);
+                    String alias = safeToString(rightOperand);
                     if (leftOperand instanceof SqlSelect) {
-                        System.out.println("[scanForSubqueriesInFrom] 发现(SELECT ...) AS结构");
+                        System.out.println("[scanForSubqueriesInFrom] 发现(SELECT ...) AS结构, 创建父节点 " + alias);
+                        // 创建父节点表示别名
+                        SqlNodeTree parentNode = new SqlNodeTree("SUBQUERY_PARENT", level);
+                        parentNode.setAlias(alias);
+                        parentNode.setType("SUBQUERY_PARENT");
+                        parentNode.setDescription("子查询别名: " + alias);
+
+                        // 构建子查询树作为子节点
                         SqlSelect subSelect = (SqlSelect) leftOperand;
-                        SqlNodeTree subTree = buildSelectTree(subSelect, level, visited);
+                        SqlNodeTree subTree = buildSelectTree(subSelect, level + 1, visited);
                         subTree.setType("SUBQUERY");
-                        subTree.setAlias(safeToString(call.operand(1)));
+                        subTree.setAlias("SUB" + subqueries.size());
                         subTree.setDescription("FROM子句子查询 #" + subqueries.size());
-                        subqueries.add(subTree);
+
+                        // 将子查询的子节点添加到父节点，而不是直接添加子查询本身
+                        parentNode.getChildren().addAll(subTree.getChildren());
+                        // 调整子节点的level
+                        for (SqlNodeTree child : parentNode.getChildren()) {
+                            child.setLevel(child.getLevel() - 1);
+                        }
+                        subqueries.add(parentNode);
                     } else {
                         System.out.println("[scanForSubqueriesInFrom] AS左边不是SqlSelect, 继续递归");
                         scanForSubqueriesInFrom(leftOperand, level, subqueries, visited);
