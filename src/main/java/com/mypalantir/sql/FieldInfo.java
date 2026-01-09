@@ -1,6 +1,8 @@
 package com.mypalantir.sql;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import java.util.ArrayList;
+import java.util.List;
 
 public class FieldInfo {
     @JsonProperty("name")
@@ -21,13 +23,33 @@ public class FieldInfo {
     @JsonProperty("expression")
     private String expression;
 
-    public FieldInfo() {}
+    @JsonProperty("sourceFields")
+    private List<String> sourceFields;
+
+    @JsonProperty("isCaseWhen")
+    private boolean isCaseWhen;
+
+    @JsonProperty("isIfNull")
+    private boolean isIfNull;
+
+    public FieldInfo() {
+        this.sourceFields = new ArrayList<>();
+        this.isAggregated = false;
+        this.isCaseWhen = false;
+        this.isIfNull = false;
+    }
 
     public FieldInfo(String name, String alias, String table) {
+        this();
         this.name = name;
         this.alias = alias;
         this.table = table;
-        this.isAggregated = false;
+    }
+
+    public void addSourceField(String field) {
+        if (!this.sourceFields.contains(field)) {
+            this.sourceFields.add(field);
+        }
     }
 
     public String getName() { return name; }
@@ -42,4 +64,10 @@ public class FieldInfo {
     public void setAggregated(boolean aggregated) { isAggregated = aggregated; }
     public String getExpression() { return expression; }
     public void setExpression(String expression) { this.expression = expression; }
+    public List<String> getSourceFields() { return sourceFields; }
+    public void setSourceFields(List<String> sourceFields) { this.sourceFields = sourceFields; }
+    public boolean isCaseWhen() { return isCaseWhen; }
+    public void setCaseWhen(boolean caseWhen) { isCaseWhen = caseWhen; }
+    public boolean isIfNull() { return isIfNull; }
+    public void setIfNull(boolean ifNull) { isIfNull = ifNull; }
 }

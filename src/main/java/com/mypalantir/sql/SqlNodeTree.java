@@ -2,7 +2,9 @@ package com.mypalantir.sql;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class SqlNodeTree {
     @JsonProperty("id")
@@ -26,6 +28,9 @@ public class SqlNodeTree {
     @JsonProperty("tables")
     private List<TableReference> tables;
 
+    @JsonProperty("joins")
+    private List<JoinInfo> joins;
+
     @JsonProperty("fields")
     private List<FieldInfo> fields;
 
@@ -47,12 +52,17 @@ public class SqlNodeTree {
     @JsonProperty("orderBy")
     private List<String> orderBy;
 
+    @JsonProperty("metadata")
+    private Map<String, Object> metadata;
+
     public SqlNodeTree() {
         this.id = java.util.UUID.randomUUID().toString();
         this.tables = new ArrayList<>();
         this.fields = new ArrayList<>();
         this.expressions = new ArrayList<>();
         this.children = new ArrayList<>();
+        this.joins = new ArrayList<>();
+        this.metadata = new HashMap<>();
     }
 
     public SqlNodeTree(String type, int level) {
@@ -63,6 +73,18 @@ public class SqlNodeTree {
 
     public void addChild(SqlNodeTree child) {
         this.children.add(child);
+    }
+
+    public void addJoin(JoinInfo join) {
+        this.joins.add(join);
+    }
+
+    public void addMetadata(String key, Object value) {
+        this.metadata.put(key, value);
+    }
+
+    public Object getMetadata(String key) {
+        return this.metadata.get(key);
     }
 
     // getters and setters
@@ -80,6 +102,8 @@ public class SqlNodeTree {
     public void setDescription(String description) { this.description = description; }
     public List<TableReference> getTables() { return tables; }
     public void setTables(List<TableReference> tables) { this.tables = tables; }
+    public List<JoinInfo> getJoins() { return joins; }
+    public void setJoins(List<JoinInfo> joins) { this.joins = joins; }
     public List<FieldInfo> getFields() { return fields; }
     public void setFields(List<FieldInfo> fields) { this.fields = fields; }
     public List<ExpressionInfo> getExpressions() { return expressions; }
@@ -94,4 +118,6 @@ public class SqlNodeTree {
     public void setGroupBy(List<String> groupBy) { this.groupBy = groupBy; }
     public List<String> getOrderBy() { return orderBy; }
     public void setOrderBy(List<String> orderBy) { this.orderBy = orderBy; }
+    public Map<String, Object> getMetadata() { return metadata; }
+    public void setMetadata(Map<String, Object> metadata) { this.metadata = metadata; }
 }
