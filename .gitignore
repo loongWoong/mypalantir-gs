@@ -8,7 +8,6 @@ target/
 .env.local
 .env.*.local
 local
-schema.yaml
 # Data directory (instance data)
 data/
 # H2 database files
