@@ -32,52 +32,43 @@ object_types:
         display_name: 收费站编号
         data_type: string
         required: true
-        description: "收费站唯一标识"
+        description: "收费站唯一标识（系统内部编号，如 S0085370010030）"
       - name: station_name
         display_name: 收费站名称
         data_type: string
         required: false
-        description: "收费站名称"
+        description: "收费站名称（如：山东海湾大桥站、沂源北）"
       - name: station_name_hex
         display_name: 收费站HEX编码
         data_type: string
         required: false
-        description: "收费站HEX编码"
+        description: "收费站HEX编码（如：37012C13）"
       - name: station_id_national
         display_name: 收费站编号(国标)
         data_type: string
         required: false
-        description: "收费站编号(国标)"
-      - name: province_id
-        display_name: 所属省份
-        data_type: string
-        required: false
-        description: "所属省份"
+        description: "收费站编号(国标格式，如：220103）"
       - name: center_id
         display_name: 所属中心
         data_type: string
         required: false
-        description: "所属中心"
+        description: "所属中心编号（如：22、72）"
       - name: sub_center_id
         display_name: 所属分中心
         data_type: string
         required: false
-        description: "所属分中心"
-      - name: station_type
-        display_name: 收费站类型
-        data_type: integer
-        required: false
-        description: "收费站类型"
-      - name: open_type
-        display_name: 是否开放式收费站
-        data_type: integer
-        required: false
-        description: "是否开放式收费站"
-      - name: status
-        display_name: 状态
-        data_type: integer
-        required: false
-        description: "收费站状态"
+        description: "所属分中心编号（如：2201、7214）"
+    data_source:
+      connection_id: local_h2
+      table: HIGHLINK.TOLL_STATIONS
+      id_column: station_id
+      field_mapping:
+        收费站编号: station_id
+        收费站名称: station_name
+        收费站HEX编码: station_name_hex
+        收费站编号(国标): station_id_national
+        所属中心: center_id
+        所属分中心: sub_center_id
 
   # 车道（属于收费站）
   - name: TollLane
@@ -88,37 +79,37 @@ object_types:
         display_name: 车道编号
         data_type: string
         required: true
-        description: "车道唯一标识"
+        description: "车道唯一标识（系统内部编号，如 S00853700100301010090）"
       - name: lane_number
         display_name: 车道号
         data_type: string
         required: false
-        description: "车道号"
+        description: "车道号（如：03、95）"
       - name: lane_number_hex
         display_name: 车道号HEX编码
         data_type: string
         required: false
-        description: "车道号HEX编码"
-      - name: lane_id_national
-        display_name: 车道号(国标)
-        data_type: string
-        required: false
-        description: "车道号(国标)"
+        description: "车道号HEX编码（如：37012C1303）"
       - name: lane_type
         display_name: 车道类型
         data_type: integer
         required: false
-        description: "车道类型（入口/出口）"
-      - name: lane_status
-        display_name: 车道状态
-        data_type: integer
-        required: false
-        description: "车道状态"
+        description: "车道类型（1=入口，2=出口）"
       - name: lane_app_ver
         display_name: 车道程序版本号
         data_type: string
         required: false
-        description: "车道程序版本号"
+        description: "车道程序版本号（如：3.5.2.7）"
+    data_source:
+      connection_id: local_h2
+      table: HIGHLINK.TOLL_LANES
+      id_column: lane_id
+      field_mapping:
+        车道编号: lane_id
+        车道号: lane_number
+        车道号HEX编码: lane_number_hex
+        车道类型: lane_type
+        车道程序版本号: lane_app_ver
 
   # 门架（独立实体）
   - name: Gantry
@@ -129,79 +120,66 @@ object_types:
         display_name: 门架编号
         data_type: string
         required: true
-        description: "门架唯一标识"
+        description: "门架唯一标识（如：G201137004001420120）"
       - name: gantry_hex
         display_name: 门架HEX编码
         data_type: string
         required: false
-        description: "门架HEX编码"
-      - name: gantry_type
-        display_name: 门架类型
-        data_type: string
-        required: false
-        description: "门架类型"
+        description: "门架HEX编码（如：3D010C）"
       - name: gantry_order_num
         display_name: 门架顺序号
         data_type: integer
         required: false
-        description: "门架顺序号"
-      - name: road_section_id
-        display_name: 所属路段
-        data_type: string
-        required: false
-        description: "所属路段"
-      - name: status
-        display_name: 状态
+        description: "门架顺序号（如：201）"
+      - name: gantry_type
+        display_name: 门架类型
         data_type: integer
         required: false
-        description: "门架状态"
+        description: "门架类型（如：1）"
+    data_source:
+      connection_id: local_h2
+      table: HIGHLINK.GANTRIES
+      id_column: gantry_id
+      field_mapping:
+        门架编号: gantry_id
+        门架HEX编码: gantry_hex
+        门架顺序号: gantry_order_num
+        门架类型: gantry_type
 
   # 操作员（聚合根）
   - name: Operator
     display_name: 操作员
-    description: "收费站操作员"
+    description: "收费站操作员（包含班长信息）"
     properties:
       - name: oper_id
         display_name: 操作员工号
         data_type: string
         required: true
-        description: "操作员唯一标识"
+        description: "操作员唯一标识（如：999999999）"
       - name: oper_name
         display_name: 操作员姓名
         data_type: string
         required: false
-        description: "操作员姓名"
-      - name: oper_type
-        display_name: 操作员类型
-        data_type: integer
-        required: false
-        description: "操作员类型"
-      - name: status
-        display_name: 状态
-        data_type: integer
-        required: false
-        description: "操作员状态"
-
-  # 班长（操作员的一种）
-  - name: Monitor
-    display_name: 班长
-    description: "收费站班长"
-    properties:
+        description: "操作员姓名（如：ETC操作员）"
       - name: monitor_id
         display_name: 班长工号
         data_type: string
-        required: true
-        description: "班长唯一标识"
+        required: false
+        description: "班长工号（作为操作员属性，可能为空或0）"
       - name: monitor_name
         display_name: 班长名称
         data_type: string
         required: false
-        description: "班长名称"
-      - name: status
-        display_name: 状态
-        data_type: integer
-        required: false
-        description: "班长状态"
+        description: "班长名称（作为操作员属性，可能为空或0）"
+    data_source:
+      connection_id: local_h2
+      table: HIGHLINK.OPERATORS
+      id_column: oper_id
+      field_mapping:
+        操作员工号: oper_id
+        操作员姓名: oper_name
+        班长工号: monitor_id
+        班长名称: monitor_name
 
   # 车辆（聚合根）
   - name: Vehicle
@@ -212,7 +190,7 @@ object_types:
         display_name: 车辆标识
         data_type: string
         required: true
-        description: "车辆唯一标识"
+        description: "车辆唯一标识（车牌号+车牌颜色的组合）"
       - name: plate_num
         display_name: 车牌号
         data_type: string
@@ -222,7 +200,7 @@ object_types:
         display_name: 车牌颜色
         data_type: integer
         required: false
-        description: "车牌颜色"
+        description: "车牌颜色代码"
       - name: vehicle_type
         display_name: 车辆类型
         data_type: integer
@@ -233,6 +211,16 @@ object_types:
         data_type: integer
         required: false
         description: "车种"
+    data_source:
+      connection_id: local_h2
+      table: HIGHLINK.VEHICLES
+      id_column: vehicle_id
+      field_mapping:
+        车辆标识: vehicle_id
+        车牌号: plate_num
+        车牌颜色: plate_color
+        车辆类型: vehicle_type
+        车种: vehicle_class
 
   # 通行介质（聚合根）
   - name: Media
@@ -243,42 +231,43 @@ object_types:
         display_name: 介质标识
         data_type: string
         required: true
-        description: "介质唯一标识"
+        description: "介质唯一标识（优先使用OBUID，其次CARDID，再次MEDIANO）"
       - name: media_type
         display_name: 介质类型
         data_type: integer
         required: false
-        description: "介质类型"
+        description: "介质类型（如：1）"
       - name: card_id
         display_name: 卡号
         data_type: string
         required: false
-        description: "ETC/CPC卡号"
+        description: "ETC/CPC卡号（如：1801230801665204）"
       - name: card_net
         display_name: 卡网络号
         data_type: string
         required: false
-        description: "ETC/CPC卡网络号"
+        description: "ETC/CPC卡网络号（如：3701）"
       - name: obu_id
         display_name: OBU编号
         data_type: string
         required: false
-        description: "OBU编号"
+        description: "OBU编号（如：3701071967182248）"
       - name: obu_issue_flag
         display_name: OBU发行方标识
         data_type: string
         required: false
-        description: "OBU发行方标识"
-      - name: supplier_id
-        display_name: 厂商编号
-        data_type: string
-        required: false
-        description: "厂商编号"
-      - name: status
-        display_name: 状态
-        data_type: integer
-        required: false
-        description: "介质状态"
+        description: "OBU发行方标识（如：c9bdb6ab37010001）"
+    data_source:
+      connection_id: local_h2
+      table: HIGHLINK.MEDIA
+      id_column: media_id
+      field_mapping:
+        介质标识: media_id
+        介质类型: media_type
+        卡号: card_id
+        卡网络号: card_net
+        OBU编号: obu_id
+        OBU发行方标识: obu_issue_flag
 
   # ============================================
   # 交易事实层（Fact Layer）
@@ -289,6 +278,39 @@ object_types:
   - name: EntryTransaction
     display_name: 入口交易
     description: "车辆入口交易记录（事实表）"
+    data_source:
+      connection_id: local_h2
+      table: TBL_ENTRYWASTE
+      id_column: ID
+      field_mapping:
+        交易流水号: ID
+        通行标识: PASSID
+        交易时间: ENTIME
+        逻辑日期: LDATE
+        压线圈时间: TRIGGERTIME
+        接收时间: RECEIVETIME
+        收费站编号（快照）: ENTOLLSTATIONID
+        车道号（快照）: ENTOLLLANE
+        操作员姓名（快照）: OPERNAME
+        班长名称（快照）: MONITORNAME
+        车牌号（快照）: VLP
+        车牌颜色（快照）: VLPC
+        车型（快照）: VEHICLETYPE
+        交易编码: TRANSCODE
+        交易类型: TRANSTYPE
+        批次号: BATCHNUM
+        班次: SHIFT
+        入口重量: ENWEIGHT
+        入口轴数: ENAXLECOUNT
+        交易前余额（分）: BALANCEBEFORE
+        卡面扣费金额: TRANSFEE
+        TAC码: TAC
+        终端机编号: TERMINALNO
+        部特情类型: SPECIALTYPE
+        业务分析特情状态: SPINFO
+        交易描述: DESCRIPTION
+        校验码: VERIFYCODE
+        校检标志: VERIFYFLAG
     properties:
       # 核心标识
       - name: id
@@ -325,11 +347,6 @@ object_types:
         description: "接收时间"
       
       # 快照信息（交易发生时的状态，用于历史查询）
-      - name: snapshot_station_name
-        display_name: 收费站名称（快照）
-        data_type: string
-        required: false
-        description: "交易时的收费站名称"
       - name: snapshot_station_id
         display_name: 收费站编号（快照）
         data_type: string
@@ -447,6 +464,40 @@ object_types:
   - name: ExitTransaction
     display_name: 出口交易
     description: "车辆出口交易记录（事实表）"
+    data_source:
+      connection_id: local_h2
+      table: TBL_EXITWASTE
+      id_column: ID
+      field_mapping:
+        交易流水号: ID
+        通行标识: PASSID
+        交易时间: EXTIME
+        入口时间（历史）: ENTIME
+        逻辑日期: LDATE
+        接收时间: RECEIVETIME
+        入口收费站名称（快照）: ENTOLLSTATIONNAME
+        出口收费站名称（快照）: EXTOLLSTATIONNAME
+        出口车道号（快照）: EXTOLLLANE
+        操作员姓名（快照）: OPERNAME
+        车牌号（快照）: EXVLP
+        车牌颜色（快照）: EXVLPC
+        车型（快照）: EXVEHICLETYPE
+        总交易金额: FEE
+        应收金额: PAYFEE
+        优惠金额: DISCOUNTFEE
+        卡面扣费金额: TRANSFEE
+        计费里程（米）: TOLLDISTANCE
+        实际里程(米): REALDISTANCE
+        超时时间(秒): OVERTIME
+        发票代码: INVOICECODE
+        发票编号: INVOICEID
+        支付类型: PAYTYPE
+        支付卡类型: PAYCARDTYPE
+        是否多省交易: MULTIPROVINCE
+        交易编码: TRANSCODE
+        交易类型: TRANSTYPE
+        部特情类型: SPECIALTYPE
+        交易描述: DESCRIPTION
     properties:
       # 核心标识
       - name: id
@@ -605,6 +656,35 @@ object_types:
   - name: GantryTransaction
     display_name: 门架交易
     description: "ETC门架计费交易记录（事实表）"
+    data_source:
+      connection_id: local_h2
+      table: TBL_GANTRYWASTE
+      id_column: TRADEID
+      field_mapping:
+        计费交易编号: TRADEID
+        通行标识: PASSID
+        计费交易时间: TRANSTIME
+        通过上个门架的时间: LASTGANTRYTIME
+        接收时间: RECEIVETIME
+        门架HEX编码（快照）: GANTRYHEX
+        上个门架HEX（快照）: LASTGANTRYHEX
+        车牌号（快照）: VLP
+        车牌颜色（快照）: VLPC
+        车型（快照）: VEHICLETYPE
+        应收金额: PAYFEE
+        交易金额: FEE
+        优惠金额: DISCOUNTFEE
+        卡面扣费金额: TRANSFEE
+        计费里程数: FEEMILEAGE
+        收费单元编号组合: TOLLINTERVALID
+        门架顺序号: GANTRYORDERNUM
+        交易前余额（分）: BALANCEBEFORE
+        交易后余额（分）: BALANCEAFTER
+        交易类型标识: TRANSTYPE
+        匹配状态: MATCHSTATUS
+        去重状态: VALIDSTATUS
+        处理状态: DEALSTATUS
+        对交易的文字解释: DESCRIPTION
     properties:
       # 核心标识
       - name: trade_id
@@ -742,6 +822,20 @@ object_types:
   - name: Passage
     display_name: 通行路径
     description: "车辆完整通行路径（聚合根），聚合入口、门架、出口交易"
+    data_source:
+      connection_id: local_h2
+      table: TBL_PATH
+      id_column: PASSID
+      field_mapping:
+        通行标识: PASSID
+        车牌号: PLATENUM
+        车牌颜色: PLATECOLOR
+        入口时间: ENTIME
+        出口时间: EXTIME
+        入口收费站编号: ENTOLLSTATIONID
+        出口收费站编号: EXTOLLSTATIONID
+        入口车道编号: ENTOLLLANEID
+        出口车道编号: EXTOLLLANEID
     properties:
       - name: pass_id
         display_name: 通行标识
@@ -788,36 +882,22 @@ object_types:
         data_type: string
         required: false
         description: "出口车道编号"
-      - name: ex_vehicle_type
-        display_name: 出口车辆类型
-        data_type: integer
-        required: false
-        description: "出口车辆类型"
-      - name: pay_type
-        display_name: 支付类型
-        data_type: integer
-        required: false
-        description: "支付类型"
-      - name: pay_card_type
-        display_name: 支付卡类型
-        data_type: integer
-        required: false
-        description: "支付卡类型"
-      - name: l_date
-        display_name: 逻辑日期
-        data_type: date
-        required: false
-        description: "逻辑日期"
-      - name: status
-        display_name: 通行状态
-        data_type: integer
-        required: false
-        description: "通行状态"
 
   # 保留原有的PathDetail和SplitDetail等（简化版）
   - name: PathDetail
     display_name: 车辆通行路径明细
     description: "车辆通行路径明细"
+    data_source:
+      connection_id: local_h2
+      table: TBL_PATHDETAIL
+      id_column: ID
+      field_mapping:
+        交易标识: ID
+        通行标识: PASSID
+        车牌号码: PLATENUM
+        标识点标识: IDENTIFYPOINTID
+        交易时间: TRANSTIME
+        收费单元费用: FEE
     properties:
       - name: id
         display_name: 交易标识
@@ -849,6 +929,17 @@ object_types:
         data_type: string
         required: false
         description: "收费单元费用"
+    data_source:
+      connection_id: local_h2
+      table: TBL_PATHDETAIL
+      id_column: ID
+      field_mapping:
+        交易标识: ID
+        通行标识: PASSID
+        车牌号码: PLATENUM
+        标识点标识: IDENTIFYPOINTID
+        交易时间: TRANSTIME
+        收费单元费用: FEE
 
   # 收费拆分明细（事实表）
   - name: SplitDetail
@@ -1029,20 +1120,6 @@ link_types:
       target_id_column: oper_id
       link_mode: foreign_key
 
-  # 入口交易由班长授权
-  - name: entry_authorized_by
-    display_name: 入口交易由班长授权
-    description: "入口交易由班长授权"
-    source_type: EntryTransaction
-    target_type: Monitor
-    cardinality: many-to-one
-    direction: directed
-    data_source:
-      table: entry_transactions
-      source_id_column: monitor
-      target_id_column: monitor_id
-      link_mode: foreign_key
-
   # 入口交易涉及车辆
   - name: entry_involves_vehicle
     display_name: 入口交易涉及车辆
@@ -1210,9 +1287,9 @@ link_types:
     cardinality: one-to-many
     direction: directed
     data_source:
-      table: path_details
+      table: TBL_PATHDETAIL
       source_id_column: pass_id
-      target_id_column: pass_id
+      target_id_column: PASSID
       link_mode: foreign_key
 
   # 通行路径包含拆分明细
