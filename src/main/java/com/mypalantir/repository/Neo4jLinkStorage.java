@@ -1,5 +1,7 @@
 package com.mypalantir.repository;
 
+import com.mypalantir.meta.LinkType;
+import com.mypalantir.meta.Loader;
 import org.neo4j.driver.Driver;
 import org.neo4j.driver.Session;
 import org.neo4j.driver.Value;
@@ -21,6 +23,9 @@ public class Neo4jLinkStorage implements ILinkStorage {
 
     @Autowired(required = false)
     private Driver neo4jDriver;
+
+    @Autowired(required = false)
+    private Loader loader;
 
     /**
      * 验证并重试连接（如果连接失败）
@@ -66,9 +71,29 @@ public class Neo4jLinkStorage implements ILinkStorage {
         String now = Instant.now().toString();
 
         try (Session session = neo4jDriver.session()) {
-            // 通过查询节点获取标签（类型）
-            String sourceLabel = getNodeLabel(session, sourceID);
-            String targetLabel = getNodeLabel(session, targetID);
+            // 优先使用 linkType 定义中的类型，如果 loader 不可用则回退到查询节点标签
+            String sourceLabel;
+            String targetLabel;
+            
+            if (loader != null) {
+                try {
+                    LinkType linkTypeDef = loader.getLinkType(linkType);
+                    sourceLabel = normalizeLabel(linkTypeDef.getSourceType());
+                    targetLabel = normalizeLabel(linkTypeDef.getTargetType());
+                    logger.debug("Using linkType definition: source={}, target={}", sourceLabel, targetLabel);
+                } catch (Loader.NotFoundException e) {
+                    // 如果找不到 linkType 定义，回退到查询节点标签
+                    logger.warn("LinkType '{}' not found, falling back to querying node labels", linkType);
+                    sourceLabel = getNodeLabel(session, sourceID);
+                    targetLabel = getNodeLabel(session, targetID);
+                }
+            } else {
+                // 如果 loader 不可用，回退到查询节点标签
+                logger.warn("Loader not available, falling back to querying node labels");
+                sourceLabel = getNodeLabel(session, sourceID);
+                targetLabel = getNodeLabel(session, targetID);
+            }
+            
             String relType = normalizeRelType(linkType);
             
             // 构建关系属性
@@ -226,7 +251,22 @@ public class Neo4jLinkStorage implements ILinkStorage {
         }
 
         try (Session session = neo4jDriver.session()) {
-            String sourceLabel = getNodeLabel(session, sourceID);
+            // 优先使用 linkType 定义中的类型，如果 loader 不可用则回退到查询节点标签
+            String sourceLabel;
+            if (loader != null) {
+                try {
+                    LinkType linkTypeDef = loader.getLinkType(linkType);
+                    sourceLabel = normalizeLabel(linkTypeDef.getSourceType());
+                    logger.debug("Using linkType definition for getLinksBySource: source={}", sourceLabel);
+                } catch (Loader.NotFoundException e) {
+                    logger.warn("LinkType '{}' not found, falling back to querying node label", linkType);
+                    sourceLabel = getNodeLabel(session, sourceID);
+                }
+            } else {
+                logger.warn("Loader not available, falling back to querying node label");
+                sourceLabel = getNodeLabel(session, sourceID);
+            }
+            
             String relType = normalizeRelType(linkType);
             String cypher = "MATCH (source:" + sourceLabel + " {id: $sourceId})-[r:" + relType + "]->(target) RETURN r, target.id AS target_id";
             
@@ -259,7 +299,22 @@ public class Neo4jLinkStorage implements ILinkStorage {
         }
 
         try (Session session = neo4jDriver.session()) {
-            String targetLabel = getNodeLabel(session, targetID);
+            // 优先使用 linkType 定义中的类型，如果 loader 不可用则回退到查询节点标签
+            String targetLabel;
+            if (loader != null) {
+                try {
+                    LinkType linkTypeDef = loader.getLinkType(linkType);
+                    targetLabel = normalizeLabel(linkTypeDef.getTargetType());
+                    logger.debug("Using linkType definition for getLinksByTarget: target={}", targetLabel);
+                } catch (Loader.NotFoundException e) {
+                    logger.warn("LinkType '{}' not found, falling back to querying node label", linkType);
+                    targetLabel = getNodeLabel(session, targetID);
+                }
+            } else {
+                logger.warn("Loader not available, falling back to querying node label");
+                targetLabel = getNodeLabel(session, targetID);
+            }
+            
             String relType = normalizeRelType(linkType);
             String cypher = "MATCH (source)-[r:" + relType + "]->(target:" + targetLabel + " {id: $targetId}) RETURN r, source.id AS source_id";
             

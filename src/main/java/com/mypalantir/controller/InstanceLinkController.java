@@ -23,9 +23,15 @@ public class InstanceLinkController {
     public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getInstanceLinks(
             @PathVariable String objectType,
             @PathVariable String id,
-            @PathVariable String linkType) {
+            @PathVariable String linkType,
+            @RequestParam(defaultValue = "outgoing") String direction) {
         try {
-            List<Map<String, Object>> links = linkService.getLinksBySource(linkType, id);
+            List<Map<String, Object>> links;
+            if ("incoming".equals(direction)) {
+                links = linkService.getLinksByTarget(linkType, id);
+            } else {
+                links = linkService.getLinksBySource(linkType, id);
+            }
             return ResponseEntity.ok(ApiResponse.success(links));
         } catch (IOException e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)

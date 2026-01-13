@@ -265,8 +265,9 @@ export const linkApi = {
     await apiClient.delete(`/links/${linkType}/${id}`);
   },
 
-  getInstanceLinks: async (objectType: string, instanceId: string, linkType: string): Promise<Link[]> => {
-    const response = await apiClient.get<ApiResponse<Link[]>>(`/instances/${objectType}/${instanceId}/links/${linkType}`);
+  getInstanceLinks: async (objectType: string, instanceId: string, linkType: string, direction: 'outgoing' | 'incoming' = 'outgoing'): Promise<Link[]> => {
+    const params = new URLSearchParams({ direction });
+    const response = await apiClient.get<ApiResponse<Link[]>>(`/instances/${objectType}/${instanceId}/links/${linkType}?${params}`);
     return response.data.data;
   },
 

@@ -14,7 +14,7 @@ import {
 } from '@heroicons/react/24/outline';
 
 interface GraphNode {
-  id: string;
+  id: string;  // 使用 type:id 作为唯一标识
   name: string;
   type: string;
   data: Instance;
@@ -22,12 +22,17 @@ interface GraphNode {
 }
 
 interface GraphLink {
-  source: string;
-  target: string;
+  source: string;  // 使用 type:id 格式
+  target: string;  // 使用 type:id 格式
   id: string;
   type: string;
   data: LinkInstance;
 }
+
+// 辅助函数：生成节点的唯一标识符
+const getNodeKey = (type: string, id: string): string => {
+  return `${type}:${id}`;
+};
 
 export default function GraphView() {
   const { objectType, instanceId } = useParams<{ objectType?: string; instanceId?: string }>();
@@ -112,21 +117,29 @@ export default function GraphView() {
     
     visitedNodes.add(`${objType}:${instId}`);
     
-    // 加载当前节点的出边（正向关系）
+    // 加载当前节点的出边（正向关系）- 只查询从当前节点指向的关系和节点
     for (const linkType of linkTypes) {
       if (linkType.source_type === objType) {
         try {
-          const instanceLinks = await linkApi.getInstanceLinks(objType, instId, linkType.name);
+          // 明确指定 direction='outgoing'，查询从当前节点指向的关系
+          const instanceLinks = await linkApi.getInstanceLinks(objType, instId, linkType.name, 'outgoing');
           for (const link of instanceLinks) {
             const targetId = link.target_id as string;
             const targetType = linkType.target_type;
             
+            // 检查是否已访问过（避免重复查询）
+            const nodeKey = `${targetType}:${targetId}`;
+            if (visitedNodes.has(nodeKey)) {
+              continue;
+            }
+            
             // 加载目标实例
             try {
               const targetInstance = await instanceApi.get(targetType, targetId);
-              if (!nodeMap.has(targetId)) {
-                nodeMap.set(targetId, {
-                  id: targetId,
+              const targetNodeKey = getNodeKey(targetType, targetId);
+              if (!nodeMap.has(targetNodeKey)) {
+                nodeMap.set(targetNodeKey, {
+                  id: targetNodeKey,  // 使用 type:id 作为唯一标识
                   name: getInstanceName(targetInstance, targetType),
                   type: targetType,
                   data: targetInstance,
@@ -135,18 +148,19 @@ export default function GraphView() {
               }
               
               // 添加关系
-              const linkId = `${link.id}_${instId}_${targetId}`;
+              const sourceNodeKey = getNodeKey(objType, instId);
+              const linkId = `${link.id}_${sourceNodeKey}_${targetNodeKey}`;
               if (!linkList.some(l => l.id === linkId)) {
                 linkList.push({
-                  source: instId,
-                  target: targetId,
+                  source: sourceNodeKey,  // 使用 type:id 格式
+                  target: targetNodeKey,  // 使用 type:id 格式
                   id: link.id,
                   type: linkType.name,
                   data: link,
                 });
               }
               
-              // 递归查询目标节点的正向血缘
+              // 递归查询目标节点的正向血缘（继续向下追溯）
               await loadForwardLineage(
                 targetType,
                 targetId,
@@ -164,6 +178,141 @@ export default function GraphView() {
           }
         } catch (err) {
           console.error(`Failed to load forward links for ${linkType.name}:`, err);
+        }
+      }
+    }
+  };
+
+  // 递归查询全链血缘（遍历与当前节点相关的全部节点和关系，包括出边和入边）
+  const loadFullLineage = async (
+    objType: string,
+    instId: string,
+    nodeMap: Map<string, GraphNode>,
+    linkList: GraphLink[],
+    visitedNodes: Set<string>,
+    linkTypes: any[],
+    objectTypes: any[],
+    maxDepth: number = 10,
+    currentDepth: number = 0
+  ) => {
+    if (currentDepth >= maxDepth || visitedNodes.has(`${objType}:${instId}`)) {
+      return;
+    }
+    
+    visitedNodes.add(`${objType}:${instId}`);
+    
+    // 同时查询出边和入边
+    for (const linkType of linkTypes) {
+      // 查询出边（正向关系）
+      if (linkType.source_type === objType) {
+        try {
+          const instanceLinks = await linkApi.getInstanceLinks(objType, instId, linkType.name, 'outgoing');
+          for (const link of instanceLinks) {
+            const targetId = link.target_id as string;
+            const targetType = linkType.target_type;
+            
+            try {
+              const targetInstance = await instanceApi.get(targetType, targetId);
+              const targetNodeKey = getNodeKey(targetType, targetId);
+              if (!nodeMap.has(targetNodeKey)) {
+                nodeMap.set(targetNodeKey, {
+                  id: targetNodeKey,  // 使用 type:id 作为唯一标识
+                  name: getInstanceName(targetInstance, targetType),
+                  type: targetType,
+                  data: targetInstance,
+                  group: getTypeGroup(targetType, objectTypes),
+                });
+              }
+              
+              const sourceNodeKey = getNodeKey(objType, instId);
+              const linkId = `${link.id}_${sourceNodeKey}_${targetNodeKey}`;
+              if (!linkList.some(l => l.id === linkId)) {
+                linkList.push({
+                  source: sourceNodeKey,  // 使用 type:id 格式
+                  target: targetNodeKey,  // 使用 type:id 格式
+                  id: link.id,
+                  type: linkType.name,
+                  data: link,
+                });
+              }
+              
+              // 递归查询目标节点的全链血缘
+              await loadFullLineage(
+                targetType,
+                targetId,
+                nodeMap,
+                linkList,
+                visitedNodes,
+                linkTypes,
+                objectTypes,
+                maxDepth,
+                currentDepth + 1
+              );
+            } catch (err) {
+              console.error(`Failed to load target instance ${targetId}:`, err);
+            }
+          }
+        } catch (err) {
+          console.error(`Failed to load forward links for ${linkType.name}:`, err);
+        }
+      }
+      
+      // 查询入边（反向关系）
+      if (linkType.target_type === objType) {
+        try {
+          const instanceLinks = await linkApi.getInstanceLinks(objType, instId, linkType.name, 'incoming');
+          for (const link of instanceLinks) {
+            const sourceId = link.source_id as string;
+            const sourceType = linkType.source_type;
+            
+            const nodeKey = `${sourceType}:${sourceId}`;
+            if (visitedNodes.has(nodeKey)) {
+              continue;
+            }
+            
+            try {
+              const sourceInstance = await instanceApi.get(sourceType, sourceId);
+              const sourceNodeKey = getNodeKey(sourceType, sourceId);
+              if (!nodeMap.has(sourceNodeKey)) {
+                nodeMap.set(sourceNodeKey, {
+                  id: sourceNodeKey,  // 使用 type:id 作为唯一标识
+                  name: getInstanceName(sourceInstance, sourceType),
+                  type: sourceType,
+                  data: sourceInstance,
+                  group: getTypeGroup(sourceType, objectTypes),
+                });
+              }
+              
+              const targetNodeKey = getNodeKey(objType, instId);
+              const linkId = `${link.id}_${sourceNodeKey}_${targetNodeKey}`;
+              if (!linkList.some(l => l.id === linkId || (l.source === sourceNodeKey && l.target === targetNodeKey && l.type === linkType.name))) {
+                linkList.push({
+                  source: sourceNodeKey,  // 使用 type:id 格式
+                  target: targetNodeKey,  // 使用 type:id 格式
+                  id: link.id,
+                  type: linkType.name,
+                  data: link,
+                });
+              }
+              
+              // 递归查询源节点的全链血缘
+              await loadFullLineage(
+                sourceType,
+                sourceId,
+                nodeMap,
+                linkList,
+                visitedNodes,
+                linkTypes,
+                objectTypes,
+                maxDepth,
+                currentDepth + 1
+              );
+            } catch (err) {
+              console.error(`Failed to load source instance ${sourceId}:`, err);
+            }
+          }
+        } catch (err) {
+          console.error(`Failed to load backward links for ${linkType.name}:`, err);
         }
       }
     }
@@ -187,90 +336,100 @@ export default function GraphView() {
     
     visitedNodes.add(`${objType}:${instId}`);
     
-    // 加载当前节点的入边（反向关系）
+    // 加载当前节点的入边（反向关系）- 只查询指向当前节点的关系和节点
+    console.log(`[loadBackwardLineage] 开始查询节点 ${objType}:${instId} 的反向血缘，当前深度: ${currentDepth}`);
+    console.log(`[loadBackwardLineage] 可用的关系类型数量: ${linkTypes.length}`);
+    
     for (const linkType of linkTypes) {
       if (linkType.target_type === objType) {
+        console.log(`[loadBackwardLineage] 检查关系类型: ${linkType.name} (source: ${linkType.source_type}, target: ${linkType.target_type})`);
         try {
-          // 查询所有指向当前节点的关系
-          // 注意：这里需要查询所有链接然后过滤，因为后端可能没有直接查询入边的API
-          let offset = 0;
-          const limit = 1000;
-          let hasMore = true;
+          // 使用 getInstanceLinks API 查询入边关系，direction='incoming'
+          console.log(`[loadBackwardLineage] 查询 ${objType}:${instId} 的 ${linkType.name} 入边关系...`);
+          const instanceLinks = await linkApi.getInstanceLinks(objType, instId, linkType.name, 'incoming');
+          console.log(`[loadBackwardLineage] 查询到 ${instanceLinks.length} 条 ${linkType.name} 关系:`, instanceLinks);
           
-          while (hasMore) {
-            const allLinks = await linkApi.list(linkType.name, offset, limit);
-            const instanceLinks = allLinks.items.filter(
-              (link: any) => link.target_id === instId
-            );
+          for (const link of instanceLinks) {
+            const sourceId = link.source_id as string;
+            const sourceType = linkType.source_type;
             
-            for (const link of instanceLinks) {
-              const sourceId = link.source_id as string;
-              const sourceType = linkType.source_type;
-              
-              // 检查是否已访问过（避免重复查询）
-              const nodeKey = `${sourceType}:${sourceId}`;
-              if (visitedNodes.has(nodeKey)) {
-                continue;
-              }
-              
-              try {
-                const sourceInstance = await instanceApi.get(sourceType, sourceId);
-                if (!nodeMap.has(sourceId)) {
-                  nodeMap.set(sourceId, {
-                    id: sourceId,
-                    name: getInstanceName(sourceInstance, sourceType),
-                    type: sourceType,
-                    data: sourceInstance,
-                    group: getTypeGroup(sourceType, objectTypes),
-                  });
-                }
-                
-                // 添加关系（使用唯一ID避免重复）
-                const linkId = `${link.id}_${sourceId}_${instId}`;
-                if (!linkList.some(l => l.id === linkId || (l.source === sourceId && l.target === instId && l.type === linkType.name))) {
-                  linkList.push({
-                    source: sourceId,
-                    target: instId,
-                    id: link.id,
-                    type: linkType.name,
-                    data: link,
-                  });
-                }
-                
-                // 递归查询源节点的反向血缘
-                await loadBackwardLineage(
-                  sourceType,
-                  sourceId,
-                  nodeMap,
-                  linkList,
-                  visitedNodes,
-                  linkTypes,
-                  objectTypes,
-                  maxDepth,
-                  currentDepth + 1
-                );
-              } catch (err) {
-                console.error(`Failed to load source instance ${sourceId}:`, err);
-              }
+            console.log(`[loadBackwardLineage] 处理关系: ${linkType.name}, source: ${sourceType}:${sourceId}, target: ${objType}:${instId}`);
+            
+            // 检查是否已访问过（避免重复查询）
+            const nodeKey = `${sourceType}:${sourceId}`;
+            if (visitedNodes.has(nodeKey)) {
+              console.log(`[loadBackwardLineage] 节点 ${nodeKey} 已访问过，跳过`);
+              continue;
             }
             
-            // 检查是否还有更多数据
-            hasMore = allLinks.items.length === limit && (offset + limit < allLinks.total);
-            offset += limit;
-            
-            // 如果已经找到指向当前节点的链接，可以提前退出
-            if (instanceLinks.length > 0 && offset >= allLinks.total) {
-              break;
+            // 加载源实例
+            try {
+              console.log(`[loadBackwardLineage] 加载源实例 ${sourceType}:${sourceId}...`);
+              const sourceInstance = await instanceApi.get(sourceType, sourceId);
+              console.log(`[loadBackwardLineage] 成功加载源实例 ${sourceType}:${sourceId}:`, sourceInstance);
+              
+              const sourceNodeKey = getNodeKey(sourceType, sourceId);
+              if (!nodeMap.has(sourceNodeKey)) {
+                const newNode = {
+                  id: sourceNodeKey,  // 使用 type:id 作为唯一标识
+                  name: getInstanceName(sourceInstance, sourceType),
+                  type: sourceType,
+                  data: sourceInstance,
+                  group: getTypeGroup(sourceType, objectTypes),
+                };
+                nodeMap.set(sourceNodeKey, newNode);
+                console.log(`[loadBackwardLineage] 添加新节点到图中:`, newNode);
+              } else {
+                const existingNode = nodeMap.get(sourceNodeKey);
+                console.log(`[loadBackwardLineage] 节点 ${sourceNodeKey} 已存在于图中:`, {
+                  existingNode: existingNode ? { id: existingNode.id, type: existingNode.type, name: existingNode.name } : null,
+                  newSourceType: sourceType,
+                  typesMatch: existingNode?.type === sourceType
+                });
+              }
+              
+              // 添加关系（使用唯一ID避免重复）
+              const targetNodeKey = getNodeKey(objType, instId);
+              const linkId = `${link.id}_${sourceNodeKey}_${targetNodeKey}`;
+              const existingLink = linkList.find(l => l.id === linkId || (l.source === sourceNodeKey && l.target === targetNodeKey && l.type === linkType.name));
+              if (!existingLink) {
+                const newLink = {
+                  source: sourceNodeKey,  // 使用 type:id 格式
+                  target: targetNodeKey,  // 使用 type:id 格式
+                  id: link.id,
+                  type: linkType.name,
+                  data: link,
+                };
+                linkList.push(newLink);
+                console.log(`[loadBackwardLineage] 添加新关系到图中:`, newLink);
+              } else {
+                console.log(`[loadBackwardLineage] 关系已存在，跳过:`, existingLink);
+              }
+              
+              // 递归查询源节点的反向血缘（继续向上追溯）
+              await loadBackwardLineage(
+                sourceType,
+                sourceId,
+                nodeMap,
+                linkList,
+                visitedNodes,
+                linkTypes,
+                objectTypes,
+                maxDepth,
+                currentDepth + 1
+              );
+            } catch (err) {
+              console.error(`[loadBackwardLineage] 加载源实例失败 ${sourceType}:${sourceId}:`, err);
             }
-            
-            // 避免无限循环
-            if (offset > 10000) break;
           }
         } catch (err) {
-          console.error(`Failed to load backward links for ${linkType.name}:`, err);
+          console.error(`[loadBackwardLineage] 查询 ${linkType.name} 关系失败:`, err);
         }
+      } else {
+        console.log(`[loadBackwardLineage] 关系类型 ${linkType.name} 的 target_type (${linkType.target_type}) 不匹配当前节点类型 ${objType}，跳过`);
       }
     }
+    console.log(`[loadBackwardLineage] 完成查询节点 ${objType}:${instId} 的反向血缘，当前节点数: ${nodeMap.size}, 当前关系数: ${linkList.length}`);
   };
 
   const loadInstanceGraph = async (objType: string, instId: string, mode: 'forward' | 'backward' | 'full' | 'direct' = 'direct') => {
@@ -293,11 +452,35 @@ export default function GraphView() {
           selectedWorkspace.object_types.includes(lt.source_type);
         const targetInWorkspace = !selectedWorkspace.object_types || selectedWorkspace.object_types.length === 0 || 
           selectedWorkspace.object_types.includes(lt.target_type);
-        return selectedWorkspace.link_types!.includes(lt.name) && sourceInWorkspace && targetInWorkspace;
+        const included = selectedWorkspace.link_types!.includes(lt.name) && sourceInWorkspace && targetInWorkspace;
+        if (lt.name === 'exit_to_path') {
+          console.log(`[loadInstanceGraph] exit_to_path 过滤检查:`, {
+            name: lt.name,
+            source_type: lt.source_type,
+            target_type: lt.target_type,
+            inLinkTypes: selectedWorkspace.link_types!.includes(lt.name),
+            sourceInWorkspace,
+            targetInWorkspace,
+            included
+          });
+        }
+        return included;
       });
     } else {
       linkTypes = allLinkTypes;
     }
+    
+    console.log('[loadInstanceGraph] 工作空间过滤结果:', {
+      allObjectTypesCount: allObjectTypes.length,
+      filteredObjectTypesCount: objectTypes.length,
+      allLinkTypesCount: allLinkTypes.length,
+      filteredLinkTypesCount: linkTypes.length,
+      exit_to_path_included: linkTypes.some(lt => lt.name === 'exit_to_path'),
+      selectedWorkspace: selectedWorkspace ? {
+        object_types: selectedWorkspace.object_types,
+        link_types: selectedWorkspace.link_types
+      } : null
+    });
     
     // 保存 objectTypes 和 linkTypes 以便在图例中使用
     setObjectTypes(objectTypes);
@@ -308,23 +491,24 @@ export default function GraphView() {
     const visitedNodes = new Set<string>();
 
     // 添加中心节点
+    const centerNodeKey = getNodeKey(objType, instance.id);
     const centerNode: GraphNode = {
-      id: instance.id,
+      id: centerNodeKey,  // 使用 type:id 作为唯一标识
       name: getInstanceName(instance, objType),
       type: objType,
       data: instance,
       group: 0,
     };
-    nodeMap.set(instance.id, centerNode);
+    nodeMap.set(centerNodeKey, centerNode);
 
     // 根据查询模式加载关系
     if (mode === 'direct') {
       // 直接关系模式：只加载直接连接的节点（原有逻辑）
       for (const linkType of linkTypes) {
         try {
-          // 查找出边
+          // 查找出边（从当前节点指向的关系）
           if (linkType.source_type === objType) {
-            const instanceLinks = await linkApi.getInstanceLinks(objType, instId, linkType.name);
+            const instanceLinks = await linkApi.getInstanceLinks(objType, instId, linkType.name, 'outgoing');
             for (const link of instanceLinks) {
               const targetId = link.target_id as string;
               const targetType = linkType.target_type;
@@ -332,9 +516,10 @@ export default function GraphView() {
               // 加载目标实例
               try {
                 const targetInstance = await instanceApi.get(targetType, targetId);
-                if (!nodeMap.has(targetId)) {
-                  nodeMap.set(targetId, {
-                    id: targetId,
+                const targetNodeKey = getNodeKey(targetType, targetId);
+                if (!nodeMap.has(targetNodeKey)) {
+                  nodeMap.set(targetNodeKey, {
+                    id: targetNodeKey,  // 使用 type:id 作为唯一标识
                     name: getInstanceName(targetInstance, targetType),
                     type: targetType,
                     data: targetInstance,
@@ -342,8 +527,8 @@ export default function GraphView() {
                   });
                 }
                 linkList.push({
-                  source: instance.id,
-                  target: targetId,
+                  source: centerNodeKey,  // 使用 type:id 格式
+                  target: targetNodeKey,  // 使用 type:id 格式
                   id: link.id,
                   type: linkType.name,
                   data: link,
@@ -354,41 +539,57 @@ export default function GraphView() {
             }
           }
 
-          // 查找入边
+          // 查找入边（指向当前节点的关系）
           if (linkType.target_type === objType) {
+            console.log(`[loadInstanceGraph-direct] 检查入边关系类型: ${linkType.name} (source: ${linkType.source_type}, target: ${linkType.target_type})`);
             try {
-              const allLinks = await linkApi.list(linkType.name, 0, 1000);
-              const instanceLinks = allLinks.items.filter(
-                (link: any) => link.target_id === instId
-              );
+              // 使用 getInstanceLinks API 查询入边关系，direction='incoming'
+              console.log(`[loadInstanceGraph-direct] 查询 ${objType}:${instId} 的 ${linkType.name} 入边关系...`);
+              const instanceLinks = await linkApi.getInstanceLinks(objType, instId, linkType.name, 'incoming');
+              console.log(`[loadInstanceGraph-direct] 查询到 ${instanceLinks.length} 条 ${linkType.name} 关系:`, instanceLinks);
+              
               for (const link of instanceLinks) {
                 const sourceId = link.source_id as string;
                 const sourceType = linkType.source_type;
                 
+                console.log(`[loadInstanceGraph-direct] 处理关系: ${linkType.name}, source: ${sourceType}:${sourceId}, target: ${objType}:${instId}`);
+                
+                // 加载源实例
                 try {
+                  console.log(`[loadInstanceGraph-direct] 加载源实例 ${sourceType}:${sourceId}...`);
                   const sourceInstance = await instanceApi.get(sourceType, sourceId);
-                  if (!nodeMap.has(sourceId)) {
-                    nodeMap.set(sourceId, {
-                      id: sourceId,
+                  console.log(`[loadInstanceGraph-direct] 成功加载源实例 ${sourceType}:${sourceId}:`, sourceInstance);
+                  
+                  const sourceNodeKey = getNodeKey(sourceType, sourceId);
+                  if (!nodeMap.has(sourceNodeKey)) {
+                    const newNode = {
+                      id: sourceNodeKey,  // 使用 type:id 作为唯一标识
                       name: getInstanceName(sourceInstance, sourceType),
                       type: sourceType,
                       data: sourceInstance,
                       group: getTypeGroup(sourceType, objectTypes),
-                    });
+                    };
+                    nodeMap.set(sourceNodeKey, newNode);
+                    console.log(`[loadInstanceGraph-direct] 添加新节点到图中:`, newNode);
+                  } else {
+                    console.log(`[loadInstanceGraph-direct] 节点 ${sourceNodeKey} 已存在于图中`);
                   }
-                  linkList.push({
-                    source: sourceId,
-                    target: instance.id,
+                  
+                  const newLink = {
+                    source: sourceNodeKey,  // 使用 type:id 格式
+                    target: centerNodeKey,  // 使用 type:id 格式
                     id: link.id,
                     type: linkType.name,
                     data: link,
-                  });
+                  };
+                  linkList.push(newLink);
+                  console.log(`[loadInstanceGraph-direct] 添加新关系到图中:`, newLink);
                 } catch (err) {
-                  console.error(`Failed to load source instance ${sourceId}:`, err);
+                  console.error(`[loadInstanceGraph-direct] 加载源实例失败 ${sourceType}:${sourceId}:`, err);
                 }
               }
             } catch (err) {
-              console.error(`Failed to load incoming links for ${linkType.name}:`, err);
+              console.error(`[loadInstanceGraph-direct] 查询 ${linkType.name} 入边关系失败:`, err);
             }
           }
         } catch (err) {
@@ -408,39 +609,45 @@ export default function GraphView() {
       );
     } else if (mode === 'backward') {
       // 反向血缘：从当前节点向前递归查询
+      console.log('[GraphView] 开始反向血缘查询', { objType, instId, linkTypesCount: linkTypes.length, objectTypesCount: objectTypes.length });
+      console.log('[GraphView] 过滤后的关系类型:', linkTypes.map(lt => ({ name: lt.name, source_type: lt.source_type, target_type: lt.target_type })));
       await loadBackwardLineage(
         objType,
         instId,
         nodeMap,
         linkList,
         visitedNodes,
-        linkTypes,
+        linkTypes,  // 使用工作空间过滤后的关系类型
         objectTypes
       );
+      console.log('[GraphView] 反向血缘查询完成', { nodesCount: nodeMap.size, linksCount: linkList.length });
     } else if (mode === 'full') {
-      // 全链血缘：正向 + 反向
-      await loadForwardLineage(
+      // 全链血缘：遍历与当前节点相关的全部节点和关系（包括出边和入边）
+      await loadFullLineage(
         objType,
         instId,
         nodeMap,
         linkList,
-        new Set<string>(), // 正向使用独立的 visited set
-        linkTypes,
-        objectTypes
-      );
-      await loadBackwardLineage(
-        objType,
-        instId,
-        nodeMap,
-        linkList,
-        new Set<string>(), // 反向使用独立的 visited set
-        linkTypes,
+        visitedNodes,
+        linkTypes,  // 使用工作空间过滤后的关系类型
         objectTypes
       );
     }
 
-    setNodes(Array.from(nodeMap.values()));
-    setLinks(linkList);
+    const finalNodes = Array.from(nodeMap.values());
+    const finalLinks = linkList;
+    
+    console.log('[loadInstanceGraph] 最终结果:', {
+      nodesCount: finalNodes.length,
+      linksCount: finalLinks.length,
+      nodes: finalNodes.map(n => ({ id: n.id, type: n.type, name: n.name })),
+      links: finalLinks.map(l => ({ id: l.id, type: l.type, source: l.source, target: l.target })),
+      exit_to_path_links: finalLinks.filter(l => l.type === 'exit_to_path'),
+      exit_transaction_nodes: finalNodes.filter(n => n.type === 'ExitTransaction')
+    });
+    
+    setNodes(finalNodes);
+    setLinks(finalLinks);
   };
 
   const loadFullGraph = async () => {
@@ -497,16 +704,20 @@ export default function GraphView() {
           for (const link of links.items) {
             const sourceId = link.source_id as string;
             const targetId = link.target_id as string;
+            const sourceType = linkType.source_type;
+            const targetType = linkType.target_type;
             
-            // 收集节点ID并计算度数
-            nodeIdsToLoad.add(sourceId);
-            nodeIdsToLoad.add(targetId);
-            nodeDegree.set(sourceId, (nodeDegree.get(sourceId) || 0) + 1);
-            nodeDegree.set(targetId, (nodeDegree.get(targetId) || 0) + 1);
+            // 收集节点ID并计算度数（使用 type:id 作为唯一标识）
+            const sourceNodeKey = getNodeKey(sourceType, sourceId);
+            const targetNodeKey = getNodeKey(targetType, targetId);
+            nodeIdsToLoad.add(sourceNodeKey);
+            nodeIdsToLoad.add(targetNodeKey);
+            nodeDegree.set(sourceNodeKey, (nodeDegree.get(sourceNodeKey) || 0) + 1);
+            nodeDegree.set(targetNodeKey, (nodeDegree.get(targetNodeKey) || 0) + 1);
             
             linkList.push({
-              source: sourceId,
-              target: targetId,
+              source: sourceNodeKey,  // 使用 type:id 格式
+              target: targetNodeKey,  // 使用 type:id 格式
               id: link.id,
               type: linkType.name,
               data: link,
@@ -557,18 +768,24 @@ export default function GraphView() {
     const nodeIdsByType = new Map<string, Set<string>>();
     
     // 从链接中收集节点ID，并按类型分组
+    // 注意：link.source 和 link.target 现在已经是 type:id 格式
     for (const link of linkList) {
-      // 根据链接类型推断source和target的类型
-      const linkTypeDef = linkTypes.find(lt => lt.name === link.type);
-      if (linkTypeDef) {
-        if (!nodeIdsByType.has(linkTypeDef.source_type)) {
-          nodeIdsByType.set(linkTypeDef.source_type, new Set());
+      // 从 type:id 格式中提取类型和ID
+      const [sourceType, sourceId] = link.source.split(':', 2);
+      const [targetType, targetId] = link.target.split(':', 2);
+      
+      if (sourceType && sourceId) {
+        if (!nodeIdsByType.has(sourceType)) {
+          nodeIdsByType.set(sourceType, new Set());
         }
-        if (!nodeIdsByType.has(linkTypeDef.target_type)) {
-          nodeIdsByType.set(linkTypeDef.target_type, new Set());
+        nodeIdsByType.get(sourceType)!.add(sourceId);
+      }
+      
+      if (targetType && targetId) {
+        if (!nodeIdsByType.has(targetType)) {
+          nodeIdsByType.set(targetType, new Set());
         }
-        nodeIdsByType.get(linkTypeDef.source_type)!.add(link.source);
-        nodeIdsByType.get(linkTypeDef.target_type)!.add(link.target);
+        nodeIdsByType.get(targetType)!.add(targetId);
       }
     }
 
@@ -590,8 +807,9 @@ export default function GraphView() {
             // key 格式为 "objectType:id"
             const [typeName, id] = key.split(':', 2);
             if (typeName && id) {
-              nodeMap.set(id, {
-                id: id,
+              const nodeKey = getNodeKey(typeName, id);
+              nodeMap.set(nodeKey, {
+                id: nodeKey,  // 使用 type:id 作为唯一标识
                 name: getInstanceName(instance, typeName),
                 type: typeName,
                 data: instance,
@@ -608,11 +826,12 @@ export default function GraphView() {
         for (const [typeName, nodeIds] of nodeIdsByType.entries()) {
           for (const nodeId of nodeIds) {
             if (fallbackCount >= fallbackLimit) break;
-            if (!nodeMap.has(nodeId)) {
+            const nodeKey = getNodeKey(typeName, nodeId);
+            if (!nodeMap.has(nodeKey)) {
               try {
                 const instance = await instanceApi.get(typeName, nodeId);
-                nodeMap.set(nodeId, {
-                  id: nodeId,
+                nodeMap.set(nodeKey, {
+                  id: nodeKey,  // 使用 type:id 作为唯一标识
                   name: getInstanceName(instance, typeName),
                   type: typeName,
                   data: instance,
@@ -724,7 +943,9 @@ export default function GraphView() {
   };
 
   const getNodeLabel = (node: GraphNode) => {
-    const name = node.name || node.id.substring(0, 8);
+    // node.id 现在是 type:id 格式，提取ID部分用于显示
+    const nodeIdOnly = node.id.includes(':') ? node.id.split(':')[1] : node.id;
+    const name = node.name || nodeIdOnly.substring(0, 8);
     const objectType = objectTypes.find(ot => ot.name === node.type);
     const typeDisplayName = objectType?.display_name || node.type;
     // 尝试获取一些关键属性
@@ -973,7 +1194,9 @@ export default function GraphView() {
               return 12 + Math.min(linkCount * 2, 25);
             }}
             nodeCanvasObject={(node: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
-              const label = node.name || node.id.substring(0, 8);
+              // node.id 现在是 type:id 格式，提取ID部分用于显示
+              const nodeIdOnly = node.id.includes(':') ? node.id.split(':')[1] : node.id;
+              const label = node.name || nodeIdOnly.substring(0, 8);
               const size = node.__size || 12;
               
               // 绘制节点圆形
@@ -1067,7 +1290,7 @@ export default function GraphView() {
                 <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
                   <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">实例ID</div>
                   <div className="font-mono text-sm text-gray-800 break-all bg-white p-2 rounded border">
-                    {selectedNode.id}
+                    {selectedNode.id.includes(':') ? selectedNode.id.split(':')[1] : selectedNode.id}
                   </div>
                 </div>
 
@@ -1122,13 +1345,13 @@ export default function GraphView() {
             <div className="p-6 border-t border-gray-200 bg-gray-50">
               <div className="flex gap-3">
                 <a
-                  href={`#/instances/${selectedNode.type}/${selectedNode.id}`}
+                  href={`#/instances/${selectedNode.type}/${selectedNode.id.includes(':') ? selectedNode.id.split(':')[1] : selectedNode.id}`}
                   className="flex-1 text-center px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-sm"
                 >
                   查看详情
                 </a>
                 <a
-                  href={`#/graph/${selectedNode.type}/${selectedNode.id}`}
+                  href={`#/graph/${selectedNode.type}/${selectedNode.id.includes(':') ? selectedNode.id.split(':')[1] : selectedNode.id}`}
                   className="flex-1 text-center px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium shadow-sm"
                 >
                   关系图
