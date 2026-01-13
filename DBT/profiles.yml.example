@@ -1,0 +1,20 @@
+# DBT profiles 配置文件示例
+# 将此文件复制到 ~/.dbt/profiles.yml 或项目根目录下的 profiles.yml
+# 并根据实际情况修改数据库连接信息
+
+clear_result_temp:
+  target: dev
+  outputs:
+    dev:
+      type: mysql
+      server: localhost
+      port: 3306
+      schema: your_database_name  # 数据库名称（schema）
+      database: your_database_name  # MySQL中schema和database相同
+      username: your_username  # 注意：使用 username 而不是 user
+      password: your_password
+      # 可选配置
+      charset: utf8mb4
+      # connect_timeout: 10
+      # read_timeout: 10
+      # write_timeout: 10
