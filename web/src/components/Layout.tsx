@@ -12,10 +12,20 @@ import {
   PencilIcon,
   ChevronDownIcon,
   SparklesIcon,
-
+  BuildingOfficeIcon,
+  ArrowPathIcon,
+  MapPinIcon,
+  UserIcon,
+  TruckIcon,
+  CreditCardIcon,
+  ArrowDownTrayIcon,
+  ArrowUpTrayIcon,
+  MapIcon,
+  ListBulletIcon,
+  CalculatorIcon
 } from '@heroicons/react/24/outline';
-import type { ObjectType, LinkType } from '../api/client';
-import { schemaApi } from '../api/client';
+import type { ObjectType, LinkType, ModelInfo, CurrentModel } from '../api/client';
+import { schemaApi, modelApi } from '../api/client';
 import { useEffect } from 'react';
 import { useWorkspace } from '../WorkspaceContext';
 import WorkspaceDialog from './WorkspaceDialog';
@@ -33,18 +43,24 @@ export default function Layout({ children }: LayoutProps) {
   const [workspaceDialogOpen, setWorkspaceDialogOpen] = useState(false);
   const [editingWorkspaceId, setEditingWorkspaceId] = useState<string | undefined>(undefined);
   const [workspaceDropdownOpen, setWorkspaceDropdownOpen] = useState(false);
+  const [models, setModels] = useState<ModelInfo[]>([]);
+  const [currentModel, setCurrentModel] = useState<CurrentModel | null>(null);
   
   const { workspaces, selectedWorkspaceId, selectedWorkspace, setSelectedWorkspaceId, refreshWorkspaces } = useWorkspace();
 
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [objectTypesData, linkTypesData] = await Promise.all([
+        const [objectTypesData, linkTypesData, modelsData, currentModelData] = await Promise.all([
           schemaApi.getObjectTypes(),
           schemaApi.getLinkTypes(),
+          modelApi.listModels(),
+          modelApi.getCurrentModel(),
         ]);
         setObjectTypes(objectTypesData);
         setLinkTypes(linkTypesData);
+        setModels(modelsData);
+        setCurrentModel(currentModelData);
       } catch (error) {
         console.error('Failed to load schema:', error);
       } finally {
@@ -75,6 +91,29 @@ export default function Layout({ children }: LayoutProps) {
           : false
       )
     : linkTypes;
+
+  // 为每个 object type 选择合适的图标
+  const getObjectTypeIcon = (objectTypeName: string) => {
+    const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
+      // 实体类型
+      'TollStation': BuildingOfficeIcon,      // 收费站 - 建筑物图标
+      'TollLane': ArrowPathIcon,              // 收费车道 - 路径/循环图标
+      'Gantry': MapPinIcon,                   // ETC门架 - 地图标记图标
+      'Operator': UserIcon,                    // 操作员 - 用户图标
+      'Vehicle': TruckIcon,                    // 车辆 - 卡车图标
+      'Media': CreditCardIcon,                 // 通行介质 - 卡片图标
+      // 交易类型
+      'EntryTransaction': ArrowDownTrayIcon,  // 入口交易 - 下载/进入图标
+      'ExitTransaction': ArrowUpTrayIcon,     // 出口交易 - 上传/离开图标
+      'GantryTransaction': MapPinIcon,         // 门架交易 - 地图标记图标
+      // 路径类型
+      'Passage': MapIcon,                      // 通行路径 - 地图图标
+      'PathDetail': ListBulletIcon,           // 路径明细 - 列表图标
+      'SplitDetail': CalculatorIcon,           // 拆分明细 - 计算器图标
+    };
+    
+    return iconMap[objectTypeName] || CubeIcon; // 默认使用 CubeIcon
+  };
 
   const handleCreateWorkspace = () => {
     setEditingWorkspaceId(undefined);
@@ -257,20 +296,23 @@ export default function Layout({ children }: LayoutProps) {
                     该工作空间未添加对象类型
                   </div>
                 ) : (
-                  filteredObjectTypes.map((ot) => (
-                    <Link
-                      key={ot.name}
-                      to={`/instances/${ot.name}`}
-                      className={`flex items-center px-3 py-2 rounded-lg mb-1 ${
-                        isActive(`/instances/${ot.name}`)
-                          ? 'bg-blue-50 text-blue-700'
-                          : 'text-gray-700 hover:bg-gray-100'
-                      }`}
-                    >
-                      <CubeIcon className="w-4 h-4 mr-3" />
-                      <span className="text-sm">{ot.display_name || ot.name}</span>
-                    </Link>
-                  ))
+                  filteredObjectTypes.map((ot) => {
+                    const IconComponent = getObjectTypeIcon(ot.name);
+                    return (
+                      <Link
+                        key={ot.name}
+                        to={`/instances/${ot.name}`}
+                        className={`flex items-center px-3 py-2 rounded-lg mb-1 ${
+                          isActive(`/instances/${ot.name}`)
+                            ? 'bg-blue-50 text-blue-700'
+                            : 'text-gray-700 hover:bg-gray-100'
+                        }`}
+                      >
+                        <IconComponent className="w-4 h-4 mr-3" />
+                        <span className="text-sm">{ot.display_name || ot.name}</span>
+                      </Link>
+                    );
+                  })
                 )}
 
                 <div className="mt-4 mb-2">
@@ -307,24 +349,55 @@ export default function Layout({ children }: LayoutProps) {
       {/* Main content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Top bar */}
-        <header className="bg-white border-b border-gray-200 px-4 py-3 flex items-center">
-          <button
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="lg:hidden text-gray-500 hover:text-gray-700 mr-3"
-          >
-            <Bars3Icon className="w-6 h-6" />
-          </button>
-          <h2 className="text-lg font-semibold text-gray-900">
-            {location.pathname === '/schema' && 'Schema Browser'}
-            {location.pathname.startsWith('/instances/') && 'Instances'}
-            {location.pathname.startsWith('/links/') && 'Links'}
-            {location.pathname.startsWith('/schema-graph') && 'Schema Graph'}
-            {location.pathname.startsWith('/data-sources') && 'Data Sources'}
-            {location.pathname.startsWith('/metrics') && '指标管理'}
-            {location.pathname === '/query' && 'Query Builder'}
-            {location.pathname === '/natural-language-query' && 'Natural Language Query'}
-
-          </h2>
+        <header className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center">
+            <button
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              className="lg:hidden text-gray-500 hover:text-gray-700 mr-3"
+            >
+              <Bars3Icon className="w-6 h-6" />
+            </button>
+            <h2 className="text-lg font-semibold text-gray-900">
+              {location.pathname === '/schema' && 'Schema Browser'}
+              {location.pathname.startsWith('/instances/') && 'Instances'}
+              {location.pathname.startsWith('/links/') && 'Links'}
+              {location.pathname.startsWith('/schema-graph') && 'Schema Graph'}
+              {location.pathname.startsWith('/data-sources') && 'Data Sources'}
+              {location.pathname.startsWith('/metrics') && '指标管理'}
+              {location.pathname === '/query' && 'Query Builder'}
+              {location.pathname === '/natural-language-query' && 'Natural Language Query'}
+            </h2>
+          </div>
+          
+          {/* 模型选择器 */}
+          {currentModel && models.length > 0 ? (
+            <div className="flex items-center space-x-2">
+              <label className="text-sm text-gray-600 whitespace-nowrap">当前模型:</label>
+              <div className="relative">
+                <select
+                  value={currentModel.modelId}
+                  onChange={(e) => {
+                    const selectedModel = models.find(m => m.id === e.target.value);
+                    if (selectedModel && selectedModel.id !== currentModel.modelId) {
+                      if (confirm(`切换模型需要重启应用。\n\n当前模型: ${currentModel.modelId}\n选择模型: ${selectedModel.displayName}\n\n请在 application.properties 中设置:\nontology.model=${selectedModel.id}\n\n然后重启应用。`)) {
+                        // 可以打开配置文件或显示说明
+                        console.log(`请设置 ontology.model=${selectedModel.id} 并重启应用`);
+                      }
+                    }
+                  }}
+                  className="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white min-w-[120px]"
+                >
+                  {models.map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.displayName}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          ) : (
+            <div className="text-xs text-gray-400">加载模型中...</div>
+          )}
         </header>
 
         {/* Content area */}

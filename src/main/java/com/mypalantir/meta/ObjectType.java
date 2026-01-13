@@ -33,7 +33,7 @@ public class ObjectType {
         this.name = name;
     }
 
-    @JsonIgnore
+    @JsonGetter("display_name")
     public String getDisplayName() {
         return displayName;
     }

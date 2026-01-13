@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link, useSearchParams } from 'react-router-dom';
-import type { Instance, ObjectType } from '../api/client';
-import { instanceApi, schemaApi, databaseApi, mappingApi } from '../api/client';
+import type { Instance, ObjectType, QueryRequest } from '../api/client';
+import { instanceApi, schemaApi, queryApi, databaseApi, mappingApi } from '../api/client';
 import { useWorkspace } from '../WorkspaceContext';
 import { PlusIcon, PencilIcon, TrashIcon, ArrowPathIcon, CloudArrowDownIcon, XMarkIcon, LinkIcon, ArrowDownTrayIcon, FunnelIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline';
 import InstanceForm from '../components/InstanceForm';
@@ -72,8 +72,19 @@ export default function InstanceList() {
     if (!objectType) return;
     try {
       setLoading(true);
+      
+      // 首先获取对象类型定义
       const objectTypeData = await schemaApi.getObjectType(objectType);
       setObjectTypeDef(objectTypeData);
+      
+      // 如果使用 mapping 查询，使用直接 API 调用
+      if (mappingId) {
+        const instancesData = await instanceApi.listWithMapping(objectType, mappingId, offset, limit);
+        setInstances(instancesData.items);
+        setTotal(instancesData.total);
+        setFromMapping(true);
+        return;
+      }
       
       // 构建筛选条件
       const filterParams: Record<string, any> = {};
@@ -83,19 +94,57 @@ export default function InstanceList() {
         }
       });
       
-      let instancesData;
-      if (mappingId) {
-        // 使用mapping查询数据（不支持筛选）
-        instancesData = await instanceApi.listWithMapping(objectType, mappingId, offset, limit);
-        setFromMapping(true);
-      } else {
-        // 常规查询，支持筛选
-        instancesData = await instanceApi.list(objectType, offset, limit, Object.keys(filterParams).length > 0 ? filterParams : undefined);
+      // 优先使用 OntologyQuery，如果失败则回退到直接 API 调用
+      try {
+        // 构建 ontology query：查询当前 object type 的所有实例
+        const selectFields: string[] = ['id']; // 首先添加 id 字段（查询系统会自动映射 id_column 为 id）
+        
+        // 添加所有属性字段
+        if (objectTypeData.properties) {
+          objectTypeData.properties.forEach(prop => {
+            selectFields.push(prop.name);
+          });
+        }
+        
+        // 构建过滤条件（转换为 OntologyQuery 格式）
+        const queryFilters: Array<[string, string, any]> = [];
+        Object.entries(filterParams).forEach(([key, value]) => {
+          queryFilters.push(['=', key, value]);
+        });
+        
+        const queryRequest: QueryRequest = {
+          object: objectType,
+          select: selectFields,
+          limit: limit,
+          offset: offset,
+          ...(queryFilters.length > 0 && { filter: queryFilters }),
+        };
+        
+        // 执行 ontology query
+        const queryResult = await queryApi.execute(queryRequest);
+        
+        // 将查询结果转换为实例列表格式
+        const instances: Instance[] = queryResult.rows.map((row: Record<string, any>) => {
+          const instance: Instance = {
+            id: row.id || '',
+            ...row,
+          };
+          return instance;
+        });
+        
+        setInstances(instances);
+        setTotal(queryResult.rowCount || instances.length);
         setFromMapping(false);
+        return;
+      } catch (queryError) {
+        console.warn('OntologyQuery failed, falling back to direct API:', queryError);
       }
       
+      // 回退到直接 API 调用（支持筛选）
+      const instancesData = await instanceApi.list(objectType, offset, limit, Object.keys(filterParams).length > 0 ? filterParams : undefined);
       setInstances(instancesData.items);
       setTotal(instancesData.total);
+      setFromMapping(false);
     } catch (error) {
       console.error('Failed to load data:', error);
     } finally {

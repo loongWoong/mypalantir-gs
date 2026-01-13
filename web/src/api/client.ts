@@ -13,7 +13,7 @@ const apiClient = axios.create({
 // 类型定义（匹配后端返回的小写字段名）
 export interface ObjectType {
   name: string;
-  display_name?: string;
+  display_name?: string;  // 显示名称（可选）
   description: string;
   base_type: string | null;
   properties: Property[];
@@ -135,6 +135,30 @@ export const schemaApi = {
     const response = await apiClient.post<ApiResponse<{ success: boolean; message: string; metadata?: Record<string, string> }>>(
       `/schema/data-sources/${id}/test`
     );
+    return response.data.data;
+  },
+};
+
+// Model API
+export interface ModelInfo {
+  id: string;
+  path: string;
+  displayName: string;
+}
+
+export interface CurrentModel {
+  modelId: string;
+  filePath: string;
+}
+
+export const modelApi = {
+  listModels: async (): Promise<ModelInfo[]> => {
+    const response = await apiClient.get<ApiResponse<ModelInfo[]>>('/models');
+    return response.data.data;
+  },
+
+  getCurrentModel: async (): Promise<CurrentModel> => {
+    const response = await apiClient.get<ApiResponse<CurrentModel>>('/models/current');
     return response.data.data;
   },
 };

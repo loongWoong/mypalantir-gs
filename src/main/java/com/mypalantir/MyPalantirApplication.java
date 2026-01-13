@@ -42,17 +42,25 @@ public class MyPalantirApplication {
     public Loader schemaLoader(Config config) {
         String filePath = config.getSchemaFilePath();
         String systemSchemaPath = config.getSystemSchemaFilePath();
-        Loader loader = new Loader(filePath, systemSchemaPath);
+        String modelId = config.getOntologyModel();
+        
+        // 支持两种模式：如果配置了 systemSchemaPath，使用双文件模式；否则使用单文件模式
+        Loader loader = (systemSchemaPath != null && !systemSchemaPath.isEmpty())
+            ? new Loader(filePath, systemSchemaPath)
+            : new Loader(filePath);
+        
         try {
             loader.load();
-            logger.info("Schema loaded successfully: {} object types, {} link types", 
+            logger.info("Ontology model '{}' loaded successfully from: {} ({} object types, {} link types)", 
+                modelId != null ? modelId : "default",
+                filePath,
                 loader.getSchema() != null && loader.getSchema().getObjectTypes() != null ? loader.getSchema().getObjectTypes().size() : 0,
                 loader.getSchema() != null && loader.getSchema().getLinkTypes() != null ? loader.getSchema().getLinkTypes().size() : 0);
             if (systemSchemaPath != null && !systemSchemaPath.isEmpty()) {
                 logger.info("System schema merged from: {}", systemSchemaPath);
             }
         } catch (IOException | Validator.ValidationException e) {
-            logger.error("Failed to load schema from: {}", filePath, e);
+            logger.error("Failed to load ontology model '{}' from: {}", modelId != null ? modelId : "default", filePath, e);
             logger.error("Schema validation error details: {}", e.getMessage());
             if (e.getCause() != null) {
                 logger.error("Caused by: ", e.getCause());

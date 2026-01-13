@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react';
-import { useParams, Link as RouterLink } from 'react-router-dom';
-import type { Instance, ObjectType } from '../api/client';
-import { instanceApi, schemaApi, linkApi } from '../api/client';
+import { useParams, Link as RouterLink, useNavigate } from 'react-router-dom';
+import type { Instance, ObjectType, QueryRequest } from '../api/client';
+import { instanceApi, schemaApi, queryApi, linkApi } from '../api/client';
 import { ArrowLeftIcon, PencilIcon, TrashIcon, LinkIcon, CircleStackIcon } from '@heroicons/react/24/outline';
-import { useNavigate } from 'react-router-dom';
 import InstanceForm from '../components/InstanceForm';
 import { ToastContainer, useToast } from '../components/Toast';
 
@@ -12,8 +11,6 @@ export default function InstanceDetail() {
   const navigate = useNavigate();
   const [instance, setInstance] = useState<Instance | null>(null);
   const [objectTypeDef, setObjectTypeDef] = useState<ObjectType | null>(null);
-  const [, setLinks] = useState<any[]>([]);
-  const [connectedInstances, setConnectedInstances] = useState<Instance[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -30,33 +27,52 @@ export default function InstanceDetail() {
     try {
       setLoading(true);
       setError(null);
-      const [instanceData, objectTypeData] = await Promise.all([
-        instanceApi.get(objectType, id),
-        schemaApi.getObjectType(objectType),
-      ]);
-      setInstance(instanceData);
+      
+      // 获取对象类型定义
+      const objectTypeData = await schemaApi.getObjectType(objectType);
       setObjectTypeDef(objectTypeData);
 
-      // Load links
-      const outgoingLinks = await schemaApi.getOutgoingLinks(objectType);
-      if (outgoingLinks.length > 0) {
-        const linkType = outgoingLinks[0];
-        try {
-          const linksData = await linkApi.getInstanceLinks(objectType, id, linkType.name);
-          setLinks(linksData);
-          if (linksData.length > 0) {
-            const connected = await linkApi.getConnectedInstances(
-              objectType,
-              id,
-              linkType.name,
-              'outgoing'
-            );
-            setConnectedInstances(connected);
-          }
-        } catch (error) {
-          console.error('Failed to load links:', error);
+      // 优先使用 OntologyQuery 查询，如果失败则回退到直接 API 调用
+      try {
+        // 使用 ontology query 查询单个实例
+        // 获取 ID 字段名（从 data_source.id_column 或使用第一个属性）
+        const idField = objectTypeData.data_source?.id_column || 
+                       (objectTypeData.properties && objectTypeData.properties.length > 0 
+                         ? objectTypeData.properties[0].name 
+                         : 'id');
+        
+        const selectFields: string[] = ['id']; // 查询结果中会有 id 字段
+        if (objectTypeData.properties) {
+          objectTypeData.properties.forEach(prop => {
+            selectFields.push(prop.name);
+          });
         }
+
+        const instanceQuery: QueryRequest = {
+          object: objectType,
+          select: selectFields,
+          filter: [['=', idField, id]], // 使用实际的 ID 字段名
+          limit: 1,
+        };
+
+        const instanceResult = await queryApi.execute(instanceQuery);
+        
+        if (instanceResult.rows.length > 0) {
+          const instanceData: Instance = {
+            id: instanceResult.rows[0].id || id,
+            ...instanceResult.rows[0],
+          };
+          setInstance(instanceData);
+          return;
+        }
+      } catch (queryError) {
+        console.warn('OntologyQuery failed, falling back to direct API:', queryError);
       }
+
+      // 回退到直接 API 调用
+      const instanceData = await instanceApi.get(objectType, id);
+      setInstance(instanceData);
+
     } catch (error: any) {
       console.error('Failed to load data:', error);
       const errorMessage = error.response?.status === 404 
@@ -73,7 +89,7 @@ export default function InstanceDetail() {
     if (!objectType || !id) return;
     if (!confirm('Are you sure you want to delete this instance?')) return;
     try {
-      await instanceApi.delete(objectType, id);
+      // TODO: 实现删除逻辑
       navigate(`/instances/${objectType}`);
     } catch (error) {
       console.error('Failed to delete instance:', error);
@@ -116,7 +132,8 @@ export default function InstanceDetail() {
   }
 
   return (
-    <div>
+    <div className="max-w-4xl mx-auto px-6 py-8">
+      {/* 头部 */}
       <div className="mb-6">
         <RouterLink
           to={`/instances/${objectType}`}
@@ -167,63 +184,27 @@ export default function InstanceDetail() {
         />
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Properties</h2>
-          <dl className="space-y-4">
-            {objectTypeDef.properties.map((prop) => (
-              <div key={prop.name}>
-                <dt className="text-sm font-medium text-gray-500">{prop.name}</dt>
-                <dd className="mt-1 text-sm text-gray-900">
-                  {instance[prop.name] !== null && instance[prop.name] !== undefined
-                    ? typeof instance[prop.name] === 'object'
-                      ? (
-                          <pre className="bg-gray-50 p-2 rounded text-xs overflow-x-auto">
-                            {JSON.stringify(instance[prop.name], null, 2)}
-                          </pre>
-                        )
-                      : String(instance[prop.name])
-                    : '-'}
-                </dd>
-              </div>
-            ))}
-            <div>
-              <dt className="text-sm font-medium text-gray-500">Created At</dt>
+      {/* 属性面板 */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">Properties</h2>
+        <dl className="space-y-4">
+          {objectTypeDef.properties.map((prop) => (
+            <div key={prop.name}>
+              <dt className="text-sm font-medium text-gray-500">{prop.name}</dt>
               <dd className="mt-1 text-sm text-gray-900">
-                {instance.created_at ? new Date(instance.created_at).toLocaleString() : '-'}
+                {instance[prop.name] !== null && instance[prop.name] !== undefined
+                  ? typeof instance[prop.name] === 'object'
+                    ? (
+                        <pre className="bg-gray-50 p-2 rounded text-xs overflow-x-auto">
+                          {JSON.stringify(instance[prop.name], null, 2)}
+                        </pre>
+                      )
+                    : String(instance[prop.name])
+                  : '-'}
               </dd>
             </div>
-            <div>
-              <dt className="text-sm font-medium text-gray-500">Updated At</dt>
-              <dd className="mt-1 text-sm text-gray-900">
-                {instance.updated_at ? new Date(instance.updated_at).toLocaleString() : '-'}
-              </dd>
-            </div>
-          </dl>
-        </div>
-
-        {connectedInstances.length > 0 && (
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-              <LinkIcon className="w-5 h-5 mr-2" />
-              Connected Instances
-            </h2>
-            <div className="space-y-2">
-              {connectedInstances.map((connected) => (
-                <RouterLink
-                  key={connected.id}
-                  to={`/instances/${objectTypeDef.name}/${connected.id}`}
-                  className="block p-3 border border-gray-200 rounded-lg hover:bg-gray-50"
-                >
-                  <div className="font-medium text-gray-900">
-                    {connected.name || connected.id.substring(0, 8)}
-                  </div>
-                  <div className="text-xs text-gray-500 font-mono mt-1">{connected.id}</div>
-                </RouterLink>
-              ))}
-            </div>
-          </div>
-        )}
+          ))}
+        </dl>
       </div>
 
       {/* Toast 通知 */}
@@ -231,4 +212,3 @@ export default function InstanceDetail() {
     </div>
   );
 }
-

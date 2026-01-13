@@ -17,8 +17,11 @@ public class Config {
     @Value("${schema.file.path:./ontology/schema.yaml}")
     private String schemaFilePath;
     
-    @Value("${schema.system.file.path:./ontology/schema-system.yaml}")
+    @Value("${schema.system.file.path:}")
     private String systemSchemaFilePath;
+    
+    @Value("${ontology.model:schema}")
+    private String ontologyModel;
 
     @Value("${data.root.path:./data}")
     private String dataRootPath;
@@ -92,6 +95,10 @@ public class Config {
 
     public String getSystemSchemaFilePath() {
         return systemSchemaFilePath;
+    }
+
+    public String getOntologyModel() {
+        return ontologyModel;
     }
 
     public String getDataRootPath() {
