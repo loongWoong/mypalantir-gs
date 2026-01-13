@@ -2604,669 +2604,1090 @@ object_types:
     #     data_type: date
     #     required: false
     #     description: "最近一次处理时间"
-  # - name: ManageSplitSum
-  #   display_name: 清分汇总结果
-  #   description: "存储清分汇总结果"
-  #   properties:
-  #     - name: crop_id
-  #       display_name: 拆分运营管理单位
-  #       data_type: integer
-  #       required: false
-  #       description: "拆分运营管理单位"
+  - name: ManageSplitSum
+    display_name: 清分汇总结果
+    description: "存储清分汇总结果"
+    properties:
+      - name: crop_id
+        display_name: 拆分运营管理单位
+        data_type: integer
+        required: false
+        description: "拆分运营管理单位"
       
-  #     - name: clear_date
-  #       display_name: 清分日期
-  #       data_type: date
-  #       required: false
-  #       description: "清分日期"
+      - name: clear_date
+        display_name: 清分日期
+        data_type: date
+        required: false
+        description: "清分日期"
       
-  #     - name: l_date
-  #       display_name: 逻辑日期
-  #       data_type: date
-  #       required: false
-  #       description: "逻辑日期"
+      - name: l_date
+        display_name: 逻辑日期
+        data_type: date
+        required: false
+        description: "逻辑日期"
       
-  #     - name: split_org
-  #       display_name: 拆分机构
-  #       data_type: string
-  #       required: false
-  #       description: "拆分机构"
+      - name: split_org
+        display_name: 拆分机构
+        data_type: string
+        required: false
+        description: "拆分机构"
       
-  #     - name: org_type
-  #       display_name: 机构类型
-  #       data_type: integer
-  #       required: false
-  #       description: "机构类型"
+      - name: org_type
+        display_name: 机构类型
+        data_type: integer
+        required: false
+        description: "机构类型"
       
-  #     - name: pay_card_type
-  #       display_name: 支付卡类型
-  #       data_type: integer
-  #       required: false
-  #       description: "支付卡类型"
+      - name: pay_card_type
+        display_name: 支付卡类型
+        data_type: integer
+        required: false
+        description: "支付卡类型"
       
-  #     - name: money_flag
-  #       display_name: 金额标志
-  #       data_type: integer
-  #       required: false
-  #       description: "金额标志"
+      - name: money_flag
+        display_name: 金额标志
+        data_type: integer
+        required: false
+        description: "金额标志"
       
-  #     - name: cash_split_money
-  #       display_name: 现金拆分金额
-  #       data_type: bigdecimal
-  #       required: false
-  #       description: "现金拆分金额"
+      - name: cash_split_money
+        display_name: 现金拆分金额
+        data_type: bigdecimal
+        required: false
+        description: "现金拆分金额"
       
-  #     - name: cash_op_split_money
-  #       display_name: 现金操作拆分金额
-  #       data_type: bigdecimal
-  #       required: false
-  #       description: "现金操作拆分金额"
+      - name: cash_op_split_money
+        display_name: 现金操作拆分金额
+        data_type: bigdecimal
+        required: false
+        description: "现金操作拆分金额"
       
-  #     - name: cash_toll_money
-  #       display_name: 现金合计金额
-  #       data_type: bigdecimal
-  #       required: false
-  #       description: "现金合计金额"
+      - name: cash_toll_money
+        display_name: 现金合计金额
+        data_type: bigdecimal
+        required: false
+        description: "现金合计金额"
       
-  #     - name: cash_op_toll_money
-  #       display_name: 现金操作合计金额
-  #       data_type: bigdecimal
-  #       required: false
-  #       description: "现金操作合计金额"
+      - name: cash_op_toll_money
+        display_name: 现金操作合计金额
+        data_type: bigdecimal
+        required: false
+        description: "现金操作合计金额"
       
-  #     - name: other_split_money
-  #       display_name: 其他拆分金额
-  #       data_type: bigdecimal
-  #       required: false
-  #       description: "其他拆分金额"
+      - name: other_split_money
+        display_name: 其他拆分金额
+        data_type: bigdecimal
+        required: false
+        description: "其他拆分金额"
       
-  #     - name: other_op_split_money
-  #       display_name: 其他操作拆分金额
-  #       data_type: bigdecimal
-  #       required: false
-  #       description: "其他操作拆分金额"
+      - name: other_op_split_money
+        display_name: 其他操作拆分金额
+        data_type: bigdecimal
+        required: false
+        description: "其他操作拆分金额"
       
-  #     - name: other_toll_money
-  #       display_name: 其他合计金额
-  #       data_type: bigdecimal
-  #       required: false
-  #       description: "其他合计金额"
+      - name: other_toll_money
+        display_name: 其他合计金额
+        data_type: bigdecimal
+        required: false
+        description: "其他合计金额"
       
-  #     - name: other_op_toll_money
-  #       display_name: 其他操作合计金额
-  #       data_type: bigdecimal
-  #       required: false
-  #       description: "其他操作合计金额"
+      - name: other_op_toll_money
+        display_name: 其他操作合计金额
+        data_type: bigdecimal
+        required: false
+        description: "其他操作合计金额"
       
-  #     - name: union_split_money
-  #       display_name: 联合拆分金额
-  #       data_type: bigdecimal
-  #       required: false
-  #       description: "联合拆分金额"
+      - name: union_split_money
+        display_name: 联合拆分金额
+        data_type: bigdecimal
+        required: false
+        description: "联合拆分金额"
       
-  #     - name: union_op_split_money
-  #       display_name: 联合操作拆分金额
-  #       data_type: bigdecimal
-  #       required: false
-  #       description: "联合操作拆分金额"
+      - name: union_op_split_money
+        display_name: 联合操作拆分金额
+        data_type: bigdecimal
+        required: false
+        description: "联合操作拆分金额"
       
-  #     - name: union_toll_money
-  #       display_name: 联合合计金额
-  #       data_type: bigdecimal
-  #       required: false
-  #       description: "联合合计金额"
+      - name: union_toll_money
+        display_name: 联合合计金额
+        data_type: bigdecimal
+        required: false
+        description: "联合合计金额"
       
-  #     - name: union_op_toll_money
-  #       display_name: 联合操作合计金额
-  #       data_type: bigdecimal
-  #       required: false
-  #       description: "联合操作合计金额"
+      - name: union_op_toll_money
+        display_name: 联合操作合计金额
+        data_type: bigdecimal
+        required: false
+        description: "联合操作合计金额"
       
-  #     - name: etc_split_money
-  #       display_name: ETC拆分金额
-  #       data_type: bigdecimal
-  #       required: false
-  #       description: "ETC拆分金额"
+      - name: etc_split_money
+        display_name: ETC拆分金额
+        data_type: bigdecimal
+        required: false
+        description: "ETC拆分金额"
       
-  #     - name: etc_op_split_money
-  #       display_name: ETC操作拆分金额
-  #       data_type: bigdecimal
-  #       required: false
-  #       description: "ETC操作拆分金额"
+      - name: etc_op_split_money
+        display_name: ETC操作拆分金额
+        data_type: bigdecimal
+        required: false
+        description: "ETC操作拆分金额"
       
-  #     - name: etc_toll_money
-  #       display_name: ETC合计金额
-  #       data_type: bigdecimal
-  #       required: false
-  #       description: "ETC合计金额"
+      - name: etc_toll_money
+        display_name: ETC合计金额
+        data_type: bigdecimal
+        required: false
+        description: "ETC合计金额"
       
-  #     - name: etc_op_toll_money
-  #       display_name: ETC操作合计金额
-  #       data_type: bigdecimal
-  #       required: false
-  #       description: "ETC操作合计金额"
+      - name: etc_op_toll_money
+        display_name: ETC操作合计金额
+        data_type: bigdecimal
+        required: false
+        description: "ETC操作合计金额"
       
-  #     - name: alipay_split_money
-  #       display_name: 支付宝拆分金额
-  #       data_type: bigdecimal
-  #       required: false
-  #       description: "支付宝拆分金额"
+      - name: alipay_split_money
+        display_name: 支付宝拆分金额
+        data_type: bigdecimal
+        required: false
+        description: "支付宝拆分金额"
       
-  #     - name: alipay_op_split_money
-  #       display_name: 支付宝操作拆分金额
-  #       data_type: bigdecimal
-  #       required: false
-  #       description: "支付宝操作拆分金额"
+      - name: alipay_op_split_money
+        display_name: 支付宝操作拆分金额
+        data_type: bigdecimal
+        required: false
+        description: "支付宝操作拆分金额"
       
-  #     - name: alipay_toll_money
-  #       display_name: 支付宝合计金额
-  #       data_type: bigdecimal
-  #       required: false
-  #       description: "支付宝合计金额"
+      - name: alipay_toll_money
+        display_name: 支付宝合计金额
+        data_type: bigdecimal
+        required: false
+        description: "支付宝合计金额"
       
-  #     - name: alipay_op_toll_money
-  #       display_name: 支付宝操作合计金额
-  #       data_type: bigdecimal
-  #       required: false
-  #       description: "支付宝操作合计金额"
+      - name: alipay_op_toll_money
+        display_name: 支付宝操作合计金额
+        data_type: bigdecimal
+        required: false
+        description: "支付宝操作合计金额"
       
-  #     - name: wepay_split_money
-  #       display_name: 微信拆分金额
-  #       data_type: bigdecimal
-  #       required: false
-  #       description: "微信拆分金额"
+      - name: wepay_split_money
+        display_name: 微信拆分金额
+        data_type: bigdecimal
+        required: false
+        description: "微信拆分金额"
       
-  #     - name: wepay_op_split_money
-  #       display_name: 微信操作拆分金额
-  #       data_type: bigdecimal
-  #       required: false
-  #       description: "微信操作拆分金额"
+      - name: wepay_op_split_money
+        display_name: 微信操作拆分金额
+        data_type: bigdecimal
+        required: false
+        description: "微信操作拆分金额"
       
-  #     - name: wepay_toll_money
-  #       display_name: 微信合计金额
-  #       data_type: bigdecimal
-  #       required: false
-  #       description: "微信合计金额"
+      - name: wepay_toll_money
+        display_name: 微信合计金额
+        data_type: bigdecimal
+        required: false
+        description: "微信合计金额"
       
-  #     - name: wepay_op_toll_money
-  #       display_name: 微信操作合计金额
-  #       data_type: bigdecimal
-  #       required: false
-  #       description: "微信操作合计金额"
+      - name: wepay_op_toll_money
+        display_name: 微信操作合计金额
+        data_type: bigdecimal
+        required: false
+        description: "微信操作合计金额"
       
-  #     - name: gen_time
-  #       display_name: 生成时间
-  #       data_type: date
-  #       required: false
-  #       description: "生成时间"
+      - name: gen_time
+        display_name: 生成时间
+        data_type: date
+        required: false
+        description: "生成时间"
       
-  #     - name: corp
-  #       display_name: 企业
-  #       data_type: string
-  #       required: false
-  #       description: "企业"
+      - name: corp
+        display_name: 企业
+        data_type: string
+        required: false
+        description: "企业"
       
-  #     - name: road
-  #       display_name: 路段
-  #       data_type: string
-  #       required: false
-  #       description: "路段"
+      - name: road
+        display_name: 路段
+        data_type: string
+        required: false
+        description: "路段"
       
-  #     - name: cash_return_money
-  #       display_name: 现金退费金额
-  #       data_type: bigdecimal
-  #       required: false
-  #       description: "现金退费金额"
+      - name: cash_return_money
+        display_name: 现金退费金额
+        data_type: bigdecimal
+        required: false
+        description: "现金退费金额"
       
-  #     - name: other_return_money
-  #       display_name: 其他退费金额
-  #       data_type: bigdecimal
-  #       required: false
-  #       description: "其他退费金额"
+      - name: other_return_money
+        display_name: 其他退费金额
+        data_type: bigdecimal
+        required: false
+        description: "其他退费金额"
       
-  #     - name: union_return_money
-  #       display_name: 联合退费金额
-  #       data_type: bigdecimal
-  #       required: false
-  #       description: "联合退费金额"
+      - name: union_return_money
+        display_name: 联合退费金额
+        data_type: bigdecimal
+        required: false
+        description: "联合退费金额"
       
-  #     - name: etc_return_money
-  #       display_name: ETC退费金额
-  #       data_type: bigdecimal
-  #       required: false
-  #       description: "ETC退费金额"
+      - name: etc_return_money
+        display_name: ETC退费金额
+        data_type: bigdecimal
+        required: false
+        description: "ETC退费金额"
       
-  #     - name: alipay_return_money
-  #       display_name: 支付宝退费金额
-  #       data_type: bigdecimal
-  #       required: false
-  #       description: "支付宝退费金额"
+      - name: alipay_return_money
+        display_name: 支付宝退费金额
+        data_type: bigdecimal
+        required: false
+        description: "支付宝退费金额"
       
-  #     - name: wepay_return_money
-  #       display_name: 微信退费金额
-  #       data_type: bigdecimal
-  #       required: false
-  #       description: "微信退费金额"
+      - name: wepay_return_money
+        display_name: 微信退费金额
+        data_type: bigdecimal
+        required: false
+        description: "微信退费金额"
 
-  # - name: ExClearResultEtc
-  #   display_name: ETC外部清分结果
-  #   description: "ETC外部清分结果表"
-  #   properties:
-  #     - name: crop_id
-  #       display_name: 运营管理单位
-  #       data_type: int
-  #       required: true
-  #       description: "运营管理单位"
+  - name: ExClearResultEtc
+    display_name: ETC外部清分结果
+    description: "ETC外部清分结果表"
+    properties:
+      - name: crop_id
+        display_name: 运营管理单位
+        data_type: int
+        required: true
+        description: "运营管理单位"
       
-  #     - name: toll_section_id
-  #       display_name: 收费路段编码
-  #       data_type: string
-  #       required: true
-  #       description: "收费路段编码"
+      - name: toll_section_id
+        display_name: 收费路段编码
+        data_type: string
+        required: true
+        description: "收费路段编码"
       
-  #     - name: toll_interval_id
-  #       display_name: 收费区间编码
-  #       data_type: string
-  #       required: true
-  #       description: "收费区间编码"
+      - name: toll_interval_id
+        display_name: 收费区间编码
+        data_type: string
+        required: true
+        description: "收费区间编码"
       
-  #     - name: toll_station
-  #       display_name: 收费站编码
-  #       data_type: string
-  #       required: true
-  #       description: "收费站编码"
+      - name: toll_station
+        display_name: 收费站编码
+        data_type: string
+        required: true
+        description: "收费站编码"
       
-  #     - name: vehicle_type
-  #       display_name: 车型
-  #       data_type: int
-  #       required: true
-  #       description: "车型"
+      - name: vehicle_type
+        display_name: 车型
+        data_type: int
+        required: true
+        description: "车型"
       
-  #     - name: pay_type
-  #       display_name: 支付类型
-  #       data_type: int
-  #       required: true
-  #       description: "支付类型"
+      - name: pay_type
+        display_name: 支付类型
+        data_type: int
+        required: true
+        description: "支付类型"
       
-  #     - name: pay_card_type
-  #       display_name: 支付卡类型
-  #       data_type: int
-  #       required: true
-  #       description: "支付卡类型"
+      - name: pay_card_type
+        display_name: 支付卡类型
+        data_type: int
+        required: true
+        description: "支付卡类型"
       
-  #     - name: province_type
-  #       display_name: 省份类型
-  #       data_type: int
-  #       required: true
-  #       description: "省份类型"
+      - name: province_type
+        display_name: 省份类型
+        data_type: int
+        required: true
+        description: "省份类型"
       
-  #     - name: l_date
-  #       display_name: 逻辑日期
-  #       data_type: datetime
-  #       required: true
-  #       description: "逻辑日期"
+      - name: l_date
+        display_name: 逻辑日期
+        data_type: datetime
+        required: true
+        description: "逻辑日期"
       
-  #     - name: nation_clear_date
-  #       display_name: 部级清分日期
-  #       data_type: datetime
-  #       required: true
-  #       description: "部级清分日期"
+      - name: nation_clear_date
+        display_name: 部级清分日期
+        data_type: datetime
+        required: true
+        description: "部级清分日期"
       
-  #     - name: nation_split_date
-  #       display_name: 部级拆分日期
-  #       data_type: datetime
-  #       required: true
-  #       description: "部级拆分日期"
+      - name: nation_split_date
+        display_name: 部级拆分日期
+        data_type: datetime
+        required: true
+        description: "部级拆分日期"
       
-  #     - name: clear_date
-  #       display_name: 清分日期
-  #       data_type: datetime
-  #       required: true
-  #       description: "清分日期"
+      - name: clear_date
+        display_name: 清分日期
+        data_type: datetime
+        required: true
+        description: "清分日期"
       
-  #     - name: multi_province
-  #       display_name: 跨省标志
-  #       data_type: int
-  #       required: true
-  #       description: "跨省标志"
+      - name: multi_province
+        display_name: 跨省标志
+        data_type: int
+        required: true
+        description: "跨省标志"
       
-  #     - name: modify_flag
-  #       display_name: 修改标志
-  #       data_type: int
-  #       required: true
-  #       description: "修改标志"
+      - name: modify_flag
+        display_name: 修改标志
+        data_type: int
+        required: true
+        description: "修改标志"
       
-  #     - name: road_type
-  #       display_name: 路段类型
-  #       data_type: bigdecimal
-  #       required: true
-  #       description: "路段类型"
+      - name: road_type
+        display_name: 路段类型
+        data_type: bigdecimal
+        required: true
+        description: "路段类型"
       
-  #     - name: busi_batch
-  #       display_name: 业务批次号
-  #       data_type: string
-  #       required: true
-  #       description: "业务批次号"
+      - name: busi_batch
+        display_name: 业务批次号
+        data_type: string
+        required: true
+        description: "业务批次号"
       
-  #     - name: union_pay_type
-  #       display_name: 银联支付类型
-  #       data_type: int
-  #       required: true
-  #       description: "银联支付类型，默认值0"
+      - name: union_pay_type
+        display_name: 银联支付类型
+        data_type: int
+        required: true
+        description: "银联支付类型，默认值0"
       
-  #     - name: clear_type
-  #       display_name: 清分类型
-  #       data_type: int
-  #       required: true
-  #       description: "清分类型"
+      - name: clear_type
+        display_name: 清分类型
+        data_type: int
+        required: true
+        description: "清分类型"
       
-  #     - name: issuer_id
-  #       display_name: 发行方编码
-  #       data_type: string
-  #       required: true
-  #       description: "发行方编码"
+      - name: issuer_id
+        display_name: 发行方编码
+        data_type: string
+        required: true
+        description: "发行方编码"
       
-  #     - name: toll_province_id
-  #       display_name: 收费省份编码
-  #       data_type: string
-  #       required: true
-  #       description: "收费省份编码"
+      - name: toll_province_id
+        display_name: 收费省份编码
+        data_type: string
+        required: true
+        description: "收费省份编码"
       
-  #     - name: ser_province_id
-  #       display_name: 服务省份编码
-  #       data_type: string
-  #       required: true
-  #       description: "服务省份编码"
+      - name: ser_province_id
+        display_name: 服务省份编码
+        data_type: string
+        required: true
+        description: "服务省份编码"
       
-  #     - name: toll_crop_id
-  #       display_name: 收费运营单位
-  #       data_type: int
-  #       required: true
-  #       description: "收费运营单位"
+      - name: toll_crop_id
+        display_name: 收费运营单位
+        data_type: int
+        required: true
+        description: "收费运营单位"
       
-  #     - name: section_id
-  #       display_name: 路段编码
-  #       data_type: string
-  #       required: true
-  #       description: "路段编码"
+      - name: section_id
+        display_name: 路段编码
+        data_type: string
+        required: true
+        description: "路段编码"
       
-  #     - name: amount
-  #       display_name: 金额
-  #       data_type: bigdecimal
-  #       required: true
-  #       description: "金额"
+      - name: amount
+        display_name: 金额
+        data_type: bigdecimal
+        required: true
+        description: "金额"
       
-  #     - name: discount_amount
-  #       display_name: 优惠金额
-  #       data_type: bigdecimal
-  #       required: true
-  #       description: "优惠金额"
+      - name: discount_amount
+        display_name: 优惠金额
+        data_type: bigdecimal
+        required: true
+        description: "优惠金额"
       
-  #     - name: charge_amount
-  #       display_name: 应收金额
-  #       data_type: bigdecimal
-  #       required: true
-  #       description: "应收金额"
+      - name: charge_amount
+        display_name: 应收金额
+        data_type: bigdecimal
+        required: true
+        description: "应收金额"
       
-  #     - name: report_flag
-  #       display_name: 上报标志
-  #       data_type: int
-  #       required: true
-  #       description: "上报标志"
+      - name: report_flag
+        display_name: 上报标志
+        data_type: int
+        required: true
+        description: "上报标志"
       
-  #     - name: last_time
-  #       display_name: 最后更新时间
-  #       data_type: datetime
-  #       required: true
-  #       description: "最后更新时间"
+      - name: last_time
+        display_name: 最后更新时间
+        data_type: datetime
+        required: true
+        description: "最后更新时间"
       
-  #     - name: ex_toll_station
-  #       display_name: 扩展收费站
-  #       data_type: string
-  #       required: false
-  #       description: "扩展收费站编码"
+      - name: ex_toll_station
+        display_name: 扩展收费站
+        data_type: string
+        required: false
+        description: "扩展收费站编码"
       
-  #     - name: split_count
-  #       display_name: 拆分次数
-  #       data_type: int
-  #       required: true
-  #       description: "拆分次数"
+      - name: split_count
+        display_name: 拆分次数
+        data_type: int
+        required: true
+        description: "拆分次数"
 
-  # - name: ExClearResultCash
-  #   display_name: 现金外部清分结果
-  #   description: "现金外部清分结果表"
-  #   properties:
-  #     - name: crop_id
-  #       display_name: 运营管理单位
-  #       data_type: int
-  #       required: true
-  #       description: "运营管理单位"
+  - name: ExClearResultCash
+    display_name: 现金外部清分结果
+    description: "现金外部清分结果表"
+    properties:
+      - name: crop_id
+        display_name: 运营管理单位
+        data_type: int
+        required: true
+        description: "运营管理单位"
       
-  #     - name: toll_section_id
-  #       display_name: 收费路段编码
-  #       data_type: string
-  #       required: true
-  #       description: "收费路段编码"
+      - name: toll_section_id
+        display_name: 收费路段编码
+        data_type: string
+        required: true
+        description: "收费路段编码"
       
-  #     - name: toll_interval_id
-  #       display_name: 收费区间编码
-  #       data_type: string
-  #       required: true
-  #       description: "收费区间编码"
+      - name: toll_interval_id
+        display_name: 收费区间编码
+        data_type: string
+        required: true
+        description: "收费区间编码"
       
-  #     - name: toll_station
-  #       display_name: 收费站编码
-  #       data_type: string
-  #       required: true
-  #       description: "收费站编码"
+      - name: toll_station
+        display_name: 收费站编码
+        data_type: string
+        required: true
+        description: "收费站编码"
       
-  #     - name: vehicle_type
-  #       display_name: 车型
-  #       data_type: int
-  #       required: true
-  #       description: "车型"
+      - name: vehicle_type
+        display_name: 车型
+        data_type: int
+        required: true
+        description: "车型"
       
-  #     - name: pay_type
-  #       display_name: 支付类型
-  #       data_type: int
-  #       required: true
-  #       description: "支付类型"
+      - name: pay_type
+        display_name: 支付类型
+        data_type: int
+        required: true
+        description: "支付类型"
       
-  #     - name: pay_card_type
-  #       display_name: 支付卡类型
-  #       data_type: int
-  #       required: true
-  #       description: "支付卡类型"
+      - name: pay_card_type
+        display_name: 支付卡类型
+        data_type: int
+        required: true
+        description: "支付卡类型"
       
-  #     - name: province_type
-  #       display_name: 省份类型
-  #       data_type: int
-  #       required: true
-  #       description: "省份类型"
+      - name: province_type
+        display_name: 省份类型
+        data_type: int
+        required: true
+        description: "省份类型"
       
-  #     - name: l_date
-  #       display_name: 逻辑日期
-  #       data_type: datetime
-  #       required: true
-  #       description: "逻辑日期"
+      - name: l_date
+        display_name: 逻辑日期
+        data_type: datetime
+        required: true
+        description: "逻辑日期"
       
-  #     - name: nation_clear_date
-  #       display_name: 部级清分日期
-  #       data_type: datetime
-  #       required: true
-  #       description: "部级清分日期"
+      - name: nation_clear_date
+        display_name: 部级清分日期
+        data_type: datetime
+        required: true
+        description: "部级清分日期"
       
-  #     - name: nation_split_date
-  #       display_name: 部级拆分日期
-  #       data_type: datetime
-  #       required: true
-  #       description: "部级拆分日期"
+      - name: nation_split_date
+        display_name: 部级拆分日期
+        data_type: datetime
+        required: true
+        description: "部级拆分日期"
       
-  #     - name: clear_date
-  #       display_name: 清分日期
-  #       data_type: datetime
-  #       required: true
-  #       description: "清分日期"
+      - name: clear_date
+        display_name: 清分日期
+        data_type: datetime
+        required: true
+        description: "清分日期"
       
-  #     - name: multi_province
-  #       display_name: 跨省标志
-  #       data_type: int
-  #       required: true
-  #       description: "跨省标志"
+      - name: multi_province
+        display_name: 跨省标志
+        data_type: int
+        required: true
+        description: "跨省标志"
       
-  #     - name: modify_flag
-  #       display_name: 修改标志
-  #       data_type: int
-  #       required: true
-  #       description: "修改标志"
+      - name: modify_flag
+        display_name: 修改标志
+        data_type: int
+        required: true
+        description: "修改标志"
       
-  #     - name: road_type
-  #       display_name: 路段类型
-  #       data_type: bigdecimal
-  #       required: true
-  #       description: "路段类型"
+      - name: road_type
+        display_name: 路段类型
+        data_type: bigdecimal
+        required: true
+        description: "路段类型"
       
-  #     - name: busi_batch
-  #       display_name: 业务批次号
-  #       data_type: string
-  #       required: true
-  #       description: "业务批次号"
+      - name: busi_batch
+        display_name: 业务批次号
+        data_type: string
+        required: true
+        description: "业务批次号"
       
-  #     - name: union_pay_type
-  #       display_name: 银联支付类型
-  #       data_type: int
-  #       required: true
-  #       description: "银联支付类型，默认值0"
+      - name: union_pay_type
+        display_name: 银联支付类型
+        data_type: int
+        required: true
+        description: "银联支付类型，默认值0"
       
-  #     - name: clear_type
-  #       display_name: 清分类型
-  #       data_type: int
-  #       required: true
-  #       description: "清分类型"
+      - name: clear_type
+        display_name: 清分类型
+        data_type: int
+        required: true
+        description: "清分类型"
       
-  #     - name: issuer_id
-  #       display_name: 发行方编码
-  #       data_type: string
-  #       required: true
-  #       description: "发行方编码，默认值'0'"
+      - name: issuer_id
+        display_name: 发行方编码
+        data_type: string
+        required: true
+        description: "发行方编码，默认值'0'"
       
-  #     - name: toll_province_id
-  #       display_name: 收费省份编码
-  #       data_type: string
-  #       required: true
-  #       description: "收费省份编码"
+      - name: toll_province_id
+        display_name: 收费省份编码
+        data_type: string
+        required: true
+        description: "收费省份编码"
       
-  #     - name: ser_province_id
-  #       display_name: 服务省份编码
-  #       data_type: string
-  #       required: true
-  #       description: "服务省份编码"
+      - name: ser_province_id
+        display_name: 服务省份编码
+        data_type: string
+        required: true
+        description: "服务省份编码"
       
-  #     - name: toll_crop_id
-  #       display_name: 收费运营单位
-  #       data_type: int
-  #       required: true
-  #       description: "收费运营单位"
+      - name: toll_crop_id
+        display_name: 收费运营单位
+        data_type: int
+        required: true
+        description: "收费运营单位"
       
-  #     - name: section_id
-  #       display_name: 路段编码
-  #       data_type: string
-  #       required: true
-  #       description: "路段编码"
+      - name: section_id
+        display_name: 路段编码
+        data_type: string
+        required: true
+        description: "路段编码"
       
-  #     - name: amount
-  #       display_name: 金额
-  #       data_type: bigdecimal
-  #       required: true
-  #       description: "金额"
+      - name: amount
+        display_name: 金额
+        data_type: bigdecimal
+        required: true
+        description: "金额"
       
-  #     - name: discount_amount
-  #       display_name: 优惠金额
-  #       data_type: bigdecimal
-  #       required: true
-  #       description: "优惠金额"
+      - name: discount_amount
+        display_name: 优惠金额
+        data_type: bigdecimal
+        required: true
+        description: "优惠金额"
       
-  #     - name: charge_amount
-  #       display_name: 应收金额
-  #       data_type: bigdecimal
-  #       required: true
-  #       description: "应收金额"
+      - name: charge_amount
+        display_name: 应收金额
+        data_type: bigdecimal
+        required: true
+        description: "应收金额"
       
-  #     - name: report_flag
-  #       display_name: 上报标志
-  #       data_type: int
-  #       required: true
-  #       description: "上报标志"
+      - name: report_flag
+        display_name: 上报标志
+        data_type: int
+        required: true
+        description: "上报标志"
       
-  #     - name: last_time
-  #       display_name: 最后更新时间
-  #       data_type: datetime
-  #       required: true
-  #       description: "最后更新时间"
+      - name: last_time
+        display_name: 最后更新时间
+        data_type: datetime
+        required: true
+        description: "最后更新时间"
       
-  #     - name: ex_toll_station
-  #       display_name: 扩展收费站
-  #       data_type: string
-  #       required: false
-  #       description: "扩展收费站编码"
+      - name: ex_toll_station
+        display_name: 扩展收费站
+        data_type: string
+        required: false
+        description: "扩展收费站编码"
       
-  #     - name: split_count
-  #       display_name: 拆分次数
-  #       data_type: int
-  #       required: true
-  #       description: "拆分次数"
+      - name: split_count
+        display_name: 拆分次数
+        data_type: int
+        required: true
+        description: "拆分次数"
 
-  # - name: OrgCode
-  #   display_name: 组织机构编码
-  #   description: "组织机构编码表，存储分中心、收费站、路段等机构信息"
-  #   properties:
-  #     - name: org_code
-  #       display_name: 机构编码
-  #       data_type: string
-  #       required: true
-  #       description: "机构编码"
+  - name: OrgCode
+    display_name: 组织机构编码
+    description: "组织机构编码表，存储分中心、收费站、路段等机构信息"
+    properties:
+      - name: org_code
+        display_name: 机构编码
+        data_type: string
+        required: true
+        description: "机构编码"
       
-  #     - name: org_type
-  #       display_name: 机构类型
-  #       data_type: int
-  #       required: true
-  #       description: "机构类型：22-分中心/小业主，23-收费站，40-路段"
+      - name: org_type
+        display_name: 机构类型
+        data_type: int
+        required: true
+        description: "机构类型：22-分中心/小业主，23-收费站，40-路段"
       
-  #     - name: bl_owner
-  #       display_name: 所属业主编码
-  #       data_type: string
-  #       required: false
-  #       description: "所属业主编码"
+      - name: bl_owner
+        display_name: 所属业主编码
+        data_type: string
+        required: false
+        description: "所属业主编码"
       
-  #     - name: bl_subcenter
-  #       display_name: 所属分中心编码
-  #       data_type: string
-  #       required: false
-  #       description: "所属分中心编码"
+      - name: bl_subcenter
+        display_name: 所属分中心编码
+        data_type: string
+        required: false
+        description: "所属分中心编码"
       
-  #     - name: bl_road
-  #       display_name: 所属路段编码
-  #       data_type: string
-  #       required: false
-  #       description: "所属路段编码"
+      - name: bl_road
+        display_name: 所属路段编码
+        data_type: string
+        required: false
+        description: "所属路段编码"
       
-  #     - name: bl_corp
-  #       display_name: 所属运营管理单位编码
-  #       data_type: string
-  #       required: false
-  #       description: "所属运营管理单位编码"
+      - name: bl_corp
+        display_name: 所属运营管理单位编码
+        data_type: string
+        required: false
+        description: "所属运营管理单位编码"
       
-  #     - name: last_ver
-  #       display_name: 版本号
-  #       data_type: int
-  #       required: true
-  #       description: "版本号"
+      - name: last_ver
+        display_name: 版本号
+        data_type: int
+        required: true
+        description: "版本号"
       
-  #     - name: ver_use_time
-  #       display_name: 版本使用时间
-  #       data_type: datetime
-  #       required: true
-  #       description: "版本使用时间"
+      - name: ver_use_time
+        display_name: 版本使用时间
+        data_type: datetime
+        required: true
+        description: "版本使用时间"
+  - name: Gbsectiondic
+    display_name: 高速公路路段信息
+    description: "存储高速公路路段的基本信息和收费信息"
+    properties:
+      - name: id
+        display_name: 路段ID
+        data_type: string
+        required: true
+        description: "路段ID"
+      
+      - name: road_id
+        display_name: 道路ID
+        data_type: string
+        required: false
+        description: "道路ID"
+      
+      - name: name
+        display_name: 名称
+        data_type: string
+        required: false
+        description: "名称"
+      
+      - name: section_owner_id
+        display_name: 路段所有者ID
+        data_type: string
+        required: false
+        description: "路段所有者ID"
+      
+      - name: type
+        display_name: 类型
+        data_type: integer
+        required: false
+        description: "类型"
+      
+      - name: length
+        display_name: 长度
+        data_type: integer
+        required: false
+        description: "长度"
+      
+      - name: start_stake_num
+        display_name: 起点桩号
+        data_type: string
+        required: false
+        description: "起点桩号"
+      
+      - name: start_lat
+        display_name: 起点纬度
+        data_type: string
+        required: false
+        description: "起点纬度"
+      
+      - name: start_lng
+        display_name: 起点经度
+        data_type: string
+        required: false
+        description: "起点经度"
+      
+      - name: end_stake_num
+        display_name: 终点桩号
+        data_type: string
+        required: false
+        description: "终点桩号"
+      
+      - name: end_lat
+        display_name: 终点纬度
+        data_type: string
+        required: false
+        description: "终点纬度"
+      
+      - name: end_lng
+        display_name: 终点经度
+        data_type: string
+        required: false
+        description: "终点经度"
+      
+      - name: tax
+        display_name: 税费
+        data_type: integer
+        required: false
+        description: "税费"
+      
+      - name: tax_rate
+        display_name: 税率
+        data_type: double
+        required: false
+        description: "税率"
+      
+      - name: charge_type
+        display_name: 收费类型
+        data_type: integer
+        required: false
+        description: "收费类型"
+      
+      - name: toll_roads
+        display_name: 收费路段
+        data_type: string
+        required: false
+        description: "收费路段"
+      
+      - name: build_time
+        display_name: 建造时间
+        data_type: date
+        required: false
+        description: "建造时间"
+      
+      - name: start_time
+        display_name: 开始时间
+        data_type: date
+        required: false
+        description: "开始时间"
+      
+      - name: end_time
+        display_name: 结束时间
+        data_type: date
+        required: false
+        description: "结束时间"
+      
+      - name: operation
+        display_name: 操作
+        data_type: integer
+        required: false
+        description: "操作"
+      
+      - name: record_gen_time
+        display_name: 记录生成时间
+        data_type: date
+        required: false
+        description: "记录生成时间"
+      
+      - name: status
+        display_name: 状态
+        data_type: string
+        required: false
+        description: "状态"
+      
+      - name: batch_filename
+        display_name: 批次文件名
+        data_type: string
+        required: false
+        description: "批次文件名"
+      
+      - name: response_code
+        display_name: 响应代码
+        data_type: integer
+        required: false
+        description: "响应代码"
+      
+      - name: response_info
+        display_name: 响应信息
+        data_type: string
+        required: false
+        description: "响应信息"
+      
+      - name: receive_time
+        display_name: 接收时间
+        data_type: date
+        required: false
+        description: "接收时间"
+      
+      - name: pro_time
+        display_name: 处理时间
+        data_type: date
+        required: false
+        description: "处理时间"
+      
+      - name: next_tax_rate
+        display_name: 下一个税率
+        data_type: double
+        required: false
+        description: "下一个税率"
+      
+      - name: next_rate_date
+        display_name: 下一个税率日期
+        data_type: date
+        required: false
+        description: "下一个税率日期"
+      
+      - name: section_level
+        display_name: 路段等级
+        data_type: integer
+        required: false
+        description: "路段等级"
+      
+      - name: online_type
+        display_name: 在线类型
+        data_type: integer
+        required: false
+        description: "在线类型"
+
+  - name: VCashClearWideTable
+    display_name: 现金清分宽表视图
+    description: "现金清分宽表视图，整合拆账数据和通行费数据"
+    properties:
+      - name: id
+        display_name: 唯一标识
+        data_type: string
+        required: true
+        description: "组合键：CLEARDATE_SPLITORG_PAYCARDTYPE_ROAD_CORP"
+      
+      - name: clear_date
+        display_name: 清分日期
+        data_type: date
+        required: true
+        description: "清分日期"
+      
+      - name: split_org
+        display_name: 小业主编码
+        data_type: string
+        required: true
+        description: "小业主编码"
+      
+      - name: corp
+        display_name: 运营管理单位编码
+        data_type: string
+        required: true
+        description: "运营管理单位编码"
+      
+      - name: road
+        display_name: 路段编码
+        data_type: string
+        required: true
+        description: "路段编码"
+      
+      - name: org_type
+        display_name: 机构类型
+        data_type: integer
+        required: true
+        description: "机构类型，默认值1"
+      
+      - name: pay_card_type
+        display_name: 支付卡类型
+        data_type: integer
+        required: true
+        description: "支付卡类型"
+      
+      - name: money_flag
+        display_name: 资金标志
+        data_type: integer
+        required: true
+        description: "资金标志，0-现金、移动支付"
+      
+      - name: cash_split_money
+        display_name: 拆账现金总收入
+        data_type: bigdecimal
+        required: false
+        description: "拆账现金总收入"
+      
+      - name: cash_op_split_money
+        display_name: 拆账现金外省代收收入
+        data_type: bigdecimal
+        required: false
+        description: "拆账现金外省代收收入"
+      
+      - name: other_split_money
+        display_name: 拆账其他总收入
+        data_type: bigdecimal
+        required: false
+        description: "拆账其他总收入"
+      
+      - name: other_op_split_money
+        display_name: 拆账其他外省代收收入
+        data_type: bigdecimal
+        required: false
+        description: "拆账其他外省代收收入"
+      
+      - name: union_split_money
+        display_name: 拆账银联总收入
+        data_type: bigdecimal
+        required: false
+        description: "拆账银联总收入"
+      
+      - name: union_op_split_money
+        display_name: 拆账银联外省代收收入
+        data_type: bigdecimal
+        required: false
+        description: "拆账银联外省代收收入"
+      
+      - name: alipay_split_money
+        display_name: 拆账支付宝总收入
+        data_type: bigdecimal
+        required: false
+        description: "拆账支付宝总收入"
+      
+      - name: alipay_op_split_money
+        display_name: 拆账支付宝外省代收收入
+        data_type: bigdecimal
+        required: false
+        description: "拆账支付宝外省代收收入"
+      
+      - name: wepay_split_money
+        display_name: 拆账微信总收入
+        data_type: bigdecimal
+        required: false
+        description: "拆账微信总收入"
+      
+      - name: wepay_op_split_money
+        display_name: 拆账微信外省代收收入
+        data_type: bigdecimal
+        required: false
+        description: "拆账微信外省代收收入"
+      
+      - name: etc_split_money
+        display_name: 拆账ETC总收入
+        data_type: bigdecimal
+        required: false
+        description: "拆账ETC总收入"
+      
+      - name: etc_op_split_money
+        display_name: 拆账ETC外省代收收入
+        data_type: bigdecimal
+        required: false
+        description: "拆账ETC外省代收收入"
+      
+      - name: cash_toll_money
+        display_name: 通行费现金总收入
+        data_type: bigdecimal
+        required: false
+        description: "通行费现金总收入"
+      
+      - name: cash_op_toll_money
+        display_name: 通行费现金代外省收收入
+        data_type: bigdecimal
+        required: false
+        description: "通行费现金代外省收收入"
+      
+      - name: other_toll_money
+        display_name: 通行费其他总收入
+        data_type: bigdecimal
+        required: false
+        description: "通行费其他总收入"
+      
+      - name: other_op_toll_money
+        display_name: 通行费其他代外省收收入
+        data_type: bigdecimal
+        required: false
+        description: "通行费其他代外省收收入"
+      
+      - name: union_toll_money
+        display_name: 通行费银联总收入
+        data_type: bigdecimal
+        required: false
+        description: "通行费银联总收入"
+      
+      - name: union_op_toll_money
+        display_name: 通行费银联代外省收收入
+        data_type: bigdecimal
+        required: false
+        description: "通行费银联代外省收收入"
+      
+      - name: alipay_toll_money
+        display_name: 通行费支付宝总收入
+        data_type: bigdecimal
+        required: false
+        description: "通行费支付宝总收入"
+      
+      - name: alipay_op_toll_money
+        display_name: 通行费支付宝代外省收收入
+        data_type: bigdecimal
+        required: false
+        description: "通行费支付宝代外省收收入"
+      
+      - name: wepay_toll_money
+        display_name: 通行费微信总收入
+        data_type: bigdecimal
+        required: false
+        description: "通行费微信总收入"
+      
+      - name: wepay_op_toll_money
+        display_name: 通行费微信代外省收收入
+        data_type: bigdecimal
+        required: false
+        description: "通行费微信代外省收收入"
+      
+      - name: etc_toll_money
+        display_name: 通行费ETC总收入
+        data_type: bigdecimal
+        required: false
+        description: "通行费ETC总收入"
+      
+      - name: etc_op_toll_money
+        display_name: 通行费ETC代外省收收入
+        data_type: bigdecimal
+        required: false
+        description: "通行费ETC代外省收收入"
+      
+      - name: cash_return_money
+        display_name: 现金退费金额
+        data_type: bigdecimal
+        required: false
+        description: "现金退费金额"
+      
+      - name: other_return_money
+        display_name: 其他退费金额
+        data_type: bigdecimal
+        required: false
+        description: "其他退费金额"
+      
+      - name: union_return_money
+        display_name: 银联退费金额
+        data_type: bigdecimal
+        required: false
+        description: "银联退费金额"
+      
+      - name: alipay_return_money
+        display_name: 支付宝退费金额
+        data_type: bigdecimal
+        required: false
+        description: "支付宝退费金额"
+      
+      - name: wepay_return_money
+        display_name: 微信退费金额
+        data_type: bigdecimal
+        required: false
+        description: "微信退费金额"
+      
+      - name: gen_time
+        display_name: 生成时间
+        data_type: datetime
+        required: false
+        description: "生成时间"
 
 link_types:
   - name: entry_to_path
@@ -3325,50 +3746,86 @@ link_types:
     property_mappings:
       pass_id: pass_id
 
-  # - name: splitdetail_to_exclearresultetc
-  #   display_name: 拆分详情支持ETC清分
-  #   description: "拆分详情支持ETC清分结果"
-  #   source_type: SplitDetail
-  #   target_type: ExClearResultEtc
-  #   cardinality: one-to-many
-  #   direction: directed
+  - name: splitdetail_to_exclearresultetc
+    display_name: 拆分详情支持ETC清分
+    description: "拆分详情支持ETC清分结果"
+    source_type: SplitDetail
+    target_type: ExClearResultEtc
+    cardinality: one-to-many
+    direction: directed
 
-  # - name: splitdetail_to_exclearresultcash
-  #   display_name: 拆分详情支持现金清分
-  #   description: "拆分详情支持现金清分结果"
-  #   source_type: SplitDetail
-  #   target_type: ExClearResultCash
-  #   cardinality: one-to-many
-  #   direction: directed
+  - name: splitdetail_to_exclearresultcash
+    display_name: 拆分详情支持现金清分
+    description: "拆分详情支持现金清分结果"
+    source_type: SplitDetail
+    target_type: ExClearResultCash
+    cardinality: one-to-many
+    direction: directed
 
-  # - name: path_to_exclearresultetc
-  #   display_name: 路径支持ETC清分
-  #   description: "路径支持ETC清分结果"
-  #   source_type: Path
-  #   target_type: ExClearResultEtc
-  #   cardinality: one-to-many
-  #   direction: directed
+  - name: path_to_exclearresultetc
+    display_name: 路径支持ETC清分
+    description: "路径支持ETC清分结果"
+    source_type: Path
+    target_type: ExClearResultEtc
+    cardinality: one-to-many
+    direction: directed
 
-  # - name: path_to_exclearresultcash
-  #   display_name: 路径支持现金清分
-  #   description: "路径支持现金清分结果"
-  #   source_type: Path
-  #   target_type: ExClearResultCash
-  #   cardinality: one-to-many
-  #   direction: directed
+  - name: path_to_exclearresultcash
+    display_name: 路径支持现金清分
+    description: "路径支持现金清分结果"
+    source_type: Path
+    target_type: ExClearResultCash
+    cardinality: one-to-many
+    direction: directed
 
-  # - name: managingsplitsum_to_exclearresultetc
-  #   display_name: 清分汇总汇总ETC清分
-  #   description: "清分汇总汇总ETC清分结果"
-  #   source_type: ManageSplitSum
-  #   target_type: ExClearResultEtc
-  #   cardinality: one-to-many
-  #   direction: directed
+  - name: managingsplitsum_to_exclearresultetc
+    display_name: 清分汇总汇总ETC清分
+    description: "清分汇总汇总ETC清分结果"
+    source_type: ManageSplitSum
+    target_type: ExClearResultEtc
+    cardinality: one-to-many
+    direction: directed
 
-  # - name: managingsplitsum_to_exclearresultcash
-  #   display_name: 清分汇总汇总现金清分
-  #   description: "清分汇总汇总现金清分结果"
-  #   source_type: ManageSplitSum
-  #   target_type: ExClearResultCash
-  #   cardinality: one-to-many
-  #   direction: directed
+  - name: managingsplitsum_to_exclearresultcash
+    display_name: 清分汇总汇总现金清分
+    description: "清分汇总汇总现金清分结果"
+    source_type: ManageSplitSum
+    target_type: ExClearResultCash
+    cardinality: one-to-many
+    direction: directed
+
+  - name: vcashclearwidetable_to_exclearresultcash
+    display_name: 现金清分宽表关联现金清分结果
+    description: "现金清分宽表基于现金清分结果数据聚合生成"
+    source_type: VCashClearWideTable
+    target_type: ExClearResultCash
+    cardinality: one-to-many
+    direction: directed
+    property_mappings:
+      clear_date: clear_date
+      pay_card_type: pay_card_type
+      split_org: toll_section_id
+      road: section_id
+      corp: crop_id
+
+  - name: vcashclearwidetable_to_gbsectiondic
+    display_name: 现金清分宽表关联路段信息
+    description: "现金清分宽表通过收费路段编码关联路段信息"
+    source_type: VCashClearWideTable
+    target_type: Gbsectiondic
+    cardinality: many-to-one
+    direction: directed
+    property_mappings:
+      split_org: road_id
+
+  - name: vcashclearwidetable_to_orgcode
+    display_name: 现金清分宽表关联组织机构编码
+    description: "现金清分宽表通过小业主、路段、运营单位编码关联组织机构编码"
+    source_type: VCashClearWideTable
+    target_type: OrgCode
+    cardinality: many-to-one
+    direction: directed
+    property_mappings:
+      split_org: bl_owner
+      road: bl_road
+      corp: bl_corp
