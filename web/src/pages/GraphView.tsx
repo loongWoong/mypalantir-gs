@@ -15,7 +15,9 @@ import {
   LinkIcon,
   SparklesIcon,
   TableCellsIcon,
-  XMarkIcon
+  ArrowsPointingOutIcon,
+  ArrowsPointingInIcon,
+  EllipsisVerticalIcon
 } from '@heroicons/react/24/outline';
 
 interface GraphNode {
@@ -58,11 +60,14 @@ export default function GraphView() {
   const [reverseHighlightedLinks, setReverseHighlightedLinks] = useState<Set<string>>(new Set());
   // 用于检测双击的ref（避免双击时触发单击事件）
   const lastClickTimeRef = useRef<number>(0);
-  const clickTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const clickTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // 类型详情对话框状态
   const [typeDetailDialog, setTypeDetailDialog] = useState<{ type: string; layer: number; nodes: GraphNode[] } | null>(null);
   // 类型详情对话框视图模式：'card' | 'table'
   const [typeDetailViewMode, setTypeDetailViewMode] = useState<'card' | 'table'>('card');
+  // 类型详情抽屉宽度（自适应）
+  const [typeDetailDrawerWidth, setTypeDetailDrawerWidth] = useState<number>(884); // 默认 w-96 = 384px
+  const typeDetailContentRef = useRef<HTMLDivElement>(null);
   
   // 图例面板拖动状态（使用 top 定位，更直观）
   const [legendPosition, setLegendPosition] = useState<{ x: number; y: number }>(() => {
@@ -82,6 +87,20 @@ export default function GraphView() {
   const [isDraggingLegend, setIsDraggingLegend] = useState(false);
   const [dragOffset, setDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const legendRef = useRef<HTMLDivElement>(null);
+  
+  // 全屏状态
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const fullscreenContainerRef = useRef<HTMLDivElement>(null);
+  const [fullscreenZoom, setFullscreenZoom] = useState(1);
+  const [fullscreenPan, setFullscreenPan] = useState({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState(false);
+  const panStartRef = useRef<{ x: number; y: number } | null>(null);
+  
+  // 类型折叠状态（用于分层视图）
+  const [collapsedTypes, setCollapsedTypes] = useState<Set<string>>(new Set());
+  
+  // 图例折叠状态
+  const [isLegendCollapsed, setIsLegendCollapsed] = useState(false);
 
   // 处理图例面板拖动
   const handleLegendMouseDown = useCallback((e: React.MouseEvent) => {
@@ -142,6 +161,201 @@ export default function GraphView() {
       document.body.style.userSelect = '';
     };
   }, [isDraggingLegend, dragOffset, legendPosition]);
+
+  // 全屏事件监听
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      const isCurrentlyFullscreen = !!(
+        document.fullscreenElement ||
+        (document as any).webkitFullscreenElement ||
+        (document as any).msFullscreenElement
+      );
+      setIsFullscreen(isCurrentlyFullscreen);
+      if (!isCurrentlyFullscreen) {
+        setFullscreenZoom(1);
+        setFullscreenPan({ x: 0, y: 0 });
+      }
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+    document.addEventListener('msfullscreenchange', handleFullscreenChange);
+
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+      document.removeEventListener('msfullscreenchange', handleFullscreenChange);
+    };
+  }, []);
+
+  // 全屏模式下的缩放和拖动处理
+  useEffect(() => {
+    if (!isFullscreen) return;
+
+    const container = fullscreenContainerRef.current;
+    if (!container) return;
+
+    // 鼠标滚轮缩放
+    const handleWheel = (e: WheelEvent) => {
+      const target = e.target as HTMLElement;
+      if (target?.tagName === 'CANVAS' || container.contains(target)) {
+        e.preventDefault();
+        const delta = e.deltaY > 0 ? 0.9 : 1.1;
+        setFullscreenZoom(prev => Math.max(0.1, Math.min(5, prev * delta)));
+      }
+    };
+
+    // 鼠标拖动 - 使用中键或右键拖动，左键用于节点交互
+    const handleMouseDown = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      // 中键或右键拖动
+      if (target?.tagName === 'CANVAS' && (e.button === 1 || e.button === 2)) {
+        e.preventDefault();
+        setIsPanning(true);
+        panStartRef.current = { x: e.clientX - fullscreenPan.x, y: e.clientY - fullscreenPan.y };
+      }
+    };
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (isPanning && panStartRef.current) {
+        setFullscreenPan({
+          x: e.clientX - panStartRef.current.x,
+          y: e.clientY - panStartRef.current.y
+        });
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsPanning(false);
+      panStartRef.current = null;
+    };
+
+    // 阻止右键菜单
+    const handleContextMenu = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (target?.tagName === 'CANVAS') {
+        e.preventDefault();
+      }
+    };
+
+    container.addEventListener('wheel', handleWheel, { passive: false });
+    const canvas = container.querySelector('canvas');
+    if (canvas) {
+      canvas.addEventListener('mousedown', handleMouseDown);
+      canvas.addEventListener('contextmenu', handleContextMenu);
+    }
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      container.removeEventListener('wheel', handleWheel);
+      if (canvas) {
+        canvas.removeEventListener('mousedown', handleMouseDown);
+        canvas.removeEventListener('contextmenu', handleContextMenu);
+      }
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isFullscreen, isPanning, fullscreenPan]);
+
+  // 计算类型详情抽屉的自适应宽度
+  useEffect(() => {
+    if (!typeDetailDialog) {
+      setTypeDetailDrawerWidth(884); // 默认宽度
+      return;
+    }
+
+    const calculateWidth = () => {
+      // 获取视口宽度
+      const viewportWidth = window.innerWidth;
+      const maxWidth = viewportWidth * 0.8; // 最大宽度为视口宽度的80%
+      const minWidth = 884; // 最小宽度 w-96
+
+      let contentWidth = 0;
+
+      if (typeDetailViewMode === 'table') {
+        // 表格视图：根据列数估算宽度
+        const allKeys = new Set<string>();
+        typeDetailDialog.nodes.forEach(node => {
+          Object.keys(node.data).forEach(key => allKeys.add(key));
+        });
+        const otherKeys = Array.from(allKeys)
+          .filter(key => !['id', 'name', 'created_at', 'updated_at'].includes(key));
+        
+        // 尝试从实际渲染的表格获取宽度
+        const contentElement = typeDetailContentRef.current;
+        if (contentElement) {
+          const table = contentElement.querySelector('table');
+          if (table) {
+            // 临时移除宽度限制以测量自然宽度
+            const originalMinWidth = table.style.minWidth;
+            const originalWidth = table.style.width;
+            const parent = table.parentElement;
+            const originalParentOverflow = parent?.style.overflow;
+            
+            // 设置临时样式以测量
+            table.style.minWidth = 'max-content';
+            table.style.width = 'auto';
+            if (parent) {
+              parent.style.overflow = 'visible';
+            }
+            
+            // 测量表格的自然宽度
+            const tableWidth = table.scrollWidth;
+            
+            // 恢复原始样式
+            table.style.minWidth = originalMinWidth;
+            table.style.width = originalWidth;
+            if (parent) {
+              parent.style.overflow = originalParentOverflow || '';
+            }
+            
+            if (tableWidth > 0) {
+              contentWidth = tableWidth + 48; // 加上 padding (p-6 = 24px * 2)
+            } else {
+              // 如果测量失败，使用估算值
+              const baseWidth = 4 * 100; // 固定列较窄
+              const propertyWidth = otherKeys.length * 130; // 属性列稍宽
+              const timeWidth = 2 * 150; // 时间列较宽
+              contentWidth = baseWidth + propertyWidth + timeWidth + 48;
+            }
+          } else {
+            // 如果表格还未渲染，根据列数估算
+            const baseWidth = 4 * 100; // 固定列较窄
+            const propertyWidth = otherKeys.length * 130; // 属性列稍宽
+            const timeWidth = 2 * 150; // 时间列较宽
+            contentWidth = baseWidth + propertyWidth + timeWidth + 48;
+          }
+        } else {
+          // 如果内容元素还未渲染，根据列数估算
+          const baseWidth = 4 * 100; // 固定列较窄
+          const propertyWidth = otherKeys.length * 130; // 属性列稍宽
+          const timeWidth = 2 * 150; // 时间列较宽
+          contentWidth = baseWidth + propertyWidth + timeWidth + 48;
+        }
+      } else {
+        // 卡片视图：使用默认宽度或稍大一些
+        contentWidth = Math.max(minWidth, 500);
+      }
+
+      // 应用最小和最大宽度限制
+      const finalWidth = Math.max(minWidth, Math.min(contentWidth, maxWidth));
+      setTypeDetailDrawerWidth(finalWidth);
+    };
+
+    // 延迟计算，确保 DOM 已渲染
+    const timeoutId1 = setTimeout(calculateWidth, 50);
+    const timeoutId2 = setTimeout(calculateWidth, 200); // 二次延迟，确保表格完全渲染
+
+    // 监听窗口大小变化
+    window.addEventListener('resize', calculateWidth);
+
+    return () => {
+      clearTimeout(timeoutId1);
+      clearTimeout(timeoutId2);
+      window.removeEventListener('resize', calculateWidth);
+    };
+  }, [typeDetailDialog, typeDetailViewMode]);
   
   // 节点和关系上限配置（从 localStorage 读取或使用默认值）
   const [maxNodes, setMaxNodes] = useState<number>(() => {
@@ -1677,9 +1891,11 @@ export default function GraphView() {
       let typeY = padding; // 每一层都从顶部开始
       
       typeMap.forEach((typeNodes, type) => {
-        const nodeCount = typeNodes.length;
-        const boxHeight = Math.max(typeBoxHeight, nodeCount * (nodeItemHeight + nodeItemSpacing) + 60);
         const boxKey = `${layer}-${type}`;
+        const isCollapsed = collapsedTypes.has(boxKey);
+        const nodeCount = typeNodes.length;
+        // 如果折叠，只显示标题栏高度（约50px），否则显示完整高度
+        const boxHeight = isCollapsed ? 50 : Math.max(typeBoxHeight, nodeCount * (nodeItemHeight + nodeItemSpacing) + 60);
         typeBoxPositions.set(boxKey, {
           x: padding + layer * (layerWidth + 100),
           y: typeY,
@@ -1711,71 +1927,192 @@ export default function GraphView() {
           className="absolute top-0 left-0 pointer-events-none"
         >
           {/* 绘制连接线 */}
-          {links.map(link => {
-            const sourceNode = nodes.find(n => n.id === link.source);
-            const targetNode = nodes.find(n => n.id === link.target);
+          {(() => {
+            // 按源类型框和目标类型框分组关系，用于归并
+            const linksByConnection = new Map<string, Array<{ link: GraphLink; sourceNode: GraphNode; targetNode: GraphNode }>>();
             
-            if (!sourceNode || !targetNode) return null;
+            links.forEach(link => {
+              const sourceNode = nodes.find(n => n.id === link.source);
+              const targetNode = nodes.find(n => n.id === link.target);
+              
+              if (!sourceNode || !targetNode) return;
+              
+              const sourceLayer = layers.get(sourceNode.id) || 0;
+              const targetLayer = layers.get(targetNode.id) || 0;
+              const sourceBoxKey = `${sourceLayer}-${sourceNode.type}`;
+              const targetBoxKey = `${targetLayer}-${targetNode.type}`;
+              
+              const connectionKey = `${sourceBoxKey}->${targetBoxKey}:${link.type}`;
+              if (!linksByConnection.has(connectionKey)) {
+                linksByConnection.set(connectionKey, []);
+              }
+              linksByConnection.get(connectionKey)!.push({ link, sourceNode, targetNode });
+            });
             
-            const sourceLayer = layers.get(sourceNode.id) || 0;
-            const targetLayer = layers.get(targetNode.id) || 0;
-            const sourceBoxKey = `${sourceLayer}-${sourceNode.type}`;
-            const targetBoxKey = `${targetLayer}-${targetNode.type}`;
+            // 渲染归并后的关系线
+            const renderedLines: any[] = [];
             
-            const sourceBox = typeBoxPositions.get(sourceBoxKey);
-            const targetBox = typeBoxPositions.get(targetBoxKey);
-            
-            if (!sourceBox || !targetBox) return null;
-            
-            const sourceTypeNodes = nodesByLayerAndType.get(sourceLayer)?.get(sourceNode.type);
-            const targetTypeNodes = nodesByLayerAndType.get(targetLayer)?.get(targetNode.type);
-            
-            if (!sourceTypeNodes || !targetTypeNodes) return null;
-            
-            const sourceIndex = sourceTypeNodes.findIndex(n => n.id === sourceNode.id);
-            const targetIndex = targetTypeNodes.findIndex(n => n.id === targetNode.id);
-            
-            if (sourceIndex === -1 || targetIndex === -1) return null;
+            linksByConnection.forEach((linkGroup, connectionKey) => {
+              const [sourceBoxKey, rest] = connectionKey.split('->');
+              const [targetBoxKey, linkType] = rest.split(':');
+              
+              const sourceBox = typeBoxPositions.get(sourceBoxKey);
+              const targetBox = typeBoxPositions.get(targetBoxKey);
+              
+              if (!sourceBox || !targetBox) return;
+              
+              const isSourceCollapsed = collapsedTypes.has(sourceBoxKey);
+              const isTargetCollapsed = collapsedTypes.has(targetBoxKey);
+              
+              // 如果源或目标类型被折叠，归并关系线
+              if (isSourceCollapsed || isTargetCollapsed) {
+                // 归并：只显示一条线，从源类型框的右侧中间到目标类型框的左侧中间
+                const x1 = sourceBox.x + sourceBox.width;
+                const y1 = sourceBox.y + sourceBox.height / 2;
+                const x2 = targetBox.x;
+                const y2 = targetBox.y + targetBox.height / 2;
+                
+                // 检查是否有高亮的关系
+                const hasHighlighted = linkGroup.some(({ link }) => 
+                  highlightedLinks.has(link.id) || reverseHighlightedLinks.has(link.id)
+                );
+                const linkColor = getLinkTypeColor(linkType);
+                
+                let strokeColor = linkColor;
+                let strokeWidth = Math.min(2 + linkGroup.length * 0.5, 6); // 根据关系数量调整线宽
+                if (hasHighlighted) {
+                  strokeColor = linkGroup.some(({ link }) => highlightedLinks.has(link.id)) 
+                    ? '#ef4444' 
+                    : '#3b82f6';
+                  strokeWidth = 4;
+                }
+                
+                renderedLines.push(
+                  <line
+                    key={connectionKey}
+                    x1={x1}
+                    y1={y1}
+                    x2={x2}
+                    y2={y2}
+                    stroke={strokeColor}
+                    strokeWidth={strokeWidth}
+                    markerEnd="url(#arrowhead)"
+                    opacity={hasHighlighted ? 1 : 0.6}
+                    className={hasHighlighted ? 'transition-all duration-200' : ''}
+                  />
+                );
+              } else {
+                // 未折叠：显示所有单独的关系线
+                linkGroup.forEach(({ link, sourceNode, targetNode }) => {
+                  const sourceLayer = layers.get(sourceNode.id) || 0;
+                  const targetLayer = layers.get(targetNode.id) || 0;
+                  const sourceTypeNodes = nodesByLayerAndType.get(sourceLayer)?.get(sourceNode.type);
+                  const targetTypeNodes = nodesByLayerAndType.get(targetLayer)?.get(targetNode.type);
+                  
+                  if (!sourceTypeNodes || !targetTypeNodes) return;
+                  
+                  const sourceIndex = sourceTypeNodes.findIndex(n => n.id === sourceNode.id);
+                  const targetIndex = targetTypeNodes.findIndex(n => n.id === targetNode.id);
+                  
+                  if (sourceIndex === -1 || targetIndex === -1) return;
 
-            const sourceY = sourceBox.y + 50 + sourceIndex * (nodeItemHeight + nodeItemSpacing) + nodeItemHeight / 2;
-            const targetY = targetBox.y + 50 + targetIndex * (nodeItemHeight + nodeItemSpacing) + nodeItemHeight / 2;
+                  const sourceY = sourceBox.y + 50 + sourceIndex * (nodeItemHeight + nodeItemSpacing) + nodeItemHeight / 2;
+                  const targetY = targetBox.y + 50 + targetIndex * (nodeItemHeight + nodeItemSpacing) + nodeItemHeight / 2;
 
-            const x1 = sourceBox.x + sourceBox.width;
-            const y1 = sourceY;
-            const x2 = targetBox.x;
-            const y2 = targetY;
+                  const x1 = sourceBox.x + sourceBox.width;
+                  const y1 = sourceY;
+                  const x2 = targetBox.x;
+                  const y2 = targetY;
 
-            // 检查是否应该高亮此连接线（正向影响或反向依赖）
-            const isHighlighted = highlightedLinks.has(link.id);
-            const isReverseHighlighted = reverseHighlightedLinks.has(link.id);
-            const linkColor = getLinkTypeColor(link.type);
+                  const isHighlighted = highlightedLinks.has(link.id);
+                  const isReverseHighlighted = reverseHighlightedLinks.has(link.id);
+                  const linkColor = getLinkTypeColor(link.type);
+                  
+                  let strokeColor = linkColor;
+                  let strokeWidth = 2;
+                  if (isHighlighted) {
+                    strokeColor = '#ef4444';
+                    strokeWidth = 4;
+                  } else if (isReverseHighlighted) {
+                    strokeColor = '#3b82f6';
+                    strokeWidth = 4;
+                  }
+
+                  renderedLines.push(
+                    <line
+                      key={link.id}
+                      x1={x1}
+                      y1={y1}
+                      x2={x2}
+                      y2={y2}
+                      stroke={strokeColor}
+                      strokeWidth={strokeWidth}
+                      markerEnd="url(#arrowhead)"
+                      opacity={isHighlighted || isReverseHighlighted ? 1 : 0.6}
+                      className={(isHighlighted || isReverseHighlighted) ? 'transition-all duration-200' : ''}
+                    />
+                  );
+                });
+              }
+            });
             
-            // 确定连接线的颜色和样式
-            let strokeColor = linkColor;
-            let strokeWidth = 2;
-            if (isHighlighted) {
-              strokeColor = '#ef4444'; // 红色表示正向影响
-              strokeWidth = 4;
-            } else if (isReverseHighlighted) {
-              strokeColor = '#3b82f6'; // 蓝色表示反向依赖
-              strokeWidth = 4;
-            }
-
-            return (
-              <line
-                key={link.id}
-                x1={x1}
-                y1={y1}
-                x2={x2}
-                y2={y2}
-                stroke={strokeColor}
-                strokeWidth={strokeWidth}
-                markerEnd="url(#arrowhead)"
-                opacity={isHighlighted || isReverseHighlighted ? 1 : 0.6}
-                className={(isHighlighted || isReverseHighlighted) ? 'transition-all duration-200' : ''}
-              />
-            );
+            return renderedLines;
+          })()}
+          
+          {/* 为折叠的类型框绘制入口和出口标记点 */}
+          {Array.from(nodesByLayerAndType.entries()).map(([layer, typeMap]) => {
+            return Array.from(typeMap.entries()).map(([type]) => {
+              const boxKey = `${layer}-${type}`;
+              const boxPos = typeBoxPositions.get(boxKey);
+              if (!boxPos || !collapsedTypes.has(boxKey)) return null;
+              
+              // 检查是否有进入的关系（作为目标）
+              const hasIncomingLinks = links.some(link => {
+                const targetNode = nodes.find(n => n.id === link.target);
+                if (!targetNode) return false;
+                const targetLayer = layers.get(targetNode.id) || 0;
+                return `${targetLayer}-${targetNode.type}` === boxKey;
+              });
+              
+              // 检查是否有出去的关系（作为源）
+              const hasOutgoingLinks = links.some(link => {
+                const sourceNode = nodes.find(n => n.id === link.source);
+                if (!sourceNode) return false;
+                const sourceLayer = layers.get(sourceNode.id) || 0;
+                return `${sourceLayer}-${sourceNode.type}` === boxKey;
+              });
+              
+              const centerY = boxPos.y + boxPos.height / 2;
+              
+              return (
+                <g key={`markers-${boxKey}`}>
+                  {/* 入口点（左侧） */}
+                  {hasIncomingLinks && (
+                    <circle
+                      cx={boxPos.x}
+                      cy={centerY}
+                      r={6}
+                      fill="#3b82f6"
+                      stroke="#1e40af"
+                      strokeWidth={2}
+                    />
+                  )}
+                  {/* 出口点（右侧） */}
+                  {hasOutgoingLinks && (
+                    <circle
+                      cx={boxPos.x + boxPos.width}
+                      cy={centerY}
+                      r={6}
+                      fill="#10b981"
+                      stroke="#059669"
+                      strokeWidth={2}
+                    />
+                  )}
+                </g>
+              );
+            });
           })}
+          
           <defs>
             <marker
               id="arrowhead"
@@ -1827,14 +2164,31 @@ export default function GraphView() {
                     >
                       <div className="flex items-center justify-between">
                         <h3 className="font-semibold text-gray-900 text-sm">{displayName}</h3>
-                        <span className="text-xs text-gray-500 bg-white px-2 py-1 rounded">
+                        <span 
+                          className="text-xs text-gray-500 bg-white px-2 py-1 rounded cursor-pointer hover:bg-gray-100 transition-colors"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const typeKey = `${layer}-${type}`;
+                            setCollapsedTypes(prev => {
+                              const newSet = new Set(prev);
+                              if (newSet.has(typeKey)) {
+                                newSet.delete(typeKey);
+                              } else {
+                                newSet.add(typeKey);
+                              }
+                              return newSet;
+                            });
+                          }}
+                          title="点击折叠/展开数据条目"
+                        >
                           {typeNodes.length}
                         </span>
                       </div>
                     </div>
 
                     {/* 节点列表 */}
-                    <div className="overflow-y-auto" style={{ maxHeight: boxPos.height - 50 }}>
+                    {!collapsedTypes.has(`${layer}-${type}`) && (
+                      <div className="overflow-y-auto" style={{ maxHeight: boxPos.height - 50 }}>
                       {typeNodes.map((node, index) => {
                         const nodeIdOnly = node.id.includes(':') ? node.id.split(':')[1] : node.id;
                         const isSelected = selectedNode?.id === node.id;
@@ -1886,7 +2240,8 @@ export default function GraphView() {
                           </div>
                         );
                       })}
-                    </div>
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -1948,6 +2303,44 @@ export default function GraphView() {
           >
             <ArrowPathIcon className="w-4 h-4 mr-2" />
             刷新
+          </button>
+          <button
+            onClick={() => {
+              if (!isFullscreen) {
+                // 进入全屏
+                if (fullscreenContainerRef.current) {
+                  if (fullscreenContainerRef.current.requestFullscreen) {
+                    fullscreenContainerRef.current.requestFullscreen();
+                  } else if ((fullscreenContainerRef.current as any).webkitRequestFullscreen) {
+                    (fullscreenContainerRef.current as any).webkitRequestFullscreen();
+                  } else if ((fullscreenContainerRef.current as any).msRequestFullscreen) {
+                    (fullscreenContainerRef.current as any).msRequestFullscreen();
+                  }
+                }
+                setIsFullscreen(true);
+                setFullscreenZoom(1);
+                setFullscreenPan({ x: 0, y: 0 });
+              } else {
+                // 退出全屏
+                if (document.exitFullscreen) {
+                  document.exitFullscreen();
+                } else if ((document as any).webkitExitFullscreen) {
+                  (document as any).webkitExitFullscreen();
+                } else if ((document as any).msExitFullscreen) {
+                  (document as any).msExitFullscreen();
+                }
+                setIsFullscreen(false);
+              }
+            }}
+            className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium shadow-sm"
+            title={isFullscreen ? "退出全屏" : "全屏"}
+          >
+            {isFullscreen ? (
+              <ArrowsPointingInIcon className="w-4 h-4 mr-2" />
+            ) : (
+              <ArrowsPointingOutIcon className="w-4 h-4 mr-2" />
+            )}
+            {isFullscreen ? "退出全屏" : "全屏"}
           </button>
         </div>
         
@@ -2358,7 +2751,15 @@ export default function GraphView() {
       )}
 
       {/* 图形区域 */}
-      <div className="flex-1 relative bg-white">
+      <div 
+        ref={fullscreenContainerRef}
+        className={`flex-1 relative bg-white ${isFullscreen ? 'fixed inset-0 z-50' : ''}`}
+        style={isFullscreen ? {
+          transform: `translate(${fullscreenPan.x}px, ${fullscreenPan.y}px) scale(${fullscreenZoom})`,
+          transformOrigin: 'center center',
+          cursor: isPanning ? 'grabbing' : 'grab'
+        } : {}}
+      >
         {nodes.length === 0 ? (
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="text-center">
@@ -2572,230 +2973,236 @@ export default function GraphView() {
           >
             <div className="flex items-center justify-between">
               <h4 className="text-sm font-bold text-gray-900">图例与统计</h4>
-              <div className="flex items-center gap-1 text-gray-400">
-                <div className="w-1 h-1 rounded-full bg-gray-400"></div>
-                <div className="w-1 h-1 rounded-full bg-gray-400"></div>
-                <div className="w-1 h-1 rounded-full bg-gray-400"></div>
-              </div>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsLegendCollapsed(!isLegendCollapsed);
+                }}
+                className="flex items-center gap-1 text-gray-400 hover:text-gray-600 transition-colors cursor-pointer"
+                title={isLegendCollapsed ? "展开" : "折叠"}
+              >
+                <EllipsisVerticalIcon className="w-4 h-4" />
+              </button>
             </div>
           </div>
           
           {/* 内容区域 - 可滚动 */}
-          <div className="p-4 overflow-y-auto max-h-[calc(100vh-300px)]">
-            <div className="space-y-3 text-xs">
-            <div>
-              <div className="text-gray-500 mb-2">节点类型</div>
-              <div className="space-y-1.5">
-                {Array.from(new Set(nodes.map(n => n.type))).map((type, idx) => {
-                  const typeNodes = nodes.filter(n => n.type === type);
-                  const color = nodeColor({ group: idx } as GraphNode);
-                  const objectType = objectTypes.find(ot => ot.name === type);
-                  const displayName = objectType?.display_name || type;
-                  return (
-                    <div key={type} className="flex items-center justify-between">
-                      <div className="flex items-center">
-                        <div 
-                          className="w-4 h-4 rounded-full mr-2 border-2 border-gray-300"
-                          style={{ backgroundColor: color }}
-                        ></div>
-                        <span className="text-gray-700 font-medium">{displayName}</span>
-                      </div>
-                      <span className="text-gray-500">{typeNodes.length}</span>
-                    </div>
-                  );
-                })}
+          {!isLegendCollapsed && (
+            <div className="p-4 overflow-y-auto max-h-[calc(100vh-300px)]">
+              <div className="space-y-3 text-xs">
+                <div>
+                  <div className="text-gray-500 mb-2">节点类型</div>
+                  <div className="space-y-1.5">
+                    {Array.from(new Set(nodes.map(n => n.type))).map((type, idx) => {
+                      const typeNodes = nodes.filter(n => n.type === type);
+                      const color = nodeColor({ group: idx } as GraphNode);
+                      const objectType = objectTypes.find(ot => ot.name === type);
+                      const displayName = objectType?.display_name || type;
+                      return (
+                        <div key={type} className="flex items-center justify-between">
+                          <div className="flex items-center">
+                            <div 
+                              className="w-4 h-4 rounded-full mr-2 border-2 border-gray-300"
+                              style={{ backgroundColor: color }}
+                            ></div>
+                            <span className="text-gray-700 font-medium">{displayName}</span>
+                          </div>
+                          <span className="text-gray-500">{typeNodes.length}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div className="border-t border-gray-200 pt-3">
+                  <div className="text-gray-500 mb-2">关系类型</div>
+                  <div className="space-y-1.5">
+                    {Array.from(new Set(links.map(l => l.type))).map((type) => {
+                      const typeLinks = links.filter(l => l.type === type);
+                      const color = getLinkTypeColor(type);
+                      const linkType = linkTypes.find(lt => lt.name === type);
+                      const displayName = linkType?.display_name || type;
+                      return (
+                        <div key={type} className="flex items-center justify-between">
+                          <div className="flex items-center">
+                            <div 
+                              className="w-6 h-0.5 mr-2"
+                              style={{ backgroundColor: color }}
+                            ></div>
+                            <span className="text-gray-700 font-medium">{displayName}</span>
+                          </div>
+                          <span className="text-gray-500">{typeLinks.length}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div className="border-t border-gray-200 pt-3 space-y-1 text-gray-500">
+                  <p>💡 点击节点查看详情</p>
+                  <p>🖱️ 拖拽节点移动位置</p>
+                  <p>🔍 鼠标悬停查看标签</p>
+                  {viewMode === 'hierarchical' && (
+                    <>
+                      <p className="mt-2 pt-2 border-t border-gray-200">分层视图：</p>
+                      <p>🖱️ 单击节点：高亮影响分析（黄色）</p>
+                      <p>🖱️ 双击节点：高亮反向依赖（蓝色）</p>
+                      <p>📋 点击类型标题：查看该类型所有数据详情</p>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
-            <div className="border-t border-gray-200 pt-3">
-              <div className="text-gray-500 mb-2">关系类型</div>
-              <div className="space-y-1.5">
-                {Array.from(new Set(links.map(l => l.type))).map((type) => {
-                  const typeLinks = links.filter(l => l.type === type);
-                  const color = getLinkTypeColor(type);
-                  const linkType = linkTypes.find(lt => lt.name === type);
-                  const displayName = linkType?.display_name || type;
-                  return (
-                    <div key={type} className="flex items-center justify-between">
-                      <div className="flex items-center">
-                        <div 
-                          className="w-6 h-0.5 mr-2"
-                          style={{ backgroundColor: color }}
-                        ></div>
-                        <span className="text-gray-700 font-medium">{displayName}</span>
-                      </div>
-                      <span className="text-gray-500">{typeLinks.length}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-            <div className="border-t border-gray-200 pt-3 space-y-1 text-gray-500">
-              <p>💡 点击节点查看详情</p>
-              <p>🖱️ 拖拽节点移动位置</p>
-              <p>🔍 鼠标悬停查看标签</p>
-              {viewMode === 'hierarchical' && (
-                <>
-                  <p className="mt-2 pt-2 border-t border-gray-200">分层视图：</p>
-                  <p>🖱️ 单击节点：高亮影响分析（黄色）</p>
-                  <p>🖱️ 双击节点：高亮反向依赖（蓝色）</p>
-                  <p>📋 点击类型标题：查看该类型所有数据详情</p>
-                </>
-              )}
-            </div>
-            </div>
-          </div>
+          )}
         </div>
-      </div>
 
-      {/* 类型详情对话框 */}
-      {typeDetailDialog && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setTypeDetailDialog(null)}>
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-6xl mx-4 max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-            {/* 对话框头部 */}
-            <div className="flex items-center justify-between p-6 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50">
-              <div className="flex-1">
-                <h2 className="text-2xl font-bold text-gray-900">
-                  {objectTypes.find(ot => ot.name === typeDetailDialog.type)?.display_name || typeDetailDialog.type}
-                </h2>
-                <p className="text-sm text-gray-600 mt-1">
-                  层级 {typeDetailDialog.layer} · 共 {typeDetailDialog.nodes.length} 条数据
-                </p>
+        {/* 类型详情面板 - 侧边抽屉 */}
+        {typeDetailDialog && (
+          <div 
+            className="absolute top-0 right-0 h-full bg-white shadow-2xl border-l border-gray-200 z-10 flex flex-col"
+            style={{ width: `${typeDetailDrawerWidth}px` }}
+          >
+          {/* 头部 */}
+          <div className="flex items-center justify-between p-6 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50">
+            <div className="flex-1">
+              <h3 className="text-xl font-bold text-gray-900 mb-2">
+                {objectTypes.find(ot => ot.name === typeDetailDialog.type)?.display_name || typeDetailDialog.type}
+              </h3>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="inline-block px-3 py-1 text-sm font-semibold rounded-md bg-blue-600 text-white">
+                  类型详情
+                </span>
+                <span className="text-sm text-gray-600">
+                  层级 {typeDetailDialog.layer} · 共 {typeDetailDialog.nodes.length} 条
+                </span>
               </div>
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => setTypeDetailViewMode(typeDetailViewMode === 'card' ? 'table' : 'card')}
-                  className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium text-gray-700"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors text-xs font-medium text-gray-700"
                   title={typeDetailViewMode === 'card' ? '切换到表格视图' : '切换到卡片视图'}
                 >
-                  <TableCellsIcon className="w-5 h-5" />
-                  <span>{typeDetailViewMode === 'card' ? '列表展示' : '卡片展示'}</span>
-                </button>
-                <button
-                  onClick={() => setTypeDetailDialog(null)}
-                  className="ml-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full p-2 transition-colors"
-                  aria-label="关闭"
-                >
-                  <XMarkIcon className="w-6 h-6" />
+                  <TableCellsIcon className="w-4 h-4" />
+                  <span>{typeDetailViewMode === 'card' ? '列表' : '卡片'}</span>
                 </button>
               </div>
             </div>
+            <button
+              onClick={() => setTypeDetailDialog(null)}
+              className="ml-4 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full p-2 transition-colors"
+              aria-label="关闭"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
 
-            {/* 内容区域 - 可滚动 */}
-            <div className="flex-1 overflow-auto p-6">
+          {/* 内容区域 - 可滚动 */}
+          <div ref={typeDetailContentRef} className="flex-1 overflow-y-auto p-6">
+            <div className="space-y-4">
               {typeDetailViewMode === 'card' ? (
                 // 卡片视图
-                <div className="space-y-4">
-                  {typeDetailDialog.nodes.map((node, index) => {
-                    const nodeIdOnly = node.id.includes(':') ? node.id.split(':')[1] : node.id;
-                    const isSelected = selectedNode?.id === node.id;
-                    const isHighlighted = highlightedNodes.has(node.id);
-                    const isReverseHighlighted = reverseHighlightedNodes.has(node.id);
+                typeDetailDialog.nodes.map((node, index) => {
+                  const nodeIdOnly = node.id.includes(':') ? node.id.split(':')[1] : node.id;
+                  const isSelected = selectedNode?.id === node.id;
+                  const isHighlighted = highlightedNodes.has(node.id);
+                  const isReverseHighlighted = reverseHighlightedNodes.has(node.id);
 
-                    return (
-                      <div
-                        key={node.id}
-                        className={`bg-white border-2 rounded-lg p-4 hover:shadow-md transition-all ${
-                          isSelected
-                            ? 'border-blue-500 bg-blue-50'
-                            : isReverseHighlighted
-                            ? 'border-indigo-500 bg-indigo-50'
-                            : isHighlighted
-                            ? 'border-yellow-500 bg-yellow-50'
-                            : 'border-gray-200'
-                        }`}
-                      >
-                        {/* 节点头部 */}
-                        <div className="flex items-center justify-between mb-3 pb-3 border-b border-gray-200">
-                          <div className="flex items-center gap-3">
-                            <div
-                              className="w-4 h-4 rounded-full"
-                              style={{ backgroundColor: nodeColor(node) }}
-                            />
-                            <h3 className="font-semibold text-lg text-gray-900">{node.name || nodeIdOnly.substring(0, 16)}</h3>
-                            <span className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded">
-                              #{index + 1}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <a
-                              href={`#/instances/${node.type}/${nodeIdOnly}`}
-                              className="text-sm px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              查看详情
-                            </a>
-                            <a
-                              href={`#/graph/${node.type}/${nodeIdOnly}`}
-                              className="text-sm px-3 py-1.5 bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              关系图
-                            </a>
-                          </div>
+                  return (
+                    <div
+                      key={node.id}
+                      className={`bg-white border-2 rounded-lg p-4 hover:shadow-md transition-all ${
+                        isSelected
+                          ? 'border-blue-500 bg-blue-50'
+                          : isReverseHighlighted
+                          ? 'border-indigo-500 bg-indigo-50'
+                          : isHighlighted
+                          ? 'border-yellow-500 bg-yellow-50'
+                          : 'border-gray-200'
+                      }`}
+                    >
+                      {/* 节点头部 */}
+                      <div className="flex items-center justify-between mb-3 pb-3 border-b border-gray-200">
+                        <div className="flex items-center gap-3">
+                          <div
+                            className="w-4 h-4 rounded-full"
+                            style={{ backgroundColor: nodeColor(node) }}
+                          />
+                          <h4 className="font-semibold text-base text-gray-900">{node.name || nodeIdOnly.substring(0, 16)}</h4>
+                          <span className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded">
+                            #{index + 1}
+                          </span>
                         </div>
+                      </div>
 
-                        {/* 节点属性 */}
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">实例ID</div>
-                            <div className="font-mono text-sm text-gray-800 break-all bg-gray-50 p-2 rounded border">
-                              {nodeIdOnly}
-                            </div>
-                          </div>
-                          <div>
-                            <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">类型</div>
-                            <div className="text-sm text-gray-800 bg-gray-50 p-2 rounded border">
-                              {objectTypes.find(ot => ot.name === node.type)?.display_name || node.type}
-                            </div>
-                          </div>
+                      {/* ID信息 */}
+                      <div className="bg-gray-50 rounded-lg p-4 border border-gray-200 mb-3">
+                        <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">实例ID</div>
+                        <div className="font-mono text-sm text-gray-800 break-all bg-white p-2 rounded border">
+                          {nodeIdOnly}
                         </div>
+                      </div>
 
-                        {/* 其他属性 */}
-                        <div className="mt-3 pt-3 border-t border-gray-200">
-                          <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">属性信息</div>
-                          <div className="grid grid-cols-2 gap-2">
-                            {Object.entries(node.data)
-                              .filter(([key]) => !['id', 'created_at', 'updated_at'].includes(key))
-                              .slice(0, 6) // 只显示前6个属性
-                              .map(([key, value]) => (
-                                <div key={key} className="bg-gray-50 rounded p-2 border border-gray-200">
-                                  <div className="text-xs font-medium text-gray-600 mb-1">{key}</div>
-                                  <div className="text-sm text-gray-900 break-words">
-                                    {typeof value === 'object' && value !== null
-                                      ? JSON.stringify(value)
-                                      : String(value || '-')}
-                                  </div>
+                      {/* 类型信息 */}
+                      <div className="bg-gray-50 rounded-lg p-4 border border-gray-200 mb-3">
+                        <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">类型</div>
+                        <div className="text-sm text-gray-800 bg-white p-2 rounded border">
+                          {objectTypes.find(ot => ot.name === node.type)?.display_name || node.type}
+                        </div>
+                      </div>
+
+                      {/* 属性列表 */}
+                      <div>
+                        <h4 className="text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wide">属性信息</h4>
+                        <div className="space-y-3">
+                          {Object.entries(node.data)
+                            .filter(([key]) => !['id', 'created_at', 'updated_at'].includes(key))
+                            .slice(0, 6) // 只显示前6个属性
+                            .map(([key, value]) => (
+                              <div key={key} className="bg-white border border-gray-200 rounded-lg p-4 hover:border-blue-300 transition-colors">
+                                <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">{key}</div>
+                                <div className="text-base font-medium text-gray-900 break-words">
+                                  {typeof value === 'object' && value !== null
+                                    ? (
+                                        <pre className="text-sm bg-gray-50 p-3 rounded border overflow-x-auto whitespace-pre-wrap">
+                                          {JSON.stringify(value, null, 2)}
+                                        </pre>
+                                      )
+                                    : (
+                                        <span className="text-gray-900">{String(value || '-')}</span>
+                                      )}
                                 </div>
-                              ))}
-                          </div>
-                          {Object.keys(node.data).filter(key => !['id', 'created_at', 'updated_at'].includes(key)).length > 6 && (
-                            <div className="mt-2 text-xs text-gray-500 text-center">
-                              还有 {Object.keys(node.data).filter(key => !['id', 'created_at', 'updated_at'].includes(key)).length - 6} 个属性...
-                            </div>
-                          )}
+                              </div>
+                            ))}
                         </div>
+                        {Object.keys(node.data).filter(key => !['id', 'created_at', 'updated_at'].includes(key)).length > 6 && (
+                          <div className="mt-2 text-xs text-gray-500 text-center">
+                            还有 {Object.keys(node.data).filter(key => !['id', 'created_at', 'updated_at'].includes(key)).length - 6} 个属性...
+                          </div>
+                        )}
+                      </div>
 
-                        {/* 时间信息 */}
-                        {(node.data.created_at || node.data.updated_at) && (
-                          <div className="mt-3 pt-3 border-t border-gray-200 flex gap-4 text-xs text-gray-500">
+                      {/* 时间信息 */}
+                      {(node.data.created_at || node.data.updated_at) && (
+                        <div className="bg-gray-50 rounded-lg p-4 border border-gray-200 mt-3">
+                          <div className="grid grid-cols-2 gap-4 text-sm">
                             {node.data.created_at && (
                               <div>
-                                <span className="font-medium">创建时间：</span>
-                                {new Date(node.data.created_at).toLocaleString('zh-CN')}
+                                <div className="text-xs font-semibold text-gray-500 mb-1">创建时间</div>
+                                <div className="text-gray-900">{new Date(node.data.created_at).toLocaleString('zh-CN')}</div>
                               </div>
                             )}
                             {node.data.updated_at && (
                               <div>
-                                <span className="font-medium">更新时间：</span>
-                                {new Date(node.data.updated_at).toLocaleString('zh-CN')}
+                                <div className="text-xs font-semibold text-gray-500 mb-1">更新时间</div>
+                                <div className="text-gray-900">{new Date(node.data.updated_at).toLocaleString('zh-CN')}</div>
                               </div>
                             )}
                           </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
               ) : (
                 // 表格视图
                 (() => {
@@ -2805,7 +3212,7 @@ export default function GraphView() {
                     Object.keys(node.data).forEach(key => allKeys.add(key));
                   });
                   
-                  // 定义固定列（序号、名称、ID、类型、操作）
+                  // 定义固定列（序号、名称、ID、类型）
                   const fixedColumns = ['序号', '名称', 'ID', '类型'];
                   // 其他属性列（排除固定列和系统字段）
                   const otherKeys = Array.from(allKeys)
@@ -2813,7 +3220,7 @@ export default function GraphView() {
                     .sort();
                   
                   // 合并所有列
-                  const allColumns = [...fixedColumns, ...otherKeys, '创建时间', '更新时间', '操作'];
+                  const allColumns = [...fixedColumns, ...otherKeys, '创建时间', '更新时间'];
                   
                   return (
                     <div className="overflow-x-auto">
@@ -2907,26 +3314,6 @@ export default function GraphView() {
                                     ? new Date(node.data.updated_at).toLocaleString('zh-CN')
                                     : '-'}
                                 </td>
-                                
-                                {/* 操作 */}
-                                <td className="px-4 py-3 text-sm whitespace-nowrap">
-                                  <div className="flex items-center gap-2">
-                                    <a
-                                      href={`#/instances/${node.type}/${nodeIdOnly}`}
-                                      className="px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors text-xs"
-                                      onClick={(e) => e.stopPropagation()}
-                                    >
-                                      详情
-                                    </a>
-                                    <a
-                                      href={`#/graph/${node.type}/${nodeIdOnly}`}
-                                      className="px-2 py-1 bg-green-600 text-white rounded hover:bg-green-700 transition-colors text-xs"
-                                      onClick={(e) => e.stopPropagation()}
-                                    >
-                                      关系图
-                                    </a>
-                                  </div>
-                                </td>
                               </tr>
                             );
                           })}
@@ -2937,22 +3324,17 @@ export default function GraphView() {
                 })()
               )}
             </div>
+          </div>
 
-            {/* 底部操作栏 */}
-            <div className="p-4 border-t border-gray-200 bg-gray-50 flex items-center justify-between">
-              <div className="text-sm text-gray-600">
-                共显示 <span className="font-semibold text-gray-900">{typeDetailDialog.nodes.length}</span> 条数据
-              </div>
-              <button
-                onClick={() => setTypeDetailDialog(null)}
-                className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors text-sm font-medium"
-              >
-                关闭
-              </button>
+          {/* 底部统计信息 */}
+          <div className="p-6 border-t border-gray-200 bg-gray-50">
+            <div className="text-sm text-gray-600">
+              共显示 <span className="font-semibold text-gray-900">{typeDetailDialog.nodes.length}</span> 条数据
             </div>
           </div>
         </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
