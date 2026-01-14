@@ -34,6 +34,9 @@ public class LinkType {
     @JsonProperty("property_mappings")
     private Map<String, String> propertyMappings;
 
+    @JsonProperty("transformation_mappings")
+    private List<TransformationMapping> transformationMappings;
+
     @JsonProperty("data_source")
     private DataSourceMapping dataSource;
 
@@ -130,5 +133,22 @@ public class LinkType {
     @JsonIgnore
     public boolean hasDataSource() {
         return dataSource != null && dataSource.isConfigured();
+    }
+    
+    @JsonGetter("transformation_mappings")
+    public List<TransformationMapping> getTransformationMappings() {
+        return transformationMappings;
+    }
+    
+    public void setTransformationMappings(List<TransformationMapping> transformationMappings) {
+        this.transformationMappings = transformationMappings;
+    }
+    
+    /**
+     * 检查是否有转换映射配置
+     */
+    @JsonIgnore
+    public boolean hasTransformationMappings() {
+        return transformationMappings != null && !transformationMappings.isEmpty();
     }
 }

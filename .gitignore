@@ -2,7 +2,7 @@
 target/
 .mvn/wrapper/maven-wrapper.properties
 !.mvn/wrapper/maven-wrapper.jar
-
+calcite-calcite-1.37.0
 # Environment variables
 .env
 .env.local

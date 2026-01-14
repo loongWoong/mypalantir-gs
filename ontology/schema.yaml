@@ -3457,6 +3457,442 @@ object_types:
         required: false
         description: "在线类型"
 
+  - name: VSplitDataSub
+    display_name: 拆账数据子视图
+    description: "拆账数据子视图（V_SUB1），从现金清分结果表按清分日期、支付卡类型、收费路段编码聚合拆账金额"
+    properties:
+      - name: clear_date
+        display_name: 清分日期
+        data_type: date
+        required: true
+        description: "清分日期"
+      
+      - name: pay_card_type
+        display_name: 支付卡类型
+        data_type: integer
+        required: true
+        description: "支付卡类型"
+      
+      - name: split_org
+        display_name: 小业主编码
+        data_type: string
+        required: true
+        description: "小业主编码（从收费路段编码推导）"
+      
+      - name: road
+        display_name: 路段编码
+        data_type: string
+        required: true
+        description: "路段编码（从收费路段编码推导）"
+      
+      - name: corp
+        display_name: 运营管理单位编码
+        data_type: string
+        required: true
+        description: "运营管理单位编码（从收费路段编码推导）"
+      
+      - name: cash_split_money
+        display_name: 拆账现金总收入
+        data_type: bigdecimal
+        required: false
+        description: "拆账现金总收入（PAYTYPE=1或0的金额汇总）"
+      
+      - name: cash_op_split_money
+        display_name: 拆账现金外省代收收入
+        data_type: bigdecimal
+        required: false
+        description: "拆账现金外省代收收入（PROVINCETYPE=2的金额汇总）"
+      
+      - name: other_split_money
+        display_name: 拆账其他总收入
+        data_type: bigdecimal
+        required: false
+        description: "拆账其他总收入（PAYTYPE=2的金额汇总）"
+      
+      - name: other_op_split_money
+        display_name: 拆账其他外省代收收入
+        data_type: bigdecimal
+        required: false
+        description: "拆账其他外省代收收入（当前为0）"
+      
+      - name: union_split_money
+        display_name: 拆账银联总收入
+        data_type: bigdecimal
+        required: false
+        description: "拆账银联总收入（PAYTYPE=3的金额汇总）"
+      
+      - name: union_op_split_money
+        display_name: 拆账银联外省代收收入
+        data_type: bigdecimal
+        required: false
+        description: "拆账银联外省代收收入（当前为0）"
+      
+      - name: alipay_split_money
+        display_name: 拆账支付宝总收入
+        data_type: bigdecimal
+        required: false
+        description: "拆账支付宝总收入（PAYTYPE=6的金额汇总）"
+      
+      - name: alipay_op_split_money
+        display_name: 拆账支付宝外省代收收入
+        data_type: bigdecimal
+        required: false
+        description: "拆账支付宝外省代收收入（当前为0）"
+      
+      - name: wepay_split_money
+        display_name: 拆账微信总收入
+        data_type: bigdecimal
+        required: false
+        description: "拆账微信总收入（PAYTYPE=7的金额汇总）"
+      
+      - name: wepay_op_split_money
+        display_name: 拆账微信外省代收收入
+        data_type: bigdecimal
+        required: false
+        description: "拆账微信外省代收收入（当前为0）"
+
+  - name: VTollDataSub
+    display_name: 通行费数据子视图
+    description: "通行费数据子视图（V_SUB2），从现金清分结果表按清分日期、支付卡类型、路段、收费站聚合通行费金额和退费金额"
+    properties:
+      - name: clear_date
+        display_name: 清分日期
+        data_type: date
+        required: true
+        description: "清分日期"
+      
+      - name: pay_card_type
+        display_name: 支付卡类型
+        data_type: integer
+        required: true
+        description: "支付卡类型"
+      
+      - name: split_org
+        display_name: 小业主编码
+        data_type: string
+        required: true
+        description: "小业主编码（从外部收费站编码推导）"
+      
+      - name: road
+        display_name: 路段编码
+        data_type: string
+        required: true
+        description: "路段编码（从外部收费站编码推导）"
+      
+      - name: corp
+        display_name: 运营管理单位编码
+        data_type: string
+        required: true
+        description: "运营管理单位编码（从外部收费站编码推导）"
+      
+      - name: cash_toll_money
+        display_name: 通行费现金总收入
+        data_type: bigdecimal
+        required: false
+        description: "通行费现金总收入（PAYTYPE=1或0的金额汇总）"
+      
+      - name: cash_op_toll_money
+        display_name: 通行费现金代外省收收入
+        data_type: bigdecimal
+        required: false
+        description: "通行费现金代外省收收入（PAYTYPE=1且TOLLSECTIONID长度为6的金额汇总）"
+      
+      - name: other_toll_money
+        display_name: 通行费其他总收入
+        data_type: bigdecimal
+        required: false
+        description: "通行费其他总收入（PAYTYPE=2的金额汇总）"
+      
+      - name: other_op_toll_money
+        display_name: 通行费其他代外省收收入
+        data_type: bigdecimal
+        required: false
+        description: "通行费其他代外省收收入（PAYTYPE=2且TOLLSECTIONID长度为6的金额汇总）"
+      
+      - name: union_toll_money
+        display_name: 通行费银联总收入
+        data_type: bigdecimal
+        required: false
+        description: "通行费银联总收入（PAYTYPE=3的金额汇总）"
+      
+      - name: union_op_toll_money
+        display_name: 通行费银联代外省收收入
+        data_type: bigdecimal
+        required: false
+        description: "通行费银联代外省收收入（PAYTYPE=3且TOLLSECTIONID长度为6的金额汇总）"
+      
+      - name: alipay_toll_money
+        display_name: 通行费支付宝总收入
+        data_type: bigdecimal
+        required: false
+        description: "通行费支付宝总收入（PAYTYPE=6的金额汇总）"
+      
+      - name: alipay_op_toll_money
+        display_name: 通行费支付宝代外省收收入
+        data_type: bigdecimal
+        required: false
+        description: "通行费支付宝代外省收收入（PAYTYPE=6且TOLLSECTIONID长度为6的金额汇总）"
+      
+      - name: wepay_toll_money
+        display_name: 通行费微信总收入
+        data_type: bigdecimal
+        required: false
+        description: "通行费微信总收入（PAYTYPE=7的金额汇总）"
+      
+      - name: wepay_op_toll_money
+        display_name: 通行费微信代外省收收入
+        data_type: bigdecimal
+        required: false
+        description: "通行费微信代外省收收入（PAYTYPE=7且TOLLSECTIONID长度为6的金额汇总）"
+      
+      - name: cash_return_money
+        display_name: 现金退费金额
+        data_type: bigdecimal
+        required: false
+        description: "现金退费金额（PAYTYPE=1且MODIFYFLAG=2且PROVINCETYPE=1且TOLLSECTIONID长度为6的负金额汇总）"
+      
+      - name: other_return_money
+        display_name: 其他退费金额
+        data_type: bigdecimal
+        required: false
+        description: "其他退费金额（PAYTYPE=2且MODIFYFLAG=2且PROVINCETYPE=1且TOLLSECTIONID长度为6的负金额汇总）"
+      
+      - name: union_return_money
+        display_name: 银联退费金额
+        data_type: bigdecimal
+        required: false
+        description: "银联退费金额（PAYTYPE=3且MODIFYFLAG=2且PROVINCETYPE=1且TOLLSECTIONID长度为6的负金额汇总）"
+      
+      - name: alipay_return_money
+        display_name: 支付宝退费金额
+        data_type: bigdecimal
+        required: false
+        description: "支付宝退费金额（PAYTYPE=6且MODIFYFLAG=2且PROVINCETYPE=1且TOLLSECTIONID长度为6的负金额汇总）"
+      
+      - name: wepay_return_money
+        display_name: 微信退费金额
+        data_type: bigdecimal
+        required: false
+        description: "微信退费金额（PAYTYPE=7且MODIFYFLAG=2且PROVINCETYPE=1且TOLLSECTIONID长度为6的负金额汇总）"
+
+  - name: VSplitDataAggregate
+    display_name: 拆账数据聚合视图
+    description: "拆账数据聚合视图（V_A），按清分日期、支付卡类型、小业主、路段、运营单位聚合拆账金额"
+    properties:
+      - name: clear_date
+        display_name: 清分日期
+        data_type: date
+        required: true
+        description: "清分日期"
+      
+      - name: pay_card_type
+        display_name: 支付卡类型
+        data_type: integer
+        required: true
+        description: "支付卡类型"
+      
+      - name: split_org
+        display_name: 小业主编码
+        data_type: string
+        required: true
+        description: "小业主编码"
+      
+      - name: corp
+        display_name: 运营管理单位编码
+        data_type: string
+        required: true
+        description: "运营管理单位编码"
+      
+      - name: road
+        display_name: 路段编码
+        data_type: string
+        required: true
+        description: "路段编码"
+      
+      - name: cash_split_money
+        display_name: 拆账现金总收入
+        data_type: bigdecimal
+        required: false
+        description: "拆账现金总收入"
+      
+      - name: cash_op_split_money
+        display_name: 拆账现金外省代收收入
+        data_type: bigdecimal
+        required: false
+        description: "拆账现金外省代收收入"
+      
+      - name: other_split_money
+        display_name: 拆账其他总收入
+        data_type: bigdecimal
+        required: false
+        description: "拆账其他总收入"
+      
+      - name: other_op_split_money
+        display_name: 拆账其他外省代收收入
+        data_type: bigdecimal
+        required: false
+        description: "拆账其他外省代收收入"
+      
+      - name: union_split_money
+        display_name: 拆账银联总收入
+        data_type: bigdecimal
+        required: false
+        description: "拆账银联总收入"
+      
+      - name: union_op_split_money
+        display_name: 拆账银联外省代收收入
+        data_type: bigdecimal
+        required: false
+        description: "拆账银联外省代收收入"
+      
+      - name: alipay_split_money
+        display_name: 拆账支付宝总收入
+        data_type: bigdecimal
+        required: false
+        description: "拆账支付宝总收入"
+      
+      - name: alipay_op_split_money
+        display_name: 拆账支付宝外省代收收入
+        data_type: bigdecimal
+        required: false
+        description: "拆账支付宝外省代收收入"
+      
+      - name: wepay_split_money
+        display_name: 拆账微信总收入
+        data_type: bigdecimal
+        required: false
+        description: "拆账微信总收入"
+      
+      - name: wepay_op_split_money
+        display_name: 拆账微信外省代收收入
+        data_type: bigdecimal
+        required: false
+        description: "拆账微信外省代收收入"
+
+  - name: VTollDataAggregate
+    display_name: 通行费数据聚合视图
+    description: "通行费数据聚合视图（V_B），按清分日期、支付卡类型、小业主、路段、运营单位聚合通行费金额和退费金额"
+    properties:
+      - name: clear_date
+        display_name: 清分日期
+        data_type: date
+        required: true
+        description: "清分日期"
+      
+      - name: pay_card_type
+        display_name: 支付卡类型
+        data_type: integer
+        required: true
+        description: "支付卡类型"
+      
+      - name: split_org
+        display_name: 小业主编码
+        data_type: string
+        required: true
+        description: "小业主编码"
+      
+      - name: road
+        display_name: 路段编码
+        data_type: string
+        required: true
+        description: "路段编码"
+      
+      - name: corp
+        display_name: 运营管理单位编码
+        data_type: string
+        required: true
+        description: "运营管理单位编码"
+      
+      - name: cash_toll_money
+        display_name: 通行费现金总收入
+        data_type: bigdecimal
+        required: false
+        description: "通行费现金总收入"
+      
+      - name: cash_op_toll_money
+        display_name: 通行费现金代外省收收入
+        data_type: bigdecimal
+        required: false
+        description: "通行费现金代外省收收入"
+      
+      - name: other_toll_money
+        display_name: 通行费其他总收入
+        data_type: bigdecimal
+        required: false
+        description: "通行费其他总收入"
+      
+      - name: other_op_toll_money
+        display_name: 通行费其他代外省收收入
+        data_type: bigdecimal
+        required: false
+        description: "通行费其他代外省收收入"
+      
+      - name: union_toll_money
+        display_name: 通行费银联总收入
+        data_type: bigdecimal
+        required: false
+        description: "通行费银联总收入"
+      
+      - name: union_op_toll_money
+        display_name: 通行费银联代外省收收入
+        data_type: bigdecimal
+        required: false
+        description: "通行费银联代外省收收入"
+      
+      - name: alipay_toll_money
+        display_name: 通行费支付宝总收入
+        data_type: bigdecimal
+        required: false
+        description: "通行费支付宝总收入"
+      
+      - name: alipay_op_toll_money
+        display_name: 通行费支付宝代外省收收入
+        data_type: bigdecimal
+        required: false
+        description: "通行费支付宝代外省收收入"
+      
+      - name: wepay_toll_money
+        display_name: 通行费微信总收入
+        data_type: bigdecimal
+        required: false
+        description: "通行费微信总收入"
+      
+      - name: wepay_op_toll_money
+        display_name: 通行费微信代外省收收入
+        data_type: bigdecimal
+        required: false
+        description: "通行费微信代外省收收入"
+      
+      - name: cash_return_money
+        display_name: 现金退费金额
+        data_type: bigdecimal
+        required: false
+        description: "现金退费金额"
+      
+      - name: other_return_money
+        display_name: 其他退费金额
+        data_type: bigdecimal
+        required: false
+        description: "其他退费金额"
+      
+      - name: union_return_money
+        display_name: 银联退费金额
+        data_type: bigdecimal
+        required: false
+        description: "银联退费金额"
+      
+      - name: alipay_return_money
+        display_name: 支付宝退费金额
+        data_type: bigdecimal
+        required: false
+        description: "支付宝退费金额"
+      
+      - name: wepay_return_money
+        display_name: 微信退费金额
+        data_type: bigdecimal
+        required: false
+        description: "微信退费金额"
+
   - name: VCashClearWideTable
     display_name: 现金清分宽表视图
     description: "现金清分宽表视图，整合拆账数据和通行费数据"
@@ -3794,38 +4230,158 @@ link_types:
     cardinality: one-to-many
     direction: directed
 
-  - name: vcashclearwidetable_to_exclearresultcash
-    display_name: 现金清分宽表关联现金清分结果
-    description: "现金清分宽表基于现金清分结果数据聚合生成"
+
+  - name: vcashclearwidetable_to_splitdata
+    display_name: 现金清分宽表关联拆账数据聚合视图
+    description: "现金清分宽表通过LEFT JOIN关联拆账数据聚合视图（V_A），JOIN条件：CLEARDATE, PAYCARDTYPE, SPLITORG, ROAD, CORP"
     source_type: VCashClearWideTable
+    target_type: VSplitDataAggregate
+    cardinality: many-to-one
+    direction: directed
+    property_mappings:
+      clear_date: clear_date
+      pay_card_type: pay_card_type
+      split_org: split_org
+      road: road
+      corp: corp
+
+  - name: vcashclearwidetable_to_tolldata
+    display_name: 现金清分宽表关联通行费数据聚合视图
+    description: "现金清分宽表通过LEFT JOIN关联通行费数据聚合视图（V_B），JOIN条件：CLEARDATE, PAYCARDTYPE, SPLITORG, ROAD, CORP"
+    source_type: VCashClearWideTable
+    target_type: VTollDataAggregate
+    cardinality: many-to-one
+    direction: directed
+    property_mappings:
+      clear_date: clear_date
+      pay_card_type: pay_card_type
+      split_org: split_org
+      road: road
+      corp: corp
+
+  - name: splitdataaggregate_to_splitdatasub
+    display_name: 拆账数据聚合视图关联拆账数据子视图
+    description: "拆账数据聚合视图（V_A）从拆账数据子视图（V_SUB1）聚合生成，按SPLITORG, PAYCARDTYPE, CLEARDATE, ROAD, CORP分组汇总"
+    source_type: VSplitDataAggregate
+    target_type: VSplitDataSub
+    cardinality: one-to-many
+    direction: directed
+    property_mappings:
+      clear_date: clear_date
+      pay_card_type: pay_card_type
+      split_org: split_org
+      road: road
+      corp: corp
+
+  - name: tolldataaggregate_to_tolldatasub
+    display_name: 通行费数据聚合视图关联通行费数据子视图
+    description: "通行费数据聚合视图（V_B）从通行费数据子视图（V_SUB2）聚合生成，按SPLITORG, PAYCARDTYPE, CLEARDATE, ROAD, CORP分组汇总"
+    source_type: VTollDataAggregate
+    target_type: VTollDataSub
+    cardinality: one-to-many
+    direction: directed
+    property_mappings:
+      clear_date: clear_date
+      pay_card_type: pay_card_type
+      split_org: split_org
+      road: road
+      corp: corp
+
+  - name: splitdatasub_to_exclearresultcash
+    display_name: 拆账数据子视图关联现金清分结果
+    description: "拆账数据子视图（V_SUB1）从现金清分结果表（TBL_EXCLEARRESULTCASH）聚合生成，按CLEARDATE, PAYCARDTYPE, TOLLSECTIONID分组汇总。SPLITORG、ROAD、CORP是从TOLLSECTIONID推导的。反向推导：从VSplitDataSub的split_org推导回ExClearResultCash的toll_section_id"
+    source_type: VSplitDataSub
     target_type: ExClearResultCash
     cardinality: one-to-many
     direction: directed
     property_mappings:
       clear_date: clear_date
       pay_card_type: pay_card_type
-      split_org: toll_section_id
-      road: section_id
-      corp: crop_id
+    transformation_mappings:
+      - source_property: split_org
+        target_property: toll_section_id
+        transformation_type: reverse_derivation
+        transformation_config:
+          join_condition: |
+            TBL_EXCLEARRESULTCASH.CLEARDATE = V_SUB1.CLEARDATE
+            AND TBL_EXCLEARRESULTCASH.PAYCARDTYPE = V_SUB1.PAYCARDTYPE
+            AND (
+              (LENGTH(V_SUB1.SPLITORG) = 2 
+               AND LENGTH(TBL_EXCLEARRESULTCASH.TOLLSECTIONID) = 6
+               AND SUBSTR(TBL_EXCLEARRESULTCASH.TOLLSECTIONID, 1, 2) = V_SUB1.SPLITORG)
+              OR 
+              (TBL_EXCLEARRESULTCASH.TOLLSECTIONID IN (
+                SELECT ID FROM TBL_GBSECTIONDIC 
+                WHERE ROADID = V_SUB1.SPLITORG
+              ))
+            )
 
-  - name: vcashclearwidetable_to_gbsectiondic
-    display_name: 现金清分宽表关联路段信息
-    description: "现金清分宽表通过收费路段编码关联路段信息"
-    source_type: VCashClearWideTable
-    target_type: Gbsectiondic
-    cardinality: many-to-one
+  - name: tolldatasub_to_exclearresultcash
+    display_name: 通行费数据子视图关联现金清分结果
+    description: "通行费数据子视图（V_SUB2）从现金清分结果表（TBL_EXCLEARRESULTCASH）聚合生成，按CLEARDATE, PAYCARDTYPE, SECTIONID, TOLLSTATION, EXTOLLSTATION分组汇总。SPLITORG、ROAD、CORP是从EXTOLLSTATION推导的。反向推导：从VTollDataSub的split_org和road推导回ExClearResultCash的ex_toll_station和section_id"
+    source_type: VTollDataSub
+    target_type: ExClearResultCash
+    cardinality: one-to-many
     direction: directed
     property_mappings:
-      split_org: road_id
-
-  - name: vcashclearwidetable_to_orgcode
-    display_name: 现金清分宽表关联组织机构编码
-    description: "现金清分宽表通过小业主、路段、运营单位编码关联组织机构编码"
-    source_type: VCashClearWideTable
-    target_type: OrgCode
-    cardinality: many-to-one
-    direction: directed
-    property_mappings:
-      split_org: bl_owner
-      road: bl_road
-      corp: bl_corp
+      clear_date: clear_date
+      pay_card_type: pay_card_type
+    transformation_mappings:
+      - source_property: road
+        target_property: section_id
+        transformation_type: reverse_derivation
+        transformation_config:
+          join_condition: |
+            TBL_EXCLEARRESULTCASH.CLEARDATE = V_SUB2.CLEARDATE
+            AND TBL_EXCLEARRESULTCASH.PAYCARDTYPE = V_SUB2.PAYCARDTYPE
+            AND (
+              (LENGTH(V_SUB2.ROAD) = 2 
+               AND TBL_EXCLEARRESULTCASH.EXTOLLSTATION = V_SUB2.ROAD
+               AND TBL_EXCLEARRESULTCASH.SECTIONID IN (
+                 SELECT DISTINCT SECTIONID 
+                 FROM TBL_EXCLEARRESULTCASH 
+                 WHERE EXTOLLSTATION = V_SUB2.ROAD
+               ))
+              OR 
+              (TBL_EXCLEARRESULTCASH.SECTIONID IN (
+                SELECT DISTINCT SECTIONID 
+                FROM TBL_EXCLEARRESULTCASH 
+                WHERE EXTOLLSTATION IN (
+                  SELECT ORGCODE 
+                  FROM T_ORGCODE 
+                  WHERE ORGTYPE = 23 
+                    AND CONCAT(BL_ROAD, '0000') = V_SUB2.ROAD
+                    AND LASTVER = (
+                      SELECT MAX(LASTVER) FROM T_ORGCODE 
+                      WHERE VERUSETIME < CONCAT(V_SUB2.CLEARDATE, ' 23:59:59') AND ORGTYPE = 23
+                    )
+                )
+              ))
+            )
+      - source_property: split_org
+        target_property: ex_toll_station
+        transformation_type: reverse_derivation
+        transformation_config:
+          join_condition: |
+            TBL_EXCLEARRESULTCASH.CLEARDATE = V_SUB2.CLEARDATE
+            AND TBL_EXCLEARRESULTCASH.PAYCARDTYPE = V_SUB2.PAYCARDTYPE
+            AND (
+              (LENGTH(V_SUB2.SPLITORG) = 2 
+               AND TBL_EXCLEARRESULTCASH.EXTOLLSTATION = V_SUB2.SPLITORG)
+              OR 
+              (TBL_EXCLEARRESULTCASH.EXTOLLSTATION IN (
+                SELECT T1.ORGCODE 
+                FROM T_ORGCODE T1, T_ORGCODE T2
+                WHERE T2.ORGCODE = CONCAT(T1.BL_SUBCENTER, '00') AND T2.ORGTYPE = 22
+                  AND T1.ORGCODE = TBL_EXCLEARRESULTCASH.EXTOLLSTATION AND T1.ORGTYPE = 23
+                  AND T2.BL_OWNER = V_SUB2.SPLITORG
+                  AND T1.LASTVER = (
+                    SELECT MAX(LASTVER) FROM T_ORGCODE 
+                    WHERE VERUSETIME < CONCAT(V_SUB2.CLEARDATE, ' 23:59:59') AND ORGTYPE = 23
+                  )
+                  AND T2.LASTVER = (
+                    SELECT MAX(LASTVER) FROM T_ORGCODE 
+                    WHERE VERUSETIME < CONCAT(V_SUB2.CLEARDATE, ' 23:59:59') AND ORGTYPE = 22
+                  )
+              ))
+            )

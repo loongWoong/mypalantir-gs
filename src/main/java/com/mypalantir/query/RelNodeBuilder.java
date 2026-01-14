@@ -5,6 +5,7 @@ import com.mypalantir.meta.LinkType;
 import com.mypalantir.meta.Loader;
 import com.mypalantir.meta.ObjectType;
 import com.mypalantir.meta.Property;
+import com.mypalantir.meta.TransformationMapping;
 import com.mypalantir.query.schema.OntologySchemaFactory;
 import com.mypalantir.repository.IInstanceStorage;
 import com.mypalantir.service.MappingService;
@@ -25,12 +26,30 @@ import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.rex.RexSubQuery;
 import org.apache.calcite.schema.SchemaPlus;
 import org.apache.calcite.sql.SqlKind;
+import org.apache.calcite.sql.SqlNode;
+import org.apache.calcite.sql.parser.SqlParser;
 import org.apache.calcite.sql.type.SqlTypeName;
+import org.apache.calcite.sql2rel.SqlToRelConverter;
+import org.apache.calcite.prepare.CalciteCatalogReader;
+import org.apache.calcite.prepare.Prepare;
+import org.apache.calcite.sql.validate.SqlValidator;
+import org.apache.calcite.sql.validate.SqlValidatorUtil;
+import org.apache.calcite.sql.validate.SqlConformanceEnum;
+import org.apache.calcite.sql.SqlIntervalQualifier;
+import org.apache.calcite.sql.parser.SqlParserPos;
+import org.apache.calcite.avatica.util.TimeUnit;
+import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.tools.FrameworkConfig;
 import org.apache.calcite.tools.Frameworks;
 import org.apache.calcite.tools.RelBuilder;
+import org.apache.calcite.sql2rel.RelDecorrelator;
+import org.apache.calcite.config.CalciteConnectionConfig;
+import org.apache.calcite.config.CalciteConnectionConfigImpl;
+import org.apache.calcite.config.CalciteConnectionProperty;
+import org.apache.calcite.avatica.util.Casing;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -505,7 +524,7 @@ public class RelNodeBuilder {
         if (isForeignKeyMode) {
             // 外键模式：直接 JOIN 目标表（目标表中包含外键）
             return buildForeignKeyJoin(leftInput, actualSourceType, actualTargetType, 
-                                      linkMapping, actualTargetMapping, isFromSource);
+                                      linkType, linkMapping, actualTargetMapping, isFromSource);
         } else {
             // 关系表模式：通过中间表 JOIN
             return buildRelationTableJoin(leftInput, actualSourceType, actualTargetType, 
@@ -520,6 +539,7 @@ public class RelNodeBuilder {
      * @param leftInput 左表（当前查询的起始对象表）
      * @param sourceObjectType 源对象类型（当前查询的起始对象）
      * @param targetObjectType 目标对象类型（要查询到的对象）
+     * @param linkType LinkType 定义（用于获取 transformation_mappings）
      * @param linkMapping LinkType 的数据源映射
      * @param targetMapping 目标对象的数据源映射
      * @param isFromSource 是否从 source 端查询（true：从 source 查询到 target，false：从 target 查询到 source）
@@ -527,6 +547,7 @@ public class RelNodeBuilder {
      */
     private RelNode buildForeignKeyJoin(RelNode leftInput, ObjectType sourceObjectType,
                                         ObjectType targetObjectType,
+                                        LinkType linkType,
                                         DataSourceMapping linkMapping,
                                         DataSourceMapping targetMapping,
                                         boolean isFromSource) throws Exception {
@@ -548,7 +569,14 @@ public class RelNodeBuilder {
             leftIdIndex
         );
         
-        // 根据查询方向确定 JOIN 条件
+        // 检查是否有 transformation_mappings 配置
+        if (linkType != null && linkType.hasTransformationMappings()) {
+            // 使用 transformation_mappings 构建 JOIN 条件
+            return buildJoinWithTransformationMappings(leftInput, sourceObjectType, targetObjectType,
+                                                      linkType, targetMapping, isFromSource);
+        }
+        
+        // 根据查询方向确定 JOIN 条件（原有逻辑）
         RexNode joinCondition;
         if (isFromSource) {
             // 从 source 查询到 target：source_table.id = target_table.source_id_column
@@ -599,6 +627,307 @@ public class RelNodeBuilder {
     }
 
     /**
+     * 使用 transformation_mappings 构建 JOIN（支持复杂的字段转换逻辑）
+     * 
+     * @param leftInput 左表（当前查询的起始对象表）
+     * @param sourceObjectType 源对象类型（当前查询的起始对象）
+     * @param targetObjectType 目标对象类型（要查询到的对象）
+     * @param linkType LinkType 定义（包含 transformation_mappings）
+     * @param targetMapping 目标对象的数据源映射
+     * @param isFromSource 是否从 source 端查询
+     * @return JOIN 后的 RelNode
+     */
+    private RelNode buildJoinWithTransformationMappings(RelNode leftInput, ObjectType sourceObjectType,
+                                                         ObjectType targetObjectType,
+                                                         LinkType linkType,
+                                                         DataSourceMapping targetMapping,
+                                                         boolean isFromSource) throws Exception {
+        relBuilder.clear();
+        relBuilder.push(leftInput);
+        
+        // 扫描目标表
+        RelNode targetTableScan = buildTableScan(targetObjectType.getName());
+        relBuilder.push(targetTableScan);
+        
+        RelDataType leftRowType = leftInput.getRowType();
+        RelDataType targetRowType = targetTableScan.getRowType();
+        RexBuilder rexBuilder = relBuilder.getRexBuilder();
+        
+        // 获取源对象的数据源映射
+        DataSourceMapping sourceMapping = getDataSourceMappingFromMapping(sourceObjectType);
+        if (sourceMapping == null || !sourceMapping.isConfigured()) {
+            throw new IllegalArgumentException("Source object type '" + sourceObjectType.getName() + 
+                "' does not have data source configured.");
+        }
+        
+        // 构建 JOIN 条件列表
+        List<RexNode> joinConditions = new ArrayList<>();
+        
+        // 1. 处理 property_mappings 中的直接映射字段（如 clear_date, pay_card_type）
+        if (linkType.getPropertyMappings() != null) {
+            for (Map.Entry<String, String> entry : linkType.getPropertyMappings().entrySet()) {
+                String sourceProperty = entry.getKey();
+                String targetProperty = entry.getValue();
+                
+                // 在源表中查找字段
+                int sourceFieldIndex = findFieldIndexInRowType(sourceProperty, leftRowType);
+                if (sourceFieldIndex < 0) {
+                    // 尝试通过列名查找
+                    String sourceColumn = sourceMapping.getColumnName(sourceProperty);
+                    if (sourceColumn != null) {
+                        sourceFieldIndex = findFieldIndexInRowType(sourceColumn, leftRowType);
+                    }
+                }
+                
+                // 在目标表中查找字段
+                int targetFieldIndex = findFieldIndexInRowType(targetProperty, targetRowType);
+                if (targetFieldIndex < 0) {
+                    // 尝试通过列名查找
+                    String targetColumn = targetMapping.getColumnName(targetProperty);
+                    if (targetColumn != null) {
+                        targetFieldIndex = findFieldIndexInRowType(targetColumn, targetRowType);
+                    }
+                }
+                
+                if (sourceFieldIndex >= 0 && targetFieldIndex >= 0) {
+                    RexNode sourceRef = rexBuilder.makeInputRef(
+                        leftRowType.getFieldList().get(sourceFieldIndex).getType(),
+                        sourceFieldIndex
+                    );
+                    RexNode targetRef = rexBuilder.makeInputRef(
+                        targetRowType.getFieldList().get(targetFieldIndex).getType(),
+                        leftRowType.getFieldCount() + targetFieldIndex
+                    );
+                    
+                    RexNode condition = rexBuilder.makeCall(
+                        org.apache.calcite.sql.fun.SqlStdOperatorTable.EQUALS,
+                        sourceRef,
+                        targetRef
+                    );
+                    joinConditions.add(condition);
+                    
+                    System.out.println("[buildJoinWithTransformationMappings] Added property mapping: " + 
+                        sourceProperty + " = " + targetProperty);
+                } else {
+                    System.out.println("[buildJoinWithTransformationMappings] Warning: Could not find fields for mapping: " + 
+                        sourceProperty + " -> " + targetProperty);
+                }
+            }
+        }
+        
+        // 2. 处理 transformation_mappings 中的转换映射
+        if (linkType.getTransformationMappings() != null) {
+            for (TransformationMapping transformation : linkType.getTransformationMappings()) {
+                String sourceProperty = transformation.getSourceProperty();
+                String targetProperty = transformation.getTargetProperty();
+                String transformationType = transformation.getTransformationType();
+                
+                System.out.println("[buildJoinWithTransformationMappings] Processing transformation: " + 
+                    sourceProperty + " -> " + targetProperty + " (type: " + transformationType + ")");
+                
+                // 获取 JOIN 条件（如果配置了）
+                String joinConditionSql = transformation.getJoinCondition();
+                if (joinConditionSql != null && !joinConditionSql.trim().isEmpty()) {
+                    System.out.println("[buildJoinWithTransformationMappings] Found join_condition: " + joinConditionSql);
+                    try {
+                        // 解析 join_condition SQL 并转换为 RexNode
+                        RexNode conditionNode = parseJoinCondition(
+                            joinConditionSql, 
+                            leftInput, 
+                            targetTableScan,
+                            sourceObjectType,
+                            targetObjectType,
+                            sourceMapping,
+                            targetMapping
+                        );
+                        if (conditionNode != null) {
+                            joinConditions.add(conditionNode);
+                            System.out.println("[buildJoinWithTransformationMappings] Successfully parsed join_condition");
+                        } else {
+                            System.out.println("[buildJoinWithTransformationMappings] Failed to parse join_condition, skipping");
+                        }
+                    } catch (Exception e) {
+                        System.err.println("[buildJoinWithTransformationMappings] Error parsing join_condition: " + e.getMessage());
+                        e.printStackTrace();
+                        // 如果解析失败，继续使用其他条件
+                    }
+                } else {
+                    // 如果没有 join_condition，尝试构建简单的转换条件
+                    // 根据 transformation_type 构建不同的 JOIN 条件
+                    if ("direct".equals(transformationType)) {
+                        // 直接映射：source_property = target_property
+                        int sourceFieldIndex = findFieldIndexInRowType(sourceProperty, leftRowType);
+                        int targetFieldIndex = findFieldIndexInRowType(targetProperty, targetRowType);
+                        
+                        if (sourceFieldIndex >= 0 && targetFieldIndex >= 0) {
+                            RexNode sourceRef = rexBuilder.makeInputRef(
+                                leftRowType.getFieldList().get(sourceFieldIndex).getType(),
+                                sourceFieldIndex
+                            );
+                            RexNode targetRef = rexBuilder.makeInputRef(
+                                targetRowType.getFieldList().get(targetFieldIndex).getType(),
+                                leftRowType.getFieldCount() + targetFieldIndex
+                            );
+                            
+                            RexNode condition = rexBuilder.makeCall(
+                                org.apache.calcite.sql.fun.SqlStdOperatorTable.EQUALS,
+                                sourceRef,
+                                targetRef
+                            );
+                            joinConditions.add(condition);
+                        }
+                    } else if ("reverse_derivation".equals(transformationType)) {
+                        // 反向推导：需要复杂的转换逻辑
+                        // 由于无法在 JOIN 条件中直接使用子查询，这里先记录
+                        // 实际实现中，可能需要：
+                        // 1. 使用 EXISTS 子查询
+                        // 2. 或者先构建 JOIN，然后在 Filter 中应用转换逻辑
+                        System.out.println("[buildJoinWithTransformationMappings] reverse_derivation requires complex logic, " +
+                            "consider using join_condition in transformation_config");
+                    } else if ("lookup".equals(transformationType)) {
+                        // 查找表转换：通过查找表进行转换
+                        // 配置示例：
+                        // transformation_config:
+                        //   lookup_table: "TBL_GBSECTIONDIC"
+                        //   lookup_key: "ID"
+                        //   lookup_value: "ROADID"
+                        //   source_key: "split_org"
+                        //   target_key: "toll_section_id"
+                        if (transformation.getTransformationConfig() != null) {
+                            String lookupTable = (String) transformation.getTransformationConfig().get("lookup_table");
+                            String lookupKey = (String) transformation.getTransformationConfig().get("lookup_key");
+                            String lookupValue = (String) transformation.getTransformationConfig().get("lookup_value");
+                            String sourceKey = (String) transformation.getTransformationConfig().get("source_key");
+                            String targetKey = (String) transformation.getTransformationConfig().get("target_key");
+                            
+                            if (lookupTable != null && lookupKey != null && lookupValue != null && 
+                                sourceKey != null && targetKey != null) {
+                                try {
+                                    // 构建查找表的扫描
+                                    RelNode lookupTableScan = buildTableScan(lookupTable);
+                                    
+                                    // 构建 JOIN 条件：source.source_key = lookup_table.lookup_value AND target.target_key = lookup_table.lookup_key
+                                    int sourceFieldIndex = findFieldIndexInRowType(sourceKey, leftRowType);
+                                    int targetFieldIndex = findFieldIndexInRowType(targetKey, targetRowType);
+                                    RelDataType lookupRowType = lookupTableScan.getRowType();
+                                    int lookupValueIndex = findFieldIndexInRowType(lookupValue, lookupRowType);
+                                    int lookupKeyIndex = findFieldIndexInRowType(lookupKey, lookupRowType);
+                                    
+                                    if (sourceFieldIndex >= 0 && targetFieldIndex >= 0 && 
+                                        lookupValueIndex >= 0 && lookupKeyIndex >= 0) {
+                                        // 先 JOIN 查找表到源表
+                                        RexNode sourceRef = rexBuilder.makeInputRef(
+                                            leftRowType.getFieldList().get(sourceFieldIndex).getType(),
+                                            sourceFieldIndex
+                                        );
+                                        RexNode lookupValueRef = rexBuilder.makeInputRef(
+                                            lookupRowType.getFieldList().get(lookupValueIndex).getType(),
+                                            leftRowType.getFieldCount() + lookupValueIndex
+                                        );
+                                        RexNode lookupCondition = rexBuilder.makeCall(
+                                            org.apache.calcite.sql.fun.SqlStdOperatorTable.EQUALS,
+                                            sourceRef,
+                                            lookupValueRef
+                                        );
+                                        
+                                        // 然后 JOIN 目标表，条件：target.target_key = lookup_table.lookup_key
+                                        // 注意：这里需要先构建第一个 JOIN，然后再构建第二个 JOIN
+                                        // 为了简化，我们使用子查询方式
+                                        String lookupSubquery = String.format(
+                                            "SELECT %s FROM %s WHERE %s = ?",
+                                            lookupKey, lookupTable, lookupValue
+                                        );
+                                        
+                                        // 使用 EXISTS 子查询方式
+                                        String existsCondition = String.format(
+                                            "EXISTS (SELECT 1 FROM %s WHERE %s = %s AND %s = %s)",
+                                            lookupTable,
+                                            lookupValue, sourceKey,
+                                            lookupKey, targetKey
+                                        );
+                                        
+                                        RexNode existsNode = parseJoinCondition(
+                                            existsCondition,
+                                            leftInput,
+                                            targetTableScan,
+                                            sourceObjectType,
+                                            targetObjectType,
+                                            sourceMapping,
+                                            targetMapping
+                                        );
+                                        
+                                        if (existsNode != null) {
+                                            joinConditions.add(existsNode);
+                                            System.out.println("[buildJoinWithTransformationMappings] Successfully built lookup transformation");
+                                        } else {
+                                            System.out.println("[buildJoinWithTransformationMappings] Failed to build lookup transformation, using simple join");
+                                            // 回退到简单的 JOIN 条件
+                                            joinConditions.add(lookupCondition);
+                                        }
+                                    }
+                                } catch (Exception e) {
+                                    System.err.println("[buildJoinWithTransformationMappings] Error building lookup transformation: " + e.getMessage());
+                                    e.printStackTrace();
+                                }
+                            } else {
+                                System.out.println("[buildJoinWithTransformationMappings] lookup transformation missing required config");
+                            }
+                        }
+                    } else if ("function".equals(transformationType)) {
+                        // 函数转换：使用函数进行转换
+                        // 配置示例：
+                        // transformation_config:
+                        //   sql_expression: "SUBSTR(source_property, 1, 2)"
+                        String sqlExpression = transformation.getSqlExpression();
+                        if (sqlExpression != null && !sqlExpression.trim().isEmpty()) {
+                            try {
+                                // 解析 SQL 表达式并构建 JOIN 条件
+                                // 例如：SUBSTR(source.split_org, 1, 2) = target.toll_section_id
+                                String functionCondition = sqlExpression + " = " + targetProperty;
+                                
+                                RexNode functionNode = parseJoinCondition(
+                                    functionCondition,
+                                    leftInput,
+                                    targetTableScan,
+                                    sourceObjectType,
+                                    targetObjectType,
+                                    sourceMapping,
+                                    targetMapping
+                                );
+                                
+                                if (functionNode != null) {
+                                    joinConditions.add(functionNode);
+                                    System.out.println("[buildJoinWithTransformationMappings] Successfully built function transformation");
+                                } else {
+                                    System.out.println("[buildJoinWithTransformationMappings] Failed to parse function expression: " + sqlExpression);
+                                }
+                            } catch (Exception e) {
+                                System.err.println("[buildJoinWithTransformationMappings] Error building function transformation: " + e.getMessage());
+                                e.printStackTrace();
+                            }
+                        } else {
+                            System.out.println("[buildJoinWithTransformationMappings] function transformation missing sql_expression");
+                        }
+                    }
+                }
+            }
+        }
+        
+        // 组合所有 JOIN 条件（AND）
+        if (joinConditions.isEmpty()) {
+            throw new IllegalArgumentException("No valid join conditions found for link type '" + 
+                linkType.getName() + "' with transformation_mappings");
+        }
+        
+        RexNode combinedCondition = joinConditions.size() == 1 
+            ? joinConditions.get(0)
+            : rexBuilder.makeCall(org.apache.calcite.sql.fun.SqlStdOperatorTable.AND, joinConditions);
+        
+        relBuilder.join(JoinRelType.LEFT, combinedCondition);
+        return relBuilder.build();
+    }
+
+    /**
      * 构建关系表模式的 JOIN（通过中间表，两次 JOIN）
      * 例如：车辆 JOIN vehicle_media JOIN 通行介质（从 source 查询）
      * 或：通行介质 JOIN vehicle_media JOIN 车辆（从 target 查询）
@@ -618,6 +947,14 @@ public class RelNodeBuilder {
                                           DataSourceMapping linkMapping,
                                           DataSourceMapping targetMapping,
                                           boolean isFromSource) throws Exception {
+        // 检查是否有 transformation_mappings 配置
+        if (linkType != null && linkType.hasTransformationMappings()) {
+            // 对于关系表模式，transformation_mappings 主要用于构建额外的 JOIN 条件
+            // 基本的关系表 JOIN 逻辑仍然保留
+            System.out.println("[buildRelationTableJoin] Link type has transformation_mappings, " +
+                "will apply additional conditions after basic join");
+        }
+        
         // 扫描中间表（例如：vehicle_media）
         String linkTableName = linkMapping.getTable();
         RelNode linkTableScan = buildTableScan(linkTableName);
@@ -1589,6 +1926,651 @@ public class RelNodeBuilder {
     }
     
     /**
+     * 解析 join_condition SQL 表达式并转换为 RexNode
+     * 支持：等值条件、AND/OR 组合、函数调用、IN 子查询
+     * 
+     * @param joinConditionSql JOIN 条件的 SQL 表达式
+     * @param leftInput 左表 RelNode
+     * @param rightInput 右表 RelNode
+     * @param sourceObjectType 源对象类型
+     * @param targetObjectType 目标对象类型
+     * @param sourceMapping 源对象的数据源映射
+     * @param targetMapping 目标对象的数据源映射
+     * @return 解析后的 RexNode，如果解析失败返回 null
+     */
+    private RexNode parseJoinCondition(String joinConditionSql, RelNode leftInput, RelNode rightInput,
+                                       ObjectType sourceObjectType, ObjectType targetObjectType,
+                                       DataSourceMapping sourceMapping, DataSourceMapping targetMapping) {
+        try {
+            RelDataType leftRowType = leftInput.getRowType();
+            RelDataType rightRowType = rightInput.getRowType();
+            RexBuilder rexBuilder = relBuilder.getRexBuilder();
+            
+            // 递归解析条件表达式（支持 AND/OR 嵌套）
+            return parseConditionExpression(joinConditionSql.trim(), leftInput, rightInput,
+                                          sourceObjectType, targetObjectType,
+                                          sourceMapping, targetMapping);
+                
+        } catch (Exception e) {
+            System.err.println("[parseJoinCondition] Error parsing join condition: " + e.getMessage());
+            e.printStackTrace();
+            return null;
+        }
+    }
+    
+    /**
+     * 递归解析条件表达式（支持 AND/OR 嵌套）
+     */
+    private RexNode parseConditionExpression(String expr, RelNode leftInput, RelNode rightInput,
+                                            ObjectType sourceObjectType, ObjectType targetObjectType,
+                                            DataSourceMapping sourceMapping, DataSourceMapping targetMapping) {
+        RexBuilder rexBuilder = relBuilder.getRexBuilder();
+        expr = expr.trim();
+        
+        // 移除外层括号
+        while (expr.startsWith("(") && expr.endsWith(")") && 
+               isBalanced(expr.substring(1, expr.length() - 1))) {
+            expr = expr.substring(1, expr.length() - 1).trim();
+        }
+        
+        // 1. 检查是否有顶层 AND
+        int andPos = findTopLevelOperator(expr, "AND");
+        if (andPos > 0) {
+            String leftPart = expr.substring(0, andPos).trim();
+            String rightPart = expr.substring(andPos + 3).trim();
+            RexNode leftNode = parseConditionExpression(leftPart, leftInput, rightInput,
+                                                       sourceObjectType, targetObjectType,
+                                                       sourceMapping, targetMapping);
+            RexNode rightNode = parseConditionExpression(rightPart, leftInput, rightInput,
+                                                        sourceObjectType, targetObjectType,
+                                                        sourceMapping, targetMapping);
+            if (leftNode != null && rightNode != null) {
+                return rexBuilder.makeCall(org.apache.calcite.sql.fun.SqlStdOperatorTable.AND, 
+                                         leftNode, rightNode);
+            }
+        }
+        
+        // 2. 检查是否有顶层 OR
+        int orPos = findTopLevelOperator(expr, "OR");
+        if (orPos > 0) {
+            String leftPart = expr.substring(0, orPos).trim();
+            String rightPart = expr.substring(orPos + 2).trim();
+            RexNode leftNode = parseConditionExpression(leftPart, leftInput, rightInput,
+                                                       sourceObjectType, targetObjectType,
+                                                       sourceMapping, targetMapping);
+            RexNode rightNode = parseConditionExpression(rightPart, leftInput, rightInput,
+                                                        sourceObjectType, targetObjectType,
+                                                        sourceMapping, targetMapping);
+            if (leftNode != null && rightNode != null) {
+                return rexBuilder.makeCall(org.apache.calcite.sql.fun.SqlStdOperatorTable.OR, 
+                                         leftNode, rightNode);
+            }
+        }
+        
+        // 3. 处理单个条件
+        return parseSingleCondition(expr, leftInput, rightInput,
+                                   sourceObjectType, targetObjectType,
+                                   sourceMapping, targetMapping);
+    }
+    
+    /**
+     * 解析单个条件（不包含 AND/OR）
+     */
+    private RexNode parseSingleCondition(String expr, RelNode leftInput, RelNode rightInput,
+                                        ObjectType sourceObjectType, ObjectType targetObjectType,
+                                        DataSourceMapping sourceMapping, DataSourceMapping targetMapping) {
+        RexBuilder rexBuilder = relBuilder.getRexBuilder();
+        expr = expr.trim();
+        
+        // 移除外层括号
+        while (expr.startsWith("(") && expr.endsWith(")") && 
+               isBalanced(expr.substring(1, expr.length() - 1))) {
+            expr = expr.substring(1, expr.length() - 1).trim();
+        }
+        
+        // 1. 处理等值条件：left = right
+        if (expr.contains("=") && !expr.toUpperCase().contains(" IN ") && 
+            !expr.toUpperCase().contains("EXISTS")) {
+            int eqPos = findOperatorPosition(expr, "=");
+            if (eqPos > 0) {
+                String leftExpr = expr.substring(0, eqPos).trim();
+                String rightExpr = expr.substring(eqPos + 1).trim();
+                
+                RexNode leftNode = parseExpression(leftExpr, leftInput, rightInput,
+                                                  sourceObjectType, targetObjectType,
+                                                  sourceMapping, targetMapping);
+                RexNode rightNode = parseExpression(rightExpr, leftInput, rightInput,
+                                                   sourceObjectType, targetObjectType,
+                                                   sourceMapping, targetMapping);
+                
+                if (leftNode != null && rightNode != null) {
+                    return rexBuilder.makeCall(org.apache.calcite.sql.fun.SqlStdOperatorTable.EQUALS,
+                                             leftNode, rightNode);
+                }
+            }
+        }
+        
+        // 2. 处理 EXISTS 子查询：EXISTS (SELECT ...)
+        if (expr.toUpperCase().trim().startsWith("EXISTS")) {
+            String subqueryExpr = expr.substring(6).trim();
+            // 移除括号
+            if (subqueryExpr.startsWith("(") && subqueryExpr.endsWith(")")) {
+                subqueryExpr = subqueryExpr.substring(1, subqueryExpr.length() - 1).trim();
+            }
+            
+            if (subqueryExpr.toUpperCase().startsWith("SELECT")) {
+                try {
+                    RelNode subqueryRelNode = buildSubqueryRelNode(subqueryExpr);
+                    if (subqueryRelNode != null) {
+                        return rexBuilder.makeCall(
+                            org.apache.calcite.sql.fun.SqlStdOperatorTable.EXISTS,
+                            RexSubQuery.scalar(subqueryRelNode)
+                        );
+                    }
+                } catch (Exception e) {
+                    System.err.println("[parseSingleCondition] Error building EXISTS subquery: " + e.getMessage());
+                    e.printStackTrace();
+                }
+            }
+        }
+        
+        // 3. 处理 IN 子查询：field IN (SELECT ...)
+        if (expr.toUpperCase().contains(" IN ")) {
+            int inPos = findOperatorPosition(expr.toUpperCase(), " IN ");
+            if (inPos > 0) {
+                String fieldExpr = expr.substring(0, inPos).trim();
+                String subqueryExpr = expr.substring(inPos + 4).trim();
+                
+                // 移除括号
+                if (subqueryExpr.startsWith("(") && subqueryExpr.endsWith(")")) {
+                    subqueryExpr = subqueryExpr.substring(1, subqueryExpr.length() - 1).trim();
+                }
+                
+                RexNode fieldNode = parseExpression(fieldExpr, leftInput, rightInput,
+                                                   sourceObjectType, targetObjectType,
+                                                   sourceMapping, targetMapping);
+                
+                if (fieldNode != null && subqueryExpr.toUpperCase().startsWith("SELECT")) {
+                    try {
+                        RelNode subqueryRelNode = buildSubqueryRelNode(subqueryExpr);
+                        if (subqueryRelNode != null) {
+                            return rexBuilder.makeCall(
+                                org.apache.calcite.sql.fun.SqlStdOperatorTable.IN,
+                                fieldNode,
+                                RexSubQuery.scalar(subqueryRelNode)
+                            );
+                        }
+                    } catch (Exception e) {
+                        System.err.println("[parseSingleCondition] Error building IN subquery: " + e.getMessage());
+                        e.printStackTrace();
+                        // 如果解析失败，记录日志但继续使用其他条件
+                        System.out.println("[parseSingleCondition] Failed to parse IN subquery, will try other conditions");
+                    }
+                }
+            }
+        }
+        
+        // 4. 处理其他比较运算符：>, <, >=, <=, !=
+        String[] operators = {">=", "<=", "!=", "<>", ">", "<"};
+        for (String op : operators) {
+            int opPos = findOperatorPosition(expr, op);
+            if (opPos > 0) {
+                String leftExpr = expr.substring(0, opPos).trim();
+                String rightExpr = expr.substring(opPos + op.length()).trim();
+                
+                RexNode leftNode = parseExpression(leftExpr, leftInput, rightInput,
+                                                  sourceObjectType, targetObjectType,
+                                                  sourceMapping, targetMapping);
+                RexNode rightNode = parseExpression(rightExpr, leftInput, rightInput,
+                                                   sourceObjectType, targetObjectType,
+                                                   sourceMapping, targetMapping);
+                
+                if (leftNode != null && rightNode != null) {
+                    org.apache.calcite.sql.SqlOperator sqlOp;
+                    switch (op) {
+                        case ">": sqlOp = org.apache.calcite.sql.fun.SqlStdOperatorTable.GREATER_THAN; break;
+                        case "<": sqlOp = org.apache.calcite.sql.fun.SqlStdOperatorTable.LESS_THAN; break;
+                        case ">=": sqlOp = org.apache.calcite.sql.fun.SqlStdOperatorTable.GREATER_THAN_OR_EQUAL; break;
+                        case "<=": sqlOp = org.apache.calcite.sql.fun.SqlStdOperatorTable.LESS_THAN_OR_EQUAL; break;
+                        case "!=":
+                        case "<>": sqlOp = org.apache.calcite.sql.fun.SqlStdOperatorTable.NOT_EQUALS; break;
+                        default: return null;
+                    }
+                    return rexBuilder.makeCall(sqlOp, leftNode, rightNode);
+                }
+            }
+        }
+        
+        System.out.println("[parseSingleCondition] Unsupported condition: " + expr);
+        return null;
+    }
+    
+    /**
+     * 解析表达式（字段引用、函数调用、字面量等）
+     */
+    private RexNode parseExpression(String expr, RelNode leftInput, RelNode rightInput,
+                                    ObjectType sourceObjectType, ObjectType targetObjectType,
+                                    DataSourceMapping sourceMapping, DataSourceMapping targetMapping) {
+        expr = expr.trim();
+        
+        // 移除引号
+        expr = expr.replaceAll("^[\"`']|[\"`']$", "");
+        
+        // 1. 处理函数调用（如 LENGTH(field), SUBSTR(field, 1, 2)）
+        if (expr.contains("(") && expr.contains(")")) {
+            return parseFunctionCall(expr, leftInput, rightInput,
+                                   sourceObjectType, targetObjectType,
+                                   sourceMapping, targetMapping);
+        }
+        
+        // 2. 处理字段引用
+        RexNode fieldRef = parseFieldReference(expr, leftInput, rightInput,
+                                              sourceObjectType, targetObjectType,
+                                              sourceMapping, targetMapping);
+        if (fieldRef != null) {
+            return fieldRef;
+        }
+        
+        // 3. 处理字面量（数字、字符串）
+        return parseLiteral(expr);
+    }
+    
+    /**
+     * 解析函数调用（如 LENGTH(field), SUBSTR(field, 1, 2)）
+     */
+    private RexNode parseFunctionCall(String expr, RelNode leftInput, RelNode rightInput,
+                                     ObjectType sourceObjectType, ObjectType targetObjectType,
+                                     DataSourceMapping sourceMapping, DataSourceMapping targetMapping) {
+        RexBuilder rexBuilder = relBuilder.getRexBuilder();
+        
+        // 提取函数名和参数
+        int openParen = expr.indexOf('(');
+        if (openParen < 0) return null;
+        
+        String funcName = expr.substring(0, openParen).trim().toUpperCase();
+        String argsStr = expr.substring(openParen + 1, expr.lastIndexOf(')')).trim();
+        
+        // 解析参数列表
+        List<String> args = parseFunctionArguments(argsStr);
+        List<RexNode> rexArgs = new ArrayList<>();
+        
+        for (String arg : args) {
+            RexNode argNode = parseExpression(arg.trim(), leftInput, rightInput,
+                                            sourceObjectType, targetObjectType,
+                                            sourceMapping, targetMapping);
+            if (argNode != null) {
+                rexArgs.add(argNode);
+            } else {
+                // 如果参数解析失败，尝试作为字面量
+                RexNode literal = parseLiteral(arg.trim());
+                if (literal != null) {
+                    rexArgs.add(literal);
+                } else {
+                    return null; // 参数解析失败
+                }
+            }
+        }
+        
+        // 根据函数名创建对应的 RexCall
+        org.apache.calcite.sql.SqlOperator sqlOp = null;
+        switch (funcName) {
+            // 字符串函数
+            case "LENGTH":
+            case "CHAR_LENGTH":
+                sqlOp = org.apache.calcite.sql.fun.SqlStdOperatorTable.CHAR_LENGTH;
+                break;
+            case "SUBSTR":
+            case "SUBSTRING":
+                sqlOp = org.apache.calcite.sql.fun.SqlStdOperatorTable.SUBSTRING;
+                break;
+            case "CONCAT":
+                sqlOp = org.apache.calcite.sql.fun.SqlStdOperatorTable.CONCAT;
+                break;
+            case "UPPER":
+                sqlOp = org.apache.calcite.sql.fun.SqlStdOperatorTable.UPPER;
+                break;
+            case "LOWER":
+                sqlOp = org.apache.calcite.sql.fun.SqlStdOperatorTable.LOWER;
+                break;
+            case "TRIM":
+                sqlOp = org.apache.calcite.sql.fun.SqlStdOperatorTable.TRIM;
+                break;
+            case "REPLACE":
+                sqlOp = org.apache.calcite.sql.fun.SqlStdOperatorTable.REPLACE;
+                break;
+            case "LEFT":
+                // LEFT(str, n) 等价于 SUBSTRING(str, 1, n)
+                if (rexArgs.size() == 2) {
+                    // 创建 SUBSTRING(str, 1, n)
+                    RexNode startPos = rexBuilder.makeLiteral(1L, relBuilder.getTypeFactory().createSqlType(SqlTypeName.BIGINT), false);
+                    List<RexNode> substrArgs = new ArrayList<>();
+                    substrArgs.add(rexArgs.get(0)); // str
+                    substrArgs.add(startPos); // start position
+                    substrArgs.add(rexArgs.get(1)); // length
+                    return rexBuilder.makeCall(org.apache.calcite.sql.fun.SqlStdOperatorTable.SUBSTRING, substrArgs);
+                }
+                return null;
+            case "RIGHT":
+                // RIGHT(str, n) 等价于 SUBSTRING(str, LENGTH(str) - n + 1, n)
+                if (rexArgs.size() == 2) {
+                    // 计算 LENGTH(str) - n + 1
+                    RexNode lengthCall = rexBuilder.makeCall(
+                        org.apache.calcite.sql.fun.SqlStdOperatorTable.CHAR_LENGTH,
+                        rexArgs.get(0)
+                    );
+                    RexNode one = rexBuilder.makeLiteral(1L, relBuilder.getTypeFactory().createSqlType(SqlTypeName.BIGINT), false);
+                    RexNode startPos = rexBuilder.makeCall(
+                        org.apache.calcite.sql.fun.SqlStdOperatorTable.MINUS,
+                        rexBuilder.makeCall(
+                            org.apache.calcite.sql.fun.SqlStdOperatorTable.MINUS,
+                            lengthCall,
+                            rexArgs.get(1)
+                        ),
+                        one
+                    );
+                    List<RexNode> substrArgs = new ArrayList<>();
+                    substrArgs.add(rexArgs.get(0)); // str
+                    substrArgs.add(startPos); // start position
+                    substrArgs.add(rexArgs.get(1)); // length
+                    return rexBuilder.makeCall(org.apache.calcite.sql.fun.SqlStdOperatorTable.SUBSTRING, substrArgs);
+                }
+                return null;
+            // 数学函数
+            case "ABS":
+                sqlOp = org.apache.calcite.sql.fun.SqlStdOperatorTable.ABS;
+                break;
+            case "ROUND":
+                sqlOp = org.apache.calcite.sql.fun.SqlStdOperatorTable.ROUND;
+                break;
+            case "FLOOR":
+                sqlOp = org.apache.calcite.sql.fun.SqlStdOperatorTable.FLOOR;
+                break;
+            case "CEIL":
+            case "CEILING":
+                sqlOp = org.apache.calcite.sql.fun.SqlStdOperatorTable.CEIL;
+                break;
+            // 日期函数
+            case "DATE":
+                // DATE(expr) - 提取日期部分 - 使用 CAST AS DATE
+                if (rexArgs.size() == 1) {
+                    RelDataType dateType = rexBuilder.getTypeFactory().createSqlType(SqlTypeName.DATE);
+                    return rexBuilder.makeCast(dateType, rexArgs.get(0));
+                }
+                return null;
+            case "YEAR":
+                // YEAR(expr) - 提取年份
+                if (rexArgs.size() == 1) {
+                    // 使用 EXTRACT(YEAR FROM expr)
+                    RexNode yearFlag = rexBuilder.makeFlag(TimeUnit.YEAR);
+                    return rexBuilder.makeCall(
+                        org.apache.calcite.sql.fun.SqlStdOperatorTable.EXTRACT,
+                        yearFlag,
+                        rexArgs.get(0)
+                    );
+                }
+                return null;
+            case "MONTH":
+                // MONTH(expr) - 提取月份
+                if (rexArgs.size() == 1) {
+                    // 使用 EXTRACT(MONTH FROM expr)
+                    RexNode monthFlag = rexBuilder.makeFlag(TimeUnit.MONTH);
+                    return rexBuilder.makeCall(
+                        org.apache.calcite.sql.fun.SqlStdOperatorTable.EXTRACT,
+                        monthFlag,
+                        rexArgs.get(0)
+                    );
+                }
+                return null;
+            case "DAY":
+            case "DAYOFMONTH":
+                // DAY(expr) - 提取日期
+                if (rexArgs.size() == 1) {
+                    // 使用 EXTRACT(DAY FROM expr)
+                    RexNode dayFlag = rexBuilder.makeFlag(TimeUnit.DAY);
+                    return rexBuilder.makeCall(
+                        org.apache.calcite.sql.fun.SqlStdOperatorTable.EXTRACT,
+                        dayFlag,
+                        rexArgs.get(0)
+                    );
+                }
+                return null;
+            default:
+                System.out.println("[parseFunctionCall] Unsupported function: " + funcName);
+                return null;
+        }
+        
+        if (sqlOp != null && !rexArgs.isEmpty()) {
+            return rexBuilder.makeCall(sqlOp, rexArgs);
+        }
+        
+        return null;
+    }
+    
+    /**
+     * 解析函数参数列表（处理嵌套括号和逗号）
+     */
+    private List<String> parseFunctionArguments(String argsStr) {
+        List<String> args = new ArrayList<>();
+        int depth = 0;
+        int start = 0;
+        
+        for (int i = 0; i < argsStr.length(); i++) {
+            char c = argsStr.charAt(i);
+            if (c == '(') depth++;
+            else if (c == ')') depth--;
+            else if (c == ',' && depth == 0) {
+                args.add(argsStr.substring(start, i).trim());
+                start = i + 1;
+            }
+        }
+        if (start < argsStr.length()) {
+            args.add(argsStr.substring(start).trim());
+        }
+        
+        return args;
+    }
+    
+    /**
+     * 解析字面量（数字、字符串）
+     */
+    private RexNode parseLiteral(String expr) {
+        RexBuilder rexBuilder = relBuilder.getRexBuilder();
+        expr = expr.trim();
+        
+        // 移除引号
+        String unquoted = expr.replaceAll("^[\"`']|[\"`']$", "");
+        
+        // 尝试解析为数字
+        try {
+            if (unquoted.matches("^-?\\d+$")) {
+                // 整数
+                return rexBuilder.makeLiteral(
+                    Long.parseLong(unquoted),
+                    relBuilder.getTypeFactory().createSqlType(SqlTypeName.BIGINT),
+                    false
+                );
+            } else if (unquoted.matches("^-?\\d+\\.\\d+$")) {
+                // 浮点数
+                return rexBuilder.makeLiteral(
+                    Double.parseDouble(unquoted),
+                    relBuilder.getTypeFactory().createSqlType(SqlTypeName.DOUBLE),
+                    false
+                );
+            }
+        } catch (NumberFormatException e) {
+            // 不是数字，继续处理字符串
+        }
+        
+        // 字符串字面量
+        if (!unquoted.equals(expr)) {
+            // 有引号，是字符串
+            return rexBuilder.makeLiteral(
+                unquoted,
+                relBuilder.getTypeFactory().createSqlType(SqlTypeName.VARCHAR),
+                false
+            );
+        }
+        
+        return null;
+    }
+    
+    /**
+     * 查找顶层操作符的位置（不在括号内）
+     */
+    private int findTopLevelOperator(String expr, String operator) {
+        int depth = 0;
+        String upperExpr = expr.toUpperCase();
+        String upperOp = operator.toUpperCase();
+        
+        for (int i = 0; i < upperExpr.length() - upperOp.length() + 1; i++) {
+            char c = upperExpr.charAt(i);
+            if (c == '(') depth++;
+            else if (c == ')') depth--;
+            else if (depth == 0 && upperExpr.substring(i).startsWith(upperOp)) {
+                // 检查前后是否是单词边界
+                if ((i == 0 || !Character.isLetterOrDigit(upperExpr.charAt(i - 1))) &&
+                    (i + upperOp.length() >= upperExpr.length() || 
+                     !Character.isLetterOrDigit(upperExpr.charAt(i + upperOp.length())))) {
+                    return i;
+                }
+            }
+        }
+        return -1;
+    }
+    
+    /**
+     * 查找操作符位置（考虑括号）
+     */
+    private int findOperatorPosition(String expr, String operator) {
+        int depth = 0;
+        String upperExpr = expr.toUpperCase();
+        String upperOp = operator.toUpperCase();
+        
+        for (int i = 0; i < upperExpr.length() - upperOp.length() + 1; i++) {
+            char c = upperExpr.charAt(i);
+            if (c == '(') depth++;
+            else if (c == ')') depth--;
+            else if (depth == 0 && upperExpr.substring(i).startsWith(upperOp)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+    
+    /**
+     * 检查括号是否平衡
+     */
+    private boolean isBalanced(String expr) {
+        int depth = 0;
+        for (char c : expr.toCharArray()) {
+            if (c == '(') depth++;
+            else if (c == ')') {
+                depth--;
+                if (depth < 0) return false;
+            }
+        }
+        return depth == 0;
+    }
+    
+    /**
+     * 解析字段引用（如 table.field 或 field）
+     * 
+     * @param fieldExpr 字段表达式（可能包含表名前缀）
+     * @param leftInput 左表 RelNode
+     * @param rightInput 右表 RelNode
+     * @param sourceObjectType 源对象类型
+     * @param targetObjectType 目标对象类型
+     * @param sourceMapping 源对象的数据源映射
+     * @param targetMapping 目标对象的数据源映射
+     * @return 对应的 RexInputRef，如果找不到返回 null
+     */
+    private RexNode parseFieldReference(String fieldExpr, RelNode leftInput, RelNode rightInput,
+                                       ObjectType sourceObjectType, ObjectType targetObjectType,
+                                       DataSourceMapping sourceMapping, DataSourceMapping targetMapping) {
+        fieldExpr = fieldExpr.trim();
+        
+        // 移除可能的引号
+        fieldExpr = fieldExpr.replaceAll("^[\"`']|[\"`']$", "");
+        
+        RelDataType leftRowType = leftInput.getRowType();
+        RelDataType rightRowType = rightInput.getRowType();
+        RexBuilder rexBuilder = relBuilder.getRexBuilder();
+        
+        // 检查是否包含表名前缀（如 table.field）
+        if (fieldExpr.contains(".")) {
+            String[] parts = fieldExpr.split("\\.", 2);
+            String tableName = parts[0].trim().toLowerCase();
+            String fieldName = parts[1].trim();
+            
+            // 移除可能的引号
+            tableName = tableName.replaceAll("^[\"`']|[\"`']$", "");
+            fieldName = fieldName.replaceAll("^[\"`']|[\"`']$", "");
+            
+            // 判断是左表还是右表
+            String sourceTableName = sourceMapping.getTable().toLowerCase();
+            String targetTableName = targetMapping.getTable().toLowerCase();
+            
+            // 尝试匹配表名（支持部分匹配，如 v_split_data_sub 匹配 VSplitDataSub）
+            if (tableName.contains(sourceTableName) || sourceTableName.contains(tableName) ||
+                tableName.equals(sourceObjectType.getName().toLowerCase())) {
+                // 左表
+                int fieldIndex = findFieldIndexInRowType(fieldName, leftRowType);
+                if (fieldIndex < 0) {
+                    // 尝试通过列名查找
+                    String columnName = sourceMapping.getColumnName(fieldName);
+                    if (columnName != null) {
+                        fieldIndex = findFieldIndexInRowType(columnName, leftRowType);
+                    }
+                }
+                if (fieldIndex >= 0) {
+                    return rexBuilder.makeInputRef(
+                        leftRowType.getFieldList().get(fieldIndex).getType(),
+                        fieldIndex
+                    );
+                }
+            } else if (tableName.contains(targetTableName) || targetTableName.contains(tableName) ||
+                       tableName.equals(targetObjectType.getName().toLowerCase())) {
+                // 右表
+                int fieldIndex = findFieldIndexInRowType(fieldName, rightRowType);
+                if (fieldIndex < 0) {
+                    // 尝试通过列名查找
+                    String columnName = targetMapping.getColumnName(fieldName);
+                    if (columnName != null) {
+                        fieldIndex = findFieldIndexInRowType(columnName, rightRowType);
+                    }
+                }
+                if (fieldIndex >= 0) {
+                    return rexBuilder.makeInputRef(
+                        rightRowType.getFieldList().get(fieldIndex).getType(),
+                        leftRowType.getFieldCount() + fieldIndex
+                    );
+                }
+            }
+        } else {
+            // 没有表名前缀，尝试在两个表中查找
+            // 先尝试左表
+            int fieldIndex = findFieldIndexInRowType(fieldExpr, leftRowType);
+            if (fieldIndex >= 0) {
+                return rexBuilder.makeInputRef(
+                    leftRowType.getFieldList().get(fieldIndex).getType(),
+                    fieldIndex
+                );
+            }
+            
+            // 再尝试右表
+            fieldIndex = findFieldIndexInRowType(fieldExpr, rightRowType);
+            if (fieldIndex >= 0) {
+                return rexBuilder.makeInputRef(
+                    rightRowType.getFieldList().get(fieldIndex).getType(),
+                    leftRowType.getFieldCount() + fieldIndex
+                );
+            }
+        }
+        
+        return null;
+    }
+    
+    /**
      * 关闭资源
      */
     public void close() throws SQLException {
@@ -1609,6 +2591,111 @@ public class RelNodeBuilder {
                "mapping".equals(objectTypeName) ||
                "AtomicMetric".equals(objectTypeName) ||
                "MetricDefinition".equals(objectTypeName);
+    }
+    
+    /**
+     * 构建子查询 RelNode
+     * 使用 Calcite 的 SQL 解析器将 SQL 字符串转换为 RelNode
+     * 
+     * @param subquerySql 子查询 SQL 字符串
+     * @return 子查询的 RelNode，如果解析失败返回 null
+     */
+    private RelNode buildSubqueryRelNode(String subquerySql) throws Exception {
+        if (rootSchema == null) {
+            initialize();
+        }
+        
+        try {
+            // 使用 Calcite 的 SQL 解析器解析 SQL
+            SqlParser.Config parserConfig = SqlParser.config()
+                .withCaseSensitive(false)
+                .withQuotedCasing(Casing.UNCHANGED)
+                .withUnquotedCasing(Casing.TO_UPPER);
+            
+            SqlParser parser = SqlParser.create(subquerySql, parserConfig);
+            SqlNode sqlNode = parser.parseQuery();
+            
+            // 创建 CatalogReader
+            RelDataTypeFactory typeFactory = relBuilder.getTypeFactory();
+            
+            // 创建 CalciteConnectionConfig
+            java.util.Properties configProperties = new java.util.Properties();
+            configProperties.setProperty(CalciteConnectionProperty.CASE_SENSITIVE.camelName(), "false");
+            CalciteConnectionConfig connectionConfig = new CalciteConnectionConfigImpl(configProperties);
+            
+            CalciteCatalogReader catalogReader = new CalciteCatalogReader(
+                CalciteSchema.from(rootSchema),
+                CalciteSchema.from(rootSchema).path(null),
+                typeFactory,
+                connectionConfig
+            );
+            
+            // #region agent log
+            try {
+                java.nio.file.Files.write(java.nio.file.Paths.get("c:\\Users\\leon\\Downloads\\mypalantir-gs\\.cursor\\debug.log"),
+                    ("{\"location\":\"RelNodeBuilder.java:2633\",\"message\":\"Before SqlValidator creation\",\"data\":{\"operatorTable\":\"" + frameworkConfig.getOperatorTable().getClass().getName() + "\",\"catalogReader\":\"" + catalogReader.getClass().getName() + "\",\"typeFactory\":\"" + typeFactory.getClass().getName() + "\"},\"timestamp\":" + System.currentTimeMillis() + ",\"sessionId\":\"debug-session\",\"runId\":\"pre-fix\",\"hypothesisId\":\"A\"}\n").getBytes(),
+                    java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.APPEND);
+            } catch (Exception e) {}
+            // #endregion
+            
+            // 创建 SqlValidator - 使用 SqlValidatorUtil.newValidator 而不是 SqlValidatorImpl
+            // 根据 Calcite 1.37.0 文档，应该使用 SqlValidatorUtil.newValidator
+            SqlValidator validator = SqlValidatorUtil.newValidator(
+                frameworkConfig.getOperatorTable(),
+                catalogReader,
+                typeFactory,
+                SqlValidator.Config.DEFAULT.withIdentifierExpansion(true)
+            );
+            
+            // #region agent log
+            try {
+                java.nio.file.Files.write(java.nio.file.Paths.get("c:\\Users\\leon\\Downloads\\mypalantir-gs\\.cursor\\debug.log"),
+                    ("{\"location\":\"RelNodeBuilder.java:2651\",\"message\":\"After SqlValidator creation\",\"data\":{\"validatorClass\":\"" + validator.getClass().getName() + "\",\"success\":true},\"timestamp\":" + System.currentTimeMillis() + ",\"sessionId\":\"debug-session\",\"runId\":\"pre-fix\",\"hypothesisId\":\"A\"}\n").getBytes(),
+                    java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.APPEND);
+            } catch (Exception e) {}
+            // #endregion
+            
+            // 验证 SQL
+            // #region agent log
+            try {
+                java.nio.file.Files.write(java.nio.file.Paths.get("c:\\Users\\leon\\Downloads\\mypalantir-gs\\.cursor\\debug.log"),
+                    ("{\"location\":\"RelNodeBuilder.java:2658\",\"message\":\"Before SQL validation\",\"data\":{\"sqlNode\":\"" + sqlNode.toString().replace("\"", "'") + "\"},\"timestamp\":" + System.currentTimeMillis() + ",\"sessionId\":\"debug-session\",\"runId\":\"pre-fix\",\"hypothesisId\":\"B\"}\n").getBytes(),
+                    java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.APPEND);
+            } catch (Exception e) {}
+            // #endregion
+            
+            SqlNode validatedNode = validator.validate(sqlNode);
+            
+            // #region agent log
+            try {
+                java.nio.file.Files.write(java.nio.file.Paths.get("c:\\Users\\leon\\Downloads\\mypalantir-gs\\.cursor\\debug.log"),
+                    ("{\"location\":\"RelNodeBuilder.java:2672\",\"message\":\"After SQL validation\",\"data\":{\"validatedNode\":\"" + validatedNode.toString().replace("\"", "'") + "\",\"success\":true},\"timestamp\":" + System.currentTimeMillis() + ",\"sessionId\":\"debug-session\",\"runId\":\"pre-fix\",\"hypothesisId\":\"B\"}\n").getBytes(),
+                    java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.APPEND);
+            } catch (Exception e) {}
+            // #endregion
+            
+            // 转换为 RelNode
+            SqlToRelConverter.Config converterConfig = SqlToRelConverter.config()
+                .withTrimUnusedFields(false)
+                .withExpand(false);
+            
+            SqlToRelConverter converter = new SqlToRelConverter(
+                null,  // RelOptTable.ViewExpander - not needed for basic queries
+                validator,
+                catalogReader,
+                relBuilder.getCluster(),
+                frameworkConfig.getConvertletTable(),
+                converterConfig
+            );
+            
+            RelNode relNode = converter.convertQuery(validatedNode, false, true).rel;
+            return relNode;
+            
+        } catch (Exception e) {
+            System.err.println("[buildSubqueryRelNode] Error parsing subquery SQL: " + subquerySql);
+            System.err.println("[buildSubqueryRelNode] Error: " + e.getMessage());
+            throw e;
+        }
     }
 }
 
