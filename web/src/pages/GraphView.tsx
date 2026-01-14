@@ -98,6 +98,11 @@ export default function GraphView() {
   
   // 类型折叠状态（用于分层视图）
   const [collapsedTypes, setCollapsedTypes] = useState<Set<string>>(new Set());
+  // 默认类型展开状态（用于分层视图）
+  const [defaultTypeExpanded, setDefaultTypeExpanded] = useState<boolean>(() => {
+    const saved = localStorage.getItem('graphView_defaultTypeExpanded');
+    return saved !== null ? saved === 'true' : true; // 默认展开
+  });
   
   // 图例折叠状态
   const [isLegendCollapsed, setIsLegendCollapsed] = useState(false);
@@ -198,10 +203,32 @@ export default function GraphView() {
     // 鼠标滚轮缩放
     const handleWheel = (e: WheelEvent) => {
       const target = e.target as HTMLElement;
-      if (target?.tagName === 'CANVAS' || container.contains(target)) {
-        e.preventDefault();
-        const delta = e.deltaY > 0 ? 0.9 : 1.1;
-        setFullscreenZoom(prev => Math.max(0.1, Math.min(5, prev * delta)));
+      // 检查目标是否是 canvas 或在容器内，或者检查鼠标位置是否在容器内
+      const isCanvas = target?.tagName === 'CANVAS';
+      const isInContainer = container.contains(target);
+      const rect = container.getBoundingClientRect();
+      const isMouseInContainer = 
+        e.clientX >= rect.left && 
+        e.clientX <= rect.right && 
+        e.clientY >= rect.top && 
+        e.clientY <= rect.bottom;
+      
+      // 如果目标在容器内或者是 canvas，或者鼠标位置在容器内，则处理缩放
+      if (isCanvas || isInContainer || isMouseInContainer) {
+        // 排除输入框、按钮等交互元素
+        const isInteractiveElement = 
+          target?.tagName === 'INPUT' || 
+          target?.tagName === 'TEXTAREA' || 
+          target?.tagName === 'BUTTON' ||
+          target?.tagName === 'SELECT' ||
+          target?.contentEditable === 'true' ||
+          target?.closest('input, textarea, button, select, [contenteditable="true"]');
+        
+        if (!isInteractiveElement) {
+          e.preventDefault();
+          const delta = e.deltaY > 0 ? 0.9 : 1.1;
+          setFullscreenZoom(prev => Math.max(0.1, Math.min(5, prev * delta)));
+        }
       }
     };
 
@@ -238,7 +265,9 @@ export default function GraphView() {
       }
     };
 
+    // 同时绑定到 container 和 document，确保全屏模式下能捕获所有滚动事件
     container.addEventListener('wheel', handleWheel, { passive: false });
+    document.addEventListener('wheel', handleWheel, { passive: false });
     const canvas = container.querySelector('canvas');
     if (canvas) {
       canvas.addEventListener('mousedown', handleMouseDown);
@@ -249,6 +278,7 @@ export default function GraphView() {
 
     return () => {
       container.removeEventListener('wheel', handleWheel);
+      document.removeEventListener('wheel', handleWheel);
       if (canvas) {
         canvas.removeEventListener('mousedown', handleMouseDown);
         canvas.removeEventListener('contextmenu', handleContextMenu);
@@ -417,6 +447,34 @@ export default function GraphView() {
       setMaxLinksPerType(isWorkspaceMode ? 10000 : 500);
     }
   }, [selectedWorkspace]);
+
+  // 根据默认展开状态初始化类型折叠状态（仅在分层视图模式下）
+  useEffect(() => {
+    if (viewMode !== 'hierarchical' || nodes.length === 0) return;
+    
+    const layers = calculateHierarchicalLayers();
+    const newCollapsedTypes = new Set<string>();
+    
+    // 如果默认不展开，则将所有类型添加到折叠集合
+    if (!defaultTypeExpanded) {
+      const uniqueTypes = new Set<string>();
+      nodes.forEach(node => {
+        const layer = layers.get(node.id) || 0;
+        const boxKey = `${layer}-${node.type}`;
+        if (!uniqueTypes.has(boxKey)) {
+          uniqueTypes.add(boxKey);
+          newCollapsedTypes.add(boxKey);
+        }
+      });
+    }
+    
+    // 只在初始状态或默认值改变时更新，避免覆盖用户手动操作
+    // 使用 ref 来跟踪是否是首次初始化
+    const isInitialLoad = collapsedTypes.size === 0;
+    if (isInitialLoad) {
+      setCollapsedTypes(newCollapsedTypes);
+    }
+  }, [viewMode, nodes.length, defaultTypeExpanded]);
 
   const loadGraphData = async () => {
     try {
@@ -1920,127 +1978,84 @@ export default function GraphView() {
         className="w-full h-full overflow-auto bg-gray-50" 
         ref={containerRef}
       >
-        <svg
-          ref={svgRef}
-          width={totalWidth}
-          height={totalHeight}
-          className="absolute top-0 left-0 pointer-events-none"
+        {/* 渲染类型框和连线 */}
+        <div 
+          className="relative" 
+          style={{ width: totalWidth, height: totalHeight }}
         >
-          {/* 绘制连接线 */}
-          {(() => {
-            // 按源类型框和目标类型框分组关系，用于归并
-            const linksByConnection = new Map<string, Array<{ link: GraphLink; sourceNode: GraphNode; targetNode: GraphNode }>>();
-            
-            links.forEach(link => {
-              const sourceNode = nodes.find(n => n.id === link.source);
-              const targetNode = nodes.find(n => n.id === link.target);
+          {/* SVG 连线层 - 放在类型框容器内，确保同步滚动 */}
+          <svg
+            ref={svgRef}
+            width={totalWidth}
+            height={totalHeight}
+            className="absolute top-0 left-0 pointer-events-none z-0"
+          >
+            {/* 绘制连接线 */}
+            {(() => {
+              // 按源类型框和目标类型框分组关系，用于归并
+              const linksByConnection = new Map<string, Array<{ link: GraphLink; sourceNode: GraphNode; targetNode: GraphNode }>>();
               
-              if (!sourceNode || !targetNode) return;
-              
-              const sourceLayer = layers.get(sourceNode.id) || 0;
-              const targetLayer = layers.get(targetNode.id) || 0;
-              const sourceBoxKey = `${sourceLayer}-${sourceNode.type}`;
-              const targetBoxKey = `${targetLayer}-${targetNode.type}`;
-              
-              const connectionKey = `${sourceBoxKey}->${targetBoxKey}:${link.type}`;
-              if (!linksByConnection.has(connectionKey)) {
-                linksByConnection.set(connectionKey, []);
-              }
-              linksByConnection.get(connectionKey)!.push({ link, sourceNode, targetNode });
-            });
-            
-            // 渲染归并后的关系线
-            const renderedLines: any[] = [];
-            
-            linksByConnection.forEach((linkGroup, connectionKey) => {
-              const [sourceBoxKey, rest] = connectionKey.split('->');
-              const [targetBoxKey, linkType] = rest.split(':');
-              
-              const sourceBox = typeBoxPositions.get(sourceBoxKey);
-              const targetBox = typeBoxPositions.get(targetBoxKey);
-              
-              if (!sourceBox || !targetBox) return;
-              
-              const isSourceCollapsed = collapsedTypes.has(sourceBoxKey);
-              const isTargetCollapsed = collapsedTypes.has(targetBoxKey);
-              
-              // 如果源或目标类型被折叠，归并关系线
-              if (isSourceCollapsed || isTargetCollapsed) {
-                // 归并：只显示一条线，从源类型框的右侧中间到目标类型框的左侧中间
-                const x1 = sourceBox.x + sourceBox.width;
-                const y1 = sourceBox.y + sourceBox.height / 2;
-                const x2 = targetBox.x;
-                const y2 = targetBox.y + targetBox.height / 2;
+              links.forEach(link => {
+                const sourceNode = nodes.find(n => n.id === link.source);
+                const targetNode = nodes.find(n => n.id === link.target);
                 
-                // 检查是否有高亮的关系
-                const hasHighlighted = linkGroup.some(({ link }) => 
-                  highlightedLinks.has(link.id) || reverseHighlightedLinks.has(link.id)
-                );
-                const linkColor = getLinkTypeColor(linkType);
+                if (!sourceNode || !targetNode) return;
                 
-                let strokeColor = linkColor;
-                let strokeWidth = Math.min(2 + linkGroup.length * 0.5, 6); // 根据关系数量调整线宽
-                if (hasHighlighted) {
-                  strokeColor = linkGroup.some(({ link }) => highlightedLinks.has(link.id)) 
-                    ? '#ef4444' 
-                    : '#3b82f6';
-                  strokeWidth = 4;
+                const sourceLayer = layers.get(sourceNode.id) || 0;
+                const targetLayer = layers.get(targetNode.id) || 0;
+                const sourceBoxKey = `${sourceLayer}-${sourceNode.type}`;
+                const targetBoxKey = `${targetLayer}-${targetNode.type}`;
+                
+                const connectionKey = `${sourceBoxKey}->${targetBoxKey}:${link.type}`;
+                if (!linksByConnection.has(connectionKey)) {
+                  linksByConnection.set(connectionKey, []);
                 }
+                linksByConnection.get(connectionKey)!.push({ link, sourceNode, targetNode });
+              });
+              
+              // 渲染归并后的关系线
+              const renderedLines: any[] = [];
+              
+              linksByConnection.forEach((linkGroup, connectionKey) => {
+                const [sourceBoxKey, rest] = connectionKey.split('->');
+                const [targetBoxKey, linkType] = rest.split(':');
                 
-                renderedLines.push(
-                  <line
-                    key={connectionKey}
-                    x1={x1}
-                    y1={y1}
-                    x2={x2}
-                    y2={y2}
-                    stroke={strokeColor}
-                    strokeWidth={strokeWidth}
-                    markerEnd="url(#arrowhead)"
-                    opacity={hasHighlighted ? 1 : 0.6}
-                    className={hasHighlighted ? 'transition-all duration-200' : ''}
-                  />
-                );
-              } else {
-                // 未折叠：显示所有单独的关系线
-                linkGroup.forEach(({ link, sourceNode, targetNode }) => {
-                  const sourceLayer = layers.get(sourceNode.id) || 0;
-                  const targetLayer = layers.get(targetNode.id) || 0;
-                  const sourceTypeNodes = nodesByLayerAndType.get(sourceLayer)?.get(sourceNode.type);
-                  const targetTypeNodes = nodesByLayerAndType.get(targetLayer)?.get(targetNode.type);
-                  
-                  if (!sourceTypeNodes || !targetTypeNodes) return;
-                  
-                  const sourceIndex = sourceTypeNodes.findIndex(n => n.id === sourceNode.id);
-                  const targetIndex = targetTypeNodes.findIndex(n => n.id === targetNode.id);
-                  
-                  if (sourceIndex === -1 || targetIndex === -1) return;
-
-                  const sourceY = sourceBox.y + 50 + sourceIndex * (nodeItemHeight + nodeItemSpacing) + nodeItemHeight / 2;
-                  const targetY = targetBox.y + 50 + targetIndex * (nodeItemHeight + nodeItemSpacing) + nodeItemHeight / 2;
-
+                const sourceBox = typeBoxPositions.get(sourceBoxKey);
+                const targetBox = typeBoxPositions.get(targetBoxKey);
+                
+                if (!sourceBox || !targetBox) return;
+                
+                const isSourceCollapsed = collapsedTypes.has(sourceBoxKey);
+                const isTargetCollapsed = collapsedTypes.has(targetBoxKey);
+                
+                // 如果源或目标类型被折叠，归并关系线
+                if (isSourceCollapsed || isTargetCollapsed) {
+                  // 归并：只显示一条线，从源类型框的右侧中间到目标类型框的左侧中间
+                  // typeBoxPositions 中已经存储了正确的高度（折叠时为50，展开时为实际高度）
+                  // 确保连线端点精确绑定到类型框的边缘中心点
                   const x1 = sourceBox.x + sourceBox.width;
-                  const y1 = sourceY;
+                  const y1 = sourceBox.y + sourceBox.height / 2;
                   const x2 = targetBox.x;
-                  const y2 = targetY;
-
-                  const isHighlighted = highlightedLinks.has(link.id);
-                  const isReverseHighlighted = reverseHighlightedLinks.has(link.id);
-                  const linkColor = getLinkTypeColor(link.type);
+                  const y2 = targetBox.y + targetBox.height / 2;
+                  
+                  // 检查是否有高亮的关系
+                  const hasHighlighted = linkGroup.some(({ link }) => 
+                    highlightedLinks.has(link.id) || reverseHighlightedLinks.has(link.id)
+                  );
+                  const linkColor = getLinkTypeColor(linkType);
                   
                   let strokeColor = linkColor;
-                  let strokeWidth = 2;
-                  if (isHighlighted) {
-                    strokeColor = '#ef4444';
-                    strokeWidth = 4;
-                  } else if (isReverseHighlighted) {
-                    strokeColor = '#3b82f6';
+                  let strokeWidth = Math.min(2 + linkGroup.length * 0.5, 6); // 根据关系数量调整线宽
+                  if (hasHighlighted) {
+                    strokeColor = linkGroup.some(({ link }) => highlightedLinks.has(link.id)) 
+                      ? '#ef4444' 
+                      : '#3b82f6';
                     strokeWidth = 4;
                   }
-
+                  
                   renderedLines.push(
                     <line
-                      key={link.id}
+                      key={connectionKey}
                       x1={x1}
                       y1={y1}
                       x2={x2}
@@ -2048,90 +2063,135 @@ export default function GraphView() {
                       stroke={strokeColor}
                       strokeWidth={strokeWidth}
                       markerEnd="url(#arrowhead)"
-                      opacity={isHighlighted || isReverseHighlighted ? 1 : 0.6}
-                      className={(isHighlighted || isReverseHighlighted) ? 'transition-all duration-200' : ''}
+                      opacity={hasHighlighted ? 1 : 0.6}
+                      className={hasHighlighted ? 'transition-all duration-200' : ''}
                     />
                   );
-                });
-              }
-            });
-            
-            return renderedLines;
-          })()}
-          
-          {/* 为折叠的类型框绘制入口和出口标记点 */}
-          {Array.from(nodesByLayerAndType.entries()).map(([layer, typeMap]) => {
-            return Array.from(typeMap.entries()).map(([type]) => {
-              const boxKey = `${layer}-${type}`;
-              const boxPos = typeBoxPositions.get(boxKey);
-              if (!boxPos || !collapsedTypes.has(boxKey)) return null;
-              
-              // 检查是否有进入的关系（作为目标）
-              const hasIncomingLinks = links.some(link => {
-                const targetNode = nodes.find(n => n.id === link.target);
-                if (!targetNode) return false;
-                const targetLayer = layers.get(targetNode.id) || 0;
-                return `${targetLayer}-${targetNode.type}` === boxKey;
-              });
-              
-              // 检查是否有出去的关系（作为源）
-              const hasOutgoingLinks = links.some(link => {
-                const sourceNode = nodes.find(n => n.id === link.source);
-                if (!sourceNode) return false;
-                const sourceLayer = layers.get(sourceNode.id) || 0;
-                return `${sourceLayer}-${sourceNode.type}` === boxKey;
-              });
-              
-              const centerY = boxPos.y + boxPos.height / 2;
-              
-              return (
-                <g key={`markers-${boxKey}`}>
-                  {/* 入口点（左侧） */}
-                  {hasIncomingLinks && (
-                    <circle
-                      cx={boxPos.x}
-                      cy={centerY}
-                      r={6}
-                      fill="#3b82f6"
-                      stroke="#1e40af"
-                      strokeWidth={2}
-                    />
-                  )}
-                  {/* 出口点（右侧） */}
-                  {hasOutgoingLinks && (
-                    <circle
-                      cx={boxPos.x + boxPos.width}
-                      cy={centerY}
-                      r={6}
-                      fill="#10b981"
-                      stroke="#059669"
-                      strokeWidth={2}
-                    />
-                  )}
-                </g>
-              );
-            });
-          })}
-          
-          <defs>
-            <marker
-              id="arrowhead"
-              markerWidth="10"
-              markerHeight="10"
-              refX="9"
-              refY="3"
-              orient="auto"
-            >
-              <polygon points="0 0, 10 3, 0 6" fill="#666" />
-            </marker>
-          </defs>
-        </svg>
+                } else {
+                  // 未折叠：显示所有单独的关系线
+                  linkGroup.forEach(({ link, sourceNode, targetNode }) => {
+                    const sourceLayer = layers.get(sourceNode.id) || 0;
+                    const targetLayer = layers.get(targetNode.id) || 0;
+                    const sourceTypeNodes = nodesByLayerAndType.get(sourceLayer)?.get(sourceNode.type);
+                    const targetTypeNodes = nodesByLayerAndType.get(targetLayer)?.get(targetNode.type);
+                    
+                    if (!sourceTypeNodes || !targetTypeNodes) return;
+                    
+                    const sourceIndex = sourceTypeNodes.findIndex(n => n.id === sourceNode.id);
+                    const targetIndex = targetTypeNodes.findIndex(n => n.id === targetNode.id);
+                    
+                    if (sourceIndex === -1 || targetIndex === -1) return;
 
-        {/* 渲染类型框 */}
-        <div 
-          className="relative" 
-          style={{ width: totalWidth, height: totalHeight }}
-        >
+                    const sourceY = sourceBox.y + 50 + sourceIndex * (nodeItemHeight + nodeItemSpacing) + nodeItemHeight / 2;
+                    const targetY = targetBox.y + 50 + targetIndex * (nodeItemHeight + nodeItemSpacing) + nodeItemHeight / 2;
+
+                    const x1 = sourceBox.x + sourceBox.width;
+                    const y1 = sourceY;
+                    const x2 = targetBox.x;
+                    const y2 = targetY;
+
+                    const isHighlighted = highlightedLinks.has(link.id);
+                    const isReverseHighlighted = reverseHighlightedLinks.has(link.id);
+                    const linkColor = getLinkTypeColor(link.type);
+                    
+                    let strokeColor = linkColor;
+                    let strokeWidth = 2;
+                    if (isHighlighted) {
+                      strokeColor = '#ef4444';
+                      strokeWidth = 4;
+                    } else if (isReverseHighlighted) {
+                      strokeColor = '#3b82f6';
+                      strokeWidth = 4;
+                    }
+
+                    renderedLines.push(
+                      <line
+                        key={link.id}
+                        x1={x1}
+                        y1={y1}
+                        x2={x2}
+                        y2={y2}
+                        stroke={strokeColor}
+                        strokeWidth={strokeWidth}
+                        markerEnd="url(#arrowhead)"
+                        opacity={isHighlighted || isReverseHighlighted ? 1 : 0.6}
+                        className={(isHighlighted || isReverseHighlighted) ? 'transition-all duration-200' : ''}
+                      />
+                    );
+                  });
+                }
+              });
+              
+              return renderedLines;
+            })()}
+            
+            {/* 为折叠的类型框绘制入口和出口标记点 */}
+            {Array.from(nodesByLayerAndType.entries()).map(([layer, typeMap]) => {
+              return Array.from(typeMap.entries()).map(([type]) => {
+                const boxKey = `${layer}-${type}`;
+                const boxPos = typeBoxPositions.get(boxKey);
+                if (!boxPos || !collapsedTypes.has(boxKey)) return null;
+                
+                // 检查是否有进入的关系（作为目标）
+                const hasIncomingLinks = links.some(link => {
+                  const targetNode = nodes.find(n => n.id === link.target);
+                  if (!targetNode) return false;
+                  const targetLayer = layers.get(targetNode.id) || 0;
+                  return `${targetLayer}-${targetNode.type}` === boxKey;
+                });
+                
+                // 检查是否有出去的关系（作为源）
+                const hasOutgoingLinks = links.some(link => {
+                  const sourceNode = nodes.find(n => n.id === link.source);
+                  if (!sourceNode) return false;
+                  const sourceLayer = layers.get(sourceNode.id) || 0;
+                  return `${sourceLayer}-${sourceNode.type}` === boxKey;
+                });
+                
+                const centerY = boxPos.y + boxPos.height / 2;
+                
+                return (
+                  <g key={`markers-${boxKey}`}>
+                    {/* 入口点（左侧） */}
+                    {hasIncomingLinks && (
+                      <circle
+                        cx={boxPos.x}
+                        cy={centerY}
+                        r={6}
+                        fill="#3b82f6"
+                        stroke="#1e40af"
+                        strokeWidth={2}
+                      />
+                    )}
+                    {/* 出口点（右侧） */}
+                    {hasOutgoingLinks && (
+                      <circle
+                        cx={boxPos.x + boxPos.width}
+                        cy={centerY}
+                        r={6}
+                        fill="#10b981"
+                        stroke="#059669"
+                        strokeWidth={2}
+                      />
+                    )}
+                  </g>
+                );
+              });
+            })}
+            
+            <defs>
+              <marker
+                id="arrowhead"
+                markerWidth="10"
+                markerHeight="10"
+                refX="9"
+                refY="3"
+                orient="auto"
+              >
+                <polygon points="0 0, 10 3, 0 6" fill="#666" />
+              </marker>
+            </defs>
+          </svg>
           {Array.from(nodesByLayerAndType.entries()).map(([layer, typeMap]) => (
             <div key={layer} className="absolute">
               {Array.from(typeMap.entries()).map(([type, typeNodes]) => {
@@ -2460,6 +2520,47 @@ export default function GraphView() {
               </button>
             </div>
           </div>
+          
+          {/* 分层视图选项（仅在分层视图模式下显示） */}
+          {viewMode === 'hierarchical' && (
+            <div className="mb-4 border-t border-gray-200 pt-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                分层视图选项
+              </label>
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={defaultTypeExpanded}
+                    onChange={(e) => {
+                      const newValue = e.target.checked;
+                      setDefaultTypeExpanded(newValue);
+                      localStorage.setItem('graphView_defaultTypeExpanded', String(newValue));
+                      // 根据新设置更新折叠状态
+                      if (nodes.length > 0) {
+                        const layers = calculateHierarchicalLayers();
+                        const newCollapsedTypes = new Set<string>();
+                        if (!newValue) {
+                          const uniqueTypes = new Set<string>();
+                          nodes.forEach(node => {
+                            const layer = layers.get(node.id) || 0;
+                            const boxKey = `${layer}-${node.type}`;
+                            if (!uniqueTypes.has(boxKey)) {
+                              uniqueTypes.add(boxKey);
+                              newCollapsedTypes.add(boxKey);
+                            }
+                          });
+                        }
+                        setCollapsedTypes(newCollapsedTypes);
+                      }
+                    }}
+                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                  />
+                  <span className="text-sm text-gray-700">默认展开类型</span>
+                </label>
+              </div>
+            </div>
+          )}
           
           {/* 力导向图布局选项（仅在力导向图模式下显示） */}
           {viewMode === 'force' && (
