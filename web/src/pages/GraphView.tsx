@@ -101,8 +101,12 @@ export default function GraphView() {
   // 默认类型展开状态（用于分层视图）
   const [defaultTypeExpanded, setDefaultTypeExpanded] = useState<boolean>(() => {
     const saved = localStorage.getItem('graphView_defaultTypeExpanded');
-    return saved !== null ? saved === 'true' : true; // 默认展开
+    return saved !== null ? saved === 'true' : false; // 默认未勾选
   });
+  // 用于跟踪已处理的 nodes 的唯一标识，确保在 nodes 变化时重新应用设置
+  const processedNodesRef = useRef<string>('');
+  // 用于跟踪上一次的 defaultTypeExpanded 值，确保在设置改变时重新应用
+  const lastDefaultTypeExpandedRef = useRef<boolean>(defaultTypeExpanded);
   
   // 图例折叠状态
   const [isLegendCollapsed, setIsLegendCollapsed] = useState(false);
@@ -449,14 +453,33 @@ export default function GraphView() {
   }, [selectedWorkspace]);
 
   // 根据默认展开状态初始化类型折叠状态（仅在分层视图模式下）
+  // 确保在渲染前先获取设置项，并在 nodes 变化或设置改变时重新应用设置
   useEffect(() => {
     if (viewMode !== 'hierarchical' || nodes.length === 0) return;
+    
+    // 生成当前 nodes 的唯一标识（基于节点 ID 的排序字符串）
+    const currentNodeIds = nodes.map(n => n.id).sort().join(',');
+    
+    // 检测 nodes 是否变化
+    const nodesChanged = processedNodesRef.current !== currentNodeIds;
+    // 检测 defaultTypeExpanded 是否变化
+    const settingChanged = lastDefaultTypeExpandedRef.current !== defaultTypeExpanded;
+    // 是否是首次加载
+    const isFirstLoad = processedNodesRef.current === '';
+    
+    // 只在 nodes 实际变化、设置改变或首次加载时更新
+    if (!nodesChanged && !settingChanged && !isFirstLoad) return;
+    
+    // 更新跟踪的引用值
+    processedNodesRef.current = currentNodeIds;
+    lastDefaultTypeExpandedRef.current = defaultTypeExpanded;
     
     const layers = calculateHierarchicalLayers();
     const newCollapsedTypes = new Set<string>();
     
-    // 如果默认不展开，则将所有类型添加到折叠集合
+    // 根据 defaultTypeExpanded 设置来初始化折叠状态
     if (!defaultTypeExpanded) {
+      // 如果默认不展开，则将所有类型添加到折叠集合
       const uniqueTypes = new Set<string>();
       nodes.forEach(node => {
         const layer = layers.get(node.id) || 0;
@@ -467,14 +490,11 @@ export default function GraphView() {
         }
       });
     }
+    // 如果 defaultTypeExpanded 为 true，newCollapsedTypes 保持为空 Set，表示全部展开
     
-    // 只在初始状态或默认值改变时更新，避免覆盖用户手动操作
-    // 使用 ref 来跟踪是否是首次初始化
-    const isInitialLoad = collapsedTypes.size === 0;
-    if (isInitialLoad) {
-      setCollapsedTypes(newCollapsedTypes);
-    }
-  }, [viewMode, nodes.length, defaultTypeExpanded]);
+    // 更新折叠状态
+    setCollapsedTypes(newCollapsedTypes);
+  }, [viewMode, nodes.length, defaultTypeExpanded, nodes]);
 
   const loadGraphData = async () => {
     try {
