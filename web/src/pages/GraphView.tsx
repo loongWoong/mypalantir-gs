@@ -10,7 +10,9 @@ import {
   Cog6ToothIcon,
   ArrowRightIcon,
   ArrowLeftIcon,
-  ArrowsRightLeftIcon
+  ArrowsRightLeftIcon,
+  Squares2X2Icon,
+  LinkIcon
 } from '@heroicons/react/24/outline';
 
 interface GraphNode {
@@ -45,6 +47,89 @@ export default function GraphView() {
   const [objectTypes, setObjectTypes] = useState<any[]>([]);
   const [linkTypes, setLinkTypes] = useState<any[]>([]);
   
+  // 分层视图高亮状态：跟踪被点击节点和后续节点
+  const [highlightedNodes, setHighlightedNodes] = useState<Set<string>>(new Set());
+  const [highlightedLinks, setHighlightedLinks] = useState<Set<string>>(new Set());
+  
+  // 图例面板拖动状态（使用 top 定位，更直观）
+  const [legendPosition, setLegendPosition] = useState<{ x: number; y: number }>(() => {
+    const saved = localStorage.getItem('graphView_legendPosition');
+    if (saved) {
+      try {
+        const pos = JSON.parse(saved);
+        // 如果是从旧版本（bottom定位）迁移，需要转换
+        // 这里假设旧版本保存的是 bottom 值，需要转换为 top
+        return pos;
+      } catch {
+        return { x: 16, y: 48 }; // 默认位置：left-4 (16px), top-12 (48px)
+      }
+    }
+    return { x: 16, y: 48 }; // 默认位置
+  });
+  const [isDraggingLegend, setIsDraggingLegend] = useState(false);
+  const [dragOffset, setDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const legendRef = useRef<HTMLDivElement>(null);
+
+  // 处理图例面板拖动
+  const handleLegendMouseDown = useCallback((e: React.MouseEvent) => {
+    if (!legendRef.current) return;
+    const rect = legendRef.current.getBoundingClientRect();
+    setDragOffset({
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top
+    });
+    setIsDraggingLegend(true);
+    e.preventDefault();
+  }, []);
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isDraggingLegend || !legendRef.current) return;
+      
+      const container = legendRef.current.parentElement;
+      if (!container) return;
+      
+      const containerRect = container.getBoundingClientRect();
+      const legendRect = legendRef.current.getBoundingClientRect();
+      
+      // 计算新位置（相对于容器的位置，使用 top 定位）
+      let newX = e.clientX - containerRect.left - dragOffset.x;
+      let newY = e.clientY - containerRect.top - dragOffset.y;
+      
+      // 限制在容器范围内
+      const maxX = containerRect.width - legendRect.width;
+      const maxY = containerRect.height - legendRect.height;
+      
+      newX = Math.max(0, Math.min(newX, maxX));
+      newY = Math.max(0, Math.min(newY, maxY));
+      
+      const newPosition = { x: newX, y: newY };
+      setLegendPosition(newPosition);
+      // 保存位置到localStorage
+      localStorage.setItem('graphView_legendPosition', JSON.stringify(newPosition));
+    };
+
+    const handleMouseUp = () => {
+      if (isDraggingLegend) {
+        setIsDraggingLegend(false);
+      }
+    };
+
+    if (isDraggingLegend) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = 'grabbing';
+      document.body.style.userSelect = 'none';
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+  }, [isDraggingLegend, dragOffset, legendPosition]);
+  
   // 节点和关系上限配置（从 localStorage 读取或使用默认值）
   const [maxNodes, setMaxNodes] = useState<number>(() => {
     const saved = localStorage.getItem('graphView_maxNodes');
@@ -58,6 +143,12 @@ export default function GraphView() {
   
   // 血缘查询模式：'forward' | 'backward' | 'full' | 'direct'
   const [lineageMode, setLineageMode] = useState<'forward' | 'backward' | 'full' | 'direct'>('direct');
+  
+  // 视图模式：'force' | 'hierarchical'
+  const [viewMode, setViewMode] = useState<'force' | 'hierarchical'>(() => {
+    const saved = localStorage.getItem('graphView_viewMode');
+    return (saved === 'hierarchical' ? 'hierarchical' : 'force') as 'force' | 'hierarchical';
+  });
   
   // ForceGraph2D 引用
   const fgRef = useRef<any>(null);
@@ -969,6 +1060,389 @@ export default function GraphView() {
     return labels.join('\n');
   };
 
+  // 计算分层视图的层级（优先按节点类型分组）
+  const calculateHierarchicalLayers = useCallback(() => {
+    if (nodes.length === 0) return new Map<string, number>();
+
+    // 第一步：按节点类型分组
+    const nodesByType = new Map<string, GraphNode[]>();
+    nodes.forEach(node => {
+      if (!nodesByType.has(node.type)) {
+        nodesByType.set(node.type, []);
+      }
+      nodesByType.get(node.type)!.push(node);
+    });
+
+    // 第二步：构建节点类型之间的关系图
+    // typeOutEdges: 从源类型到目标类型的边集合
+    const typeOutEdges = new Map<string, Set<string>>();
+    const typeInEdges = new Map<string, Set<string>>();
+    
+    links.forEach(link => {
+      const sourceNode = nodes.find(n => n.id === link.source);
+      const targetNode = nodes.find(n => n.id === link.target);
+      
+      if (sourceNode && targetNode && sourceNode.type !== targetNode.type) {
+        // 只考虑不同类型之间的关系
+        if (!typeOutEdges.has(sourceNode.type)) {
+          typeOutEdges.set(sourceNode.type, new Set());
+        }
+        typeOutEdges.get(sourceNode.type)!.add(targetNode.type);
+        
+        if (!typeInEdges.has(targetNode.type)) {
+          typeInEdges.set(targetNode.type, new Set());
+        }
+        typeInEdges.get(targetNode.type)!.add(sourceNode.type);
+      }
+    });
+
+    // 第三步：计算每个节点类型的层级
+    const typeLayers = new Map<string, number>();
+    const typeQueue: { type: string; layer: number }[] = [];
+    
+    // 找到所有没有入边的类型（根类型）
+    nodesByType.forEach((typeNodes, type) => {
+      const inDegree = typeInEdges.get(type)?.size || 0;
+      if (inDegree === 0) {
+        typeQueue.push({ type, layer: 0 });
+        typeLayers.set(type, 0);
+      }
+    });
+
+    // 如果没有根类型，将所有类型都放在第0层
+    if (typeQueue.length === 0) {
+      nodesByType.forEach((_, type) => {
+        typeLayers.set(type, 0);
+      });
+    } else {
+      // BFS遍历类型层级
+      while (typeQueue.length > 0) {
+        const { type, layer } = typeQueue.shift()!;
+        const children = typeOutEdges.get(type) || new Set();
+        
+        children.forEach(childType => {
+          if (!typeLayers.has(childType)) {
+            const childLayer = layer + 1;
+            typeLayers.set(childType, childLayer);
+            typeQueue.push({ type: childType, layer: childLayer });
+          } else {
+            // 如果已访问，更新为更深的层级
+            const currentLayer = typeLayers.get(childType)!;
+            if (layer + 1 > currentLayer) {
+              typeLayers.set(childType, layer + 1);
+              typeQueue.push({ type: childType, layer: layer + 1 });
+            }
+          }
+        });
+      }
+
+      // 为没有层级的类型分配层级（可能是孤立类型或循环中的类型）
+      nodesByType.forEach((_, type) => {
+        if (!typeLayers.has(type)) {
+          // 找到该类型的所有前驱类型的最大层级
+          const predecessors = typeInEdges.get(type) || new Set();
+          if (predecessors.size > 0) {
+            const maxPredLayer = Math.max(...Array.from(predecessors).map(p => typeLayers.get(p) || 0));
+            typeLayers.set(type, maxPredLayer + 1);
+          } else {
+            // 没有前驱的类型放在第0层
+            typeLayers.set(type, 0);
+          }
+        }
+      });
+    }
+
+    // 第四步：为每个节点分配层级（基于其类型的层级）
+    const nodeLayers = new Map<string, number>();
+    nodes.forEach(node => {
+      const typeLayer = typeLayers.get(node.type) || 0;
+      nodeLayers.set(node.id, typeLayer);
+    });
+
+    return nodeLayers;
+  }, [nodes, links]);
+
+  // 递归查找所有后续节点（传递性）
+  const findAllDescendants = useCallback((startNodeId: string, visitedNodes: Set<string> = new Set()): { nodes: Set<string>; links: Set<string> } => {
+    const resultNodes = new Set<string>();
+    const resultLinks = new Set<string>();
+    
+    // 如果已经访问过，直接返回
+    if (visitedNodes.has(startNodeId)) {
+      return { nodes: resultNodes, links: resultLinks };
+    }
+    
+    visitedNodes.add(startNodeId);
+    
+    // 找到所有从该节点出发的连接（出边）
+    const outgoingLinks = links.filter(link => link.source === startNodeId);
+    
+    outgoingLinks.forEach(link => {
+      resultLinks.add(link.id);
+      const targetId = link.target;
+      
+      if (!visitedNodes.has(targetId)) {
+        resultNodes.add(targetId);
+        
+        // 递归查找目标节点的后续节点
+        const descendants = findAllDescendants(targetId, visitedNodes);
+        descendants.nodes.forEach(n => resultNodes.add(n));
+        descendants.links.forEach(l => resultLinks.add(l));
+      }
+    });
+    
+    return { nodes: resultNodes, links: resultLinks };
+  }, [links]);
+
+  // 处理节点点击，高亮后续节点（递归传递）
+  const handleNodeClickInHierarchical = useCallback((node: GraphNode) => {
+    setSelectedNode(node);
+    
+    // 递归查找所有后续节点和连接
+    const { nodes: descendantNodes, links: descendantLinks } = findAllDescendants(node.id);
+    
+    // 设置高亮状态
+    setHighlightedNodes(descendantNodes);
+    setHighlightedLinks(descendantLinks);
+  }, [findAllDescendants]);
+
+  // 分层视图组件
+  const HierarchicalView = () => {
+    const layers = calculateHierarchicalLayers();
+    const containerRef = useRef<HTMLDivElement>(null);
+    const svgRef = useRef<SVGSVGElement>(null);
+
+    // 按层级和类型分组节点
+    const nodesByLayerAndType = new Map<number, Map<string, GraphNode[]>>();
+    let maxLayer = 0;
+
+    nodes.forEach(node => {
+      const layer = layers.get(node.id) || 0;
+      maxLayer = Math.max(maxLayer, layer);
+      
+      if (!nodesByLayerAndType.has(layer)) {
+        nodesByLayerAndType.set(layer, new Map());
+      }
+      const layerMap = nodesByLayerAndType.get(layer)!;
+      
+      if (!layerMap.has(node.type)) {
+        layerMap.set(node.type, []);
+      }
+      layerMap.get(node.type)!.push(node);
+    });
+
+    // 布局参数
+    const layerWidth = 300;
+    const typeBoxHeight = 200;
+    const typeBoxSpacing = 20;
+    const nodeItemHeight = 32;
+    const nodeItemSpacing = 4;
+    const padding = 40;
+
+    // 计算每个类型框的位置
+    // 每一层都从顶部开始排列，而不是累积排列
+    const typeBoxPositions = new Map<string, { x: number; y: number; width: number; height: number }>();
+    
+    // 计算每一层的最大高度
+    const layerHeights = new Map<number, number>();
+    
+    nodesByLayerAndType.forEach((typeMap, layer) => {
+      let layerMaxHeight = 0;
+      let typeY = padding; // 每一层都从顶部开始
+      
+      typeMap.forEach((typeNodes, type) => {
+        const nodeCount = typeNodes.length;
+        const boxHeight = Math.max(typeBoxHeight, nodeCount * (nodeItemHeight + nodeItemSpacing) + 60);
+        const boxKey = `${layer}-${type}`;
+        typeBoxPositions.set(boxKey, {
+          x: padding + layer * (layerWidth + 100),
+          y: typeY,
+          width: layerWidth,
+          height: boxHeight
+        });
+        typeY += boxHeight + typeBoxSpacing;
+      });
+      
+      // 记录这一层的总高度（包括最后一个框的底部间距）
+      layerMaxHeight = typeY - typeBoxSpacing + padding; // 减去最后一个间距，加上底部padding
+      layerHeights.set(layer, layerMaxHeight);
+    });
+
+    // 计算总宽度和总高度（总高度取所有层的最大高度）
+    const totalWidth = padding * 2 + (maxLayer + 1) * (layerWidth + 100);
+    const maxLayerHeight = Math.max(...Array.from(layerHeights.values()), padding * 2);
+    const totalHeight = maxLayerHeight;
+
+    return (
+      <div 
+        className="w-full h-full overflow-auto bg-gray-50" 
+        ref={containerRef}
+      >
+        <svg
+          ref={svgRef}
+          width={totalWidth}
+          height={totalHeight}
+          className="absolute top-0 left-0 pointer-events-none"
+        >
+          {/* 绘制连接线 */}
+          {links.map(link => {
+            const sourceNode = nodes.find(n => n.id === link.source);
+            const targetNode = nodes.find(n => n.id === link.target);
+            
+            if (!sourceNode || !targetNode) return null;
+            
+            const sourceLayer = layers.get(sourceNode.id) || 0;
+            const targetLayer = layers.get(targetNode.id) || 0;
+            const sourceBoxKey = `${sourceLayer}-${sourceNode.type}`;
+            const targetBoxKey = `${targetLayer}-${targetNode.type}`;
+            
+            const sourceBox = typeBoxPositions.get(sourceBoxKey);
+            const targetBox = typeBoxPositions.get(targetBoxKey);
+            
+            if (!sourceBox || !targetBox) return null;
+            
+            const sourceTypeNodes = nodesByLayerAndType.get(sourceLayer)?.get(sourceNode.type);
+            const targetTypeNodes = nodesByLayerAndType.get(targetLayer)?.get(targetNode.type);
+            
+            if (!sourceTypeNodes || !targetTypeNodes) return null;
+            
+            const sourceIndex = sourceTypeNodes.findIndex(n => n.id === sourceNode.id);
+            const targetIndex = targetTypeNodes.findIndex(n => n.id === targetNode.id);
+            
+            if (sourceIndex === -1 || targetIndex === -1) return null;
+
+            const sourceY = sourceBox.y + 50 + sourceIndex * (nodeItemHeight + nodeItemSpacing) + nodeItemHeight / 2;
+            const targetY = targetBox.y + 50 + targetIndex * (nodeItemHeight + nodeItemSpacing) + nodeItemHeight / 2;
+
+            const x1 = sourceBox.x + sourceBox.width;
+            const y1 = sourceY;
+            const x2 = targetBox.x;
+            const y2 = targetY;
+
+            // 检查是否应该高亮此连接线
+            const isHighlighted = highlightedLinks.has(link.id);
+            const linkColor = getLinkTypeColor(link.type);
+
+            return (
+              <line
+                key={link.id}
+                x1={x1}
+                y1={y1}
+                x2={x2}
+                y2={y2}
+                stroke={isHighlighted ? '#ef4444' : linkColor}
+                strokeWidth={isHighlighted ? 4 : 2}
+                markerEnd="url(#arrowhead)"
+                opacity={isHighlighted ? 1 : 0.6}
+                className={isHighlighted ? 'transition-all duration-200' : ''}
+              />
+            );
+          })}
+          <defs>
+            <marker
+              id="arrowhead"
+              markerWidth="10"
+              markerHeight="10"
+              refX="9"
+              refY="3"
+              orient="auto"
+            >
+              <polygon points="0 0, 10 3, 0 6" fill="#666" />
+            </marker>
+          </defs>
+        </svg>
+
+        {/* 渲染类型框 */}
+        <div 
+          className="relative" 
+          style={{ width: totalWidth, height: totalHeight }}
+        >
+          {Array.from(nodesByLayerAndType.entries()).map(([layer, typeMap]) => (
+            <div key={layer} className="absolute">
+              {Array.from(typeMap.entries()).map(([type, typeNodes]) => {
+                const boxKey = `${layer}-${type}`;
+                const boxPos = typeBoxPositions.get(boxKey)!;
+                const objectType = objectTypes.find(ot => ot.name === type);
+                const displayName = objectType?.display_name || type;
+
+                return (
+                  <div
+                    key={boxKey}
+                    className="absolute bg-white border-2 border-gray-300 rounded-lg shadow-lg"
+                    style={{
+                      left: boxPos.x,
+                      top: boxPos.y,
+                      width: boxPos.width,
+                      height: boxPos.height,
+                    }}
+                  >
+                    {/* 类型标题 */}
+                    <div
+                      className="px-4 py-2 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-t-lg"
+                      style={{ backgroundColor: nodeColor({ group: objectTypes.findIndex(ot => ot.name === type) || 0 } as GraphNode) + '20' }}
+                    >
+                      <div className="flex items-center justify-between">
+                        <h3 className="font-semibold text-gray-900 text-sm">{displayName}</h3>
+                        <span className="text-xs text-gray-500 bg-white px-2 py-1 rounded">
+                          {typeNodes.length}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* 节点列表 */}
+                    <div className="overflow-y-auto" style={{ maxHeight: boxPos.height - 50 }}>
+                      {typeNodes.map((node, index) => {
+                        const nodeIdOnly = node.id.includes(':') ? node.id.split(':')[1] : node.id;
+                        const isSelected = selectedNode?.id === node.id;
+                        const isHighlighted = highlightedNodes.has(node.id);
+                        
+                        return (
+                          <div
+                            key={node.id}
+                            onClick={() => handleNodeClickInHierarchical(node)}
+                            className={`px-4 py-2 border-b border-gray-100 cursor-pointer transition-all duration-200 ${
+                              isSelected 
+                                ? 'bg-blue-100 border-blue-300 border-l-4' 
+                                : isHighlighted 
+                                ? 'bg-yellow-100 border-yellow-300 border-l-4 shadow-md' 
+                                : 'hover:bg-blue-50'
+                            }`}
+                            style={{
+                              height: nodeItemHeight,
+                              marginBottom: index < typeNodes.length - 1 ? nodeItemSpacing : 0,
+                            }}
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className={`text-sm truncate flex-1 font-medium ${
+                                isSelected 
+                                  ? 'text-blue-900' 
+                                  : isHighlighted 
+                                  ? 'text-yellow-900' 
+                                  : 'text-gray-800'
+                              }`} title={node.name}>
+                                {node.name || nodeIdOnly.substring(0, 16)}
+                              </span>
+                              <div
+                                className={`w-3 h-3 rounded-full ml-2 flex-shrink-0 transition-all ${
+                                  isHighlighted ? 'ring-2 ring-yellow-500 ring-offset-1' : ''
+                                }`}
+                                style={{ backgroundColor: nodeColor(node) }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -1094,6 +1568,47 @@ export default function GraphView() {
               </svg>
             </button>
           </div>
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              视图模式
+            </label>
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  setViewMode('force');
+                  localStorage.setItem('graphView_viewMode', 'force');
+                  setHighlightedNodes(new Set());
+                  setHighlightedLinks(new Set());
+                }}
+                className={`flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  viewMode === 'force'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+                title="力导向图：使用物理模拟展示节点关系"
+              >
+                <LinkIcon className="w-4 h-4 mr-2" />
+                力导向图
+              </button>
+              <button
+                onClick={() => {
+                  setViewMode('hierarchical');
+                  localStorage.setItem('graphView_viewMode', 'hierarchical');
+                  setHighlightedNodes(new Set());
+                  setHighlightedLinks(new Set());
+                }}
+                className={`flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  viewMode === 'hierarchical'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+                title="分层视图：按层级关系从左到右展示"
+              >
+                <Squares2X2Icon className="w-4 h-4 mr-2" />
+                分层视图
+              </button>
+            </div>
+          </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -1181,6 +1696,8 @@ export default function GraphView() {
               </button>
             </div>
           </div>
+        ) : viewMode === 'hierarchical' ? (
+          <HierarchicalView />
         ) : (
           <ForceGraph2D
             graphData={graphData}
@@ -1361,10 +1878,34 @@ export default function GraphView() {
           </div>
         )}
 
-        {/* 图例和统计信息 */}
-        <div className="absolute bottom-12 left-4 bg-white rounded-xl shadow-xl border border-gray-200 p-4 max-w-xs max-h-[calc(100vh-200px)] overflow-y-auto">
-          <h4 className="text-sm font-bold text-gray-900 mb-3 sticky top-0 bg-white pb-2 border-b border-gray-200">图例与统计</h4>
-          <div className="space-y-3 text-xs mt-2">
+        {/* 图例和统计信息 - 可拖动悬浮面板 */}
+        <div
+          ref={legendRef}
+          className="absolute bg-white rounded-xl shadow-xl border border-gray-200 max-w-xs max-h-[calc(100vh-200px)] overflow-hidden select-none z-20"
+          style={{
+            left: `${legendPosition.x}px`,
+            top: `${legendPosition.y}px`,
+            cursor: isDraggingLegend ? 'grabbing' : 'default',
+          }}
+        >
+          {/* 拖动手柄 - 标题栏 */}
+          <div
+            onMouseDown={handleLegendMouseDown}
+            className="px-4 py-2 border-b border-gray-200 bg-gradient-to-r from-gray-50 to-gray-100 cursor-grab active:cursor-grabbing hover:from-gray-100 hover:to-gray-200 transition-colors"
+          >
+            <div className="flex items-center justify-between">
+              <h4 className="text-sm font-bold text-gray-900">图例与统计</h4>
+              <div className="flex items-center gap-1 text-gray-400">
+                <div className="w-1 h-1 rounded-full bg-gray-400"></div>
+                <div className="w-1 h-1 rounded-full bg-gray-400"></div>
+                <div className="w-1 h-1 rounded-full bg-gray-400"></div>
+              </div>
+            </div>
+          </div>
+          
+          {/* 内容区域 - 可滚动 */}
+          <div className="p-4 overflow-y-auto max-h-[calc(100vh-300px)]">
+            <div className="space-y-3 text-xs">
             <div>
               <div className="text-gray-500 mb-2">节点类型</div>
               <div className="space-y-1.5">
@@ -1415,6 +1956,7 @@ export default function GraphView() {
               <p>💡 点击节点查看详情</p>
               <p>🖱️ 拖拽节点移动位置</p>
               <p>🔍 鼠标悬停查看标签</p>
+            </div>
             </div>
           </div>
         </div>
