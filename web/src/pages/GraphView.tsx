@@ -14,7 +14,8 @@ import {
   Squares2X2Icon,
   LinkIcon,
   SparklesIcon,
-  TableCellsIcon
+  TableCellsIcon,
+  XMarkIcon
 } from '@heroicons/react/24/outline';
 
 interface GraphNode {
@@ -58,6 +59,10 @@ export default function GraphView() {
   // 用于检测双击的ref（避免双击时触发单击事件）
   const lastClickTimeRef = useRef<number>(0);
   const clickTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  // 类型详情对话框状态
+  const [typeDetailDialog, setTypeDetailDialog] = useState<{ type: string; layer: number; nodes: GraphNode[] } | null>(null);
+  // 类型详情对话框视图模式：'card' | 'table'
+  const [typeDetailViewMode, setTypeDetailViewMode] = useState<'card' | 'table'>('card');
   
   // 图例面板拖动状态（使用 top 定位，更直观）
   const [legendPosition, setLegendPosition] = useState<{ x: number; y: number }>(() => {
@@ -1811,8 +1816,14 @@ export default function GraphView() {
                   >
                     {/* 类型标题 */}
                     <div
-                      className="px-4 py-2 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-t-lg"
+                      className="px-4 py-2 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-t-lg cursor-pointer hover:from-blue-100 hover:to-indigo-100 transition-colors"
                       style={{ backgroundColor: nodeColor({ group: objectTypes.findIndex(ot => ot.name === type) || 0 } as GraphNode) + '20' }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setTypeDetailDialog({ type, layer, nodes: typeNodes });
+                        setTypeDetailViewMode('card'); // 默认使用卡片视图
+                      }}
+                      title="点击查看该类型的所有数据详情"
                     >
                       <div className="flex items-center justify-between">
                         <h3 className="font-semibold text-gray-900 text-sm">{displayName}</h3>
@@ -2625,8 +2636,9 @@ export default function GraphView() {
               {viewMode === 'hierarchical' && (
                 <>
                   <p className="mt-2 pt-2 border-t border-gray-200">分层视图：</p>
-                  <p>🖱️ 单击：高亮影响分析（黄色）</p>
-                  <p>🖱️ 双击：高亮反向依赖（蓝色）</p>
+                  <p>🖱️ 单击节点：高亮影响分析（黄色）</p>
+                  <p>🖱️ 双击节点：高亮反向依赖（蓝色）</p>
+                  <p>📋 点击类型标题：查看该类型所有数据详情</p>
                 </>
               )}
             </div>
@@ -2634,6 +2646,313 @@ export default function GraphView() {
           </div>
         </div>
       </div>
+
+      {/* 类型详情对话框 */}
+      {typeDetailDialog && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setTypeDetailDialog(null)}>
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-6xl mx-4 max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            {/* 对话框头部 */}
+            <div className="flex items-center justify-between p-6 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50">
+              <div className="flex-1">
+                <h2 className="text-2xl font-bold text-gray-900">
+                  {objectTypes.find(ot => ot.name === typeDetailDialog.type)?.display_name || typeDetailDialog.type}
+                </h2>
+                <p className="text-sm text-gray-600 mt-1">
+                  层级 {typeDetailDialog.layer} · 共 {typeDetailDialog.nodes.length} 条数据
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setTypeDetailViewMode(typeDetailViewMode === 'card' ? 'table' : 'card')}
+                  className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium text-gray-700"
+                  title={typeDetailViewMode === 'card' ? '切换到表格视图' : '切换到卡片视图'}
+                >
+                  <TableCellsIcon className="w-5 h-5" />
+                  <span>{typeDetailViewMode === 'card' ? '列表展示' : '卡片展示'}</span>
+                </button>
+                <button
+                  onClick={() => setTypeDetailDialog(null)}
+                  className="ml-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full p-2 transition-colors"
+                  aria-label="关闭"
+                >
+                  <XMarkIcon className="w-6 h-6" />
+                </button>
+              </div>
+            </div>
+
+            {/* 内容区域 - 可滚动 */}
+            <div className="flex-1 overflow-auto p-6">
+              {typeDetailViewMode === 'card' ? (
+                // 卡片视图
+                <div className="space-y-4">
+                  {typeDetailDialog.nodes.map((node, index) => {
+                    const nodeIdOnly = node.id.includes(':') ? node.id.split(':')[1] : node.id;
+                    const isSelected = selectedNode?.id === node.id;
+                    const isHighlighted = highlightedNodes.has(node.id);
+                    const isReverseHighlighted = reverseHighlightedNodes.has(node.id);
+
+                    return (
+                      <div
+                        key={node.id}
+                        className={`bg-white border-2 rounded-lg p-4 hover:shadow-md transition-all ${
+                          isSelected
+                            ? 'border-blue-500 bg-blue-50'
+                            : isReverseHighlighted
+                            ? 'border-indigo-500 bg-indigo-50'
+                            : isHighlighted
+                            ? 'border-yellow-500 bg-yellow-50'
+                            : 'border-gray-200'
+                        }`}
+                      >
+                        {/* 节点头部 */}
+                        <div className="flex items-center justify-between mb-3 pb-3 border-b border-gray-200">
+                          <div className="flex items-center gap-3">
+                            <div
+                              className="w-4 h-4 rounded-full"
+                              style={{ backgroundColor: nodeColor(node) }}
+                            />
+                            <h3 className="font-semibold text-lg text-gray-900">{node.name || nodeIdOnly.substring(0, 16)}</h3>
+                            <span className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded">
+                              #{index + 1}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <a
+                              href={`#/instances/${node.type}/${nodeIdOnly}`}
+                              className="text-sm px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              查看详情
+                            </a>
+                            <a
+                              href={`#/graph/${node.type}/${nodeIdOnly}`}
+                              className="text-sm px-3 py-1.5 bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              关系图
+                            </a>
+                          </div>
+                        </div>
+
+                        {/* 节点属性 */}
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">实例ID</div>
+                            <div className="font-mono text-sm text-gray-800 break-all bg-gray-50 p-2 rounded border">
+                              {nodeIdOnly}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">类型</div>
+                            <div className="text-sm text-gray-800 bg-gray-50 p-2 rounded border">
+                              {objectTypes.find(ot => ot.name === node.type)?.display_name || node.type}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* 其他属性 */}
+                        <div className="mt-3 pt-3 border-t border-gray-200">
+                          <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">属性信息</div>
+                          <div className="grid grid-cols-2 gap-2">
+                            {Object.entries(node.data)
+                              .filter(([key]) => !['id', 'created_at', 'updated_at'].includes(key))
+                              .slice(0, 6) // 只显示前6个属性
+                              .map(([key, value]) => (
+                                <div key={key} className="bg-gray-50 rounded p-2 border border-gray-200">
+                                  <div className="text-xs font-medium text-gray-600 mb-1">{key}</div>
+                                  <div className="text-sm text-gray-900 break-words">
+                                    {typeof value === 'object' && value !== null
+                                      ? JSON.stringify(value)
+                                      : String(value || '-')}
+                                  </div>
+                                </div>
+                              ))}
+                          </div>
+                          {Object.keys(node.data).filter(key => !['id', 'created_at', 'updated_at'].includes(key)).length > 6 && (
+                            <div className="mt-2 text-xs text-gray-500 text-center">
+                              还有 {Object.keys(node.data).filter(key => !['id', 'created_at', 'updated_at'].includes(key)).length - 6} 个属性...
+                            </div>
+                          )}
+                        </div>
+
+                        {/* 时间信息 */}
+                        {(node.data.created_at || node.data.updated_at) && (
+                          <div className="mt-3 pt-3 border-t border-gray-200 flex gap-4 text-xs text-gray-500">
+                            {node.data.created_at && (
+                              <div>
+                                <span className="font-medium">创建时间：</span>
+                                {new Date(node.data.created_at).toLocaleString('zh-CN')}
+                              </div>
+                            )}
+                            {node.data.updated_at && (
+                              <div>
+                                <span className="font-medium">更新时间：</span>
+                                {new Date(node.data.updated_at).toLocaleString('zh-CN')}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                // 表格视图
+                (() => {
+                  // 收集所有节点的所有属性键
+                  const allKeys = new Set<string>();
+                  typeDetailDialog.nodes.forEach(node => {
+                    Object.keys(node.data).forEach(key => allKeys.add(key));
+                  });
+                  
+                  // 定义固定列（序号、名称、ID、类型、操作）
+                  const fixedColumns = ['序号', '名称', 'ID', '类型'];
+                  // 其他属性列（排除固定列和系统字段）
+                  const otherKeys = Array.from(allKeys)
+                    .filter(key => !['id', 'name', 'created_at', 'updated_at'].includes(key))
+                    .sort();
+                  
+                  // 合并所有列
+                  const allColumns = [...fixedColumns, ...otherKeys, '创建时间', '更新时间', '操作'];
+                  
+                  return (
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full divide-y divide-gray-200 border border-gray-300">
+                        <thead className="bg-gray-50 sticky top-0 z-10">
+                          <tr>
+                            {allColumns.map((column, colIndex) => (
+                              <th
+                                key={column}
+                                className={`px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b border-gray-300 whitespace-nowrap ${
+                                  colIndex < allColumns.length - 1 ? 'border-r border-gray-200' : ''
+                                }`}
+                              >
+                                {column}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {typeDetailDialog.nodes.map((node, index) => {
+                            const nodeIdOnly = node.id.includes(':') ? node.id.split(':')[1] : node.id;
+                            const isSelected = selectedNode?.id === node.id;
+                            const isHighlighted = highlightedNodes.has(node.id);
+                            const isReverseHighlighted = reverseHighlightedNodes.has(node.id);
+                            
+                            // 确定行样式
+                            let rowClassName = '';
+                            if (isSelected) {
+                              rowClassName = 'bg-blue-50';
+                            } else if (isReverseHighlighted) {
+                              rowClassName = 'bg-indigo-50';
+                            } else if (isHighlighted) {
+                              rowClassName = 'bg-yellow-50';
+                            }
+                            
+                            return (
+                              <tr key={node.id} className={rowClassName}>
+                                {/* 序号 */}
+                                <td className="px-4 py-3 text-sm text-gray-900 border-r border-gray-200">
+                                  {index + 1}
+                                </td>
+                                
+                                {/* 名称 */}
+                                <td className="px-4 py-3 text-sm text-gray-900 border-r border-gray-200">
+                                  <div className="flex items-center gap-2">
+                                    <div
+                                      className="w-3 h-3 rounded-full flex-shrink-0"
+                                      style={{ backgroundColor: nodeColor(node) }}
+                                    />
+                                    <span className="font-medium">{node.name || nodeIdOnly.substring(0, 16)}</span>
+                                  </div>
+                                </td>
+                                
+                                {/* ID */}
+                                <td className="px-4 py-3 text-sm font-mono text-gray-800 border-r border-gray-200">
+                                  {nodeIdOnly}
+                                </td>
+                                
+                                {/* 类型 */}
+                                <td className="px-4 py-3 text-sm text-gray-900 border-r border-gray-200">
+                                  {objectTypes.find(ot => ot.name === node.type)?.display_name || node.type}
+                                </td>
+                                
+                                {/* 其他属性列 */}
+                                {otherKeys.map((key) => {
+                                  const value = node.data[key];
+                                  return (
+                                    <td
+                                      key={key}
+                                      className="px-4 py-3 text-sm text-gray-900 border-r border-gray-200 max-w-xs"
+                                    >
+                                      <div className="truncate" title={typeof value === 'object' && value !== null ? JSON.stringify(value) : String(value || '-')}>
+                                        {typeof value === 'object' && value !== null
+                                          ? JSON.stringify(value)
+                                          : String(value || '-')}
+                                      </div>
+                                    </td>
+                                  );
+                                })}
+                                
+                                {/* 创建时间 */}
+                                <td className="px-4 py-3 text-sm text-gray-600 border-r border-gray-200 whitespace-nowrap">
+                                  {node.data.created_at
+                                    ? new Date(node.data.created_at).toLocaleString('zh-CN')
+                                    : '-'}
+                                </td>
+                                
+                                {/* 更新时间 */}
+                                <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
+                                  {node.data.updated_at
+                                    ? new Date(node.data.updated_at).toLocaleString('zh-CN')
+                                    : '-'}
+                                </td>
+                                
+                                {/* 操作 */}
+                                <td className="px-4 py-3 text-sm whitespace-nowrap">
+                                  <div className="flex items-center gap-2">
+                                    <a
+                                      href={`#/instances/${node.type}/${nodeIdOnly}`}
+                                      className="px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors text-xs"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      详情
+                                    </a>
+                                    <a
+                                      href={`#/graph/${node.type}/${nodeIdOnly}`}
+                                      className="px-2 py-1 bg-green-600 text-white rounded hover:bg-green-700 transition-colors text-xs"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      关系图
+                                    </a>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                })()
+              )}
+            </div>
+
+            {/* 底部操作栏 */}
+            <div className="p-4 border-t border-gray-200 bg-gray-50 flex items-center justify-between">
+              <div className="text-sm text-gray-600">
+                共显示 <span className="font-semibold text-gray-900">{typeDetailDialog.nodes.length}</span> 条数据
+              </div>
+              <button
+                onClick={() => setTypeDetailDialog(null)}
+                className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors text-sm font-medium"
+              >
+                关闭
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
