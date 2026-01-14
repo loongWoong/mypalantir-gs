@@ -52,6 +52,12 @@ export default function GraphView() {
   // 分层视图高亮状态：跟踪被点击节点和后续节点
   const [highlightedNodes, setHighlightedNodes] = useState<Set<string>>(new Set());
   const [highlightedLinks, setHighlightedLinks] = useState<Set<string>>(new Set());
+  // 反向依赖高亮状态：跟踪双击节点的前驱节点
+  const [reverseHighlightedNodes, setReverseHighlightedNodes] = useState<Set<string>>(new Set());
+  const [reverseHighlightedLinks, setReverseHighlightedLinks] = useState<Set<string>>(new Set());
+  // 用于检测双击的ref（避免双击时触发单击事件）
+  const lastClickTimeRef = useRef<number>(0);
+  const clickTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   // 图例面板拖动状态（使用 top 定位，更直观）
   const [legendPosition, setLegendPosition] = useState<{ x: number; y: number }>(() => {
@@ -266,7 +272,7 @@ export default function GraphView() {
                 linkList.push({
                   source: sourceNodeKey,  // 使用 type:id 格式
                   target: targetNodeKey,  // 使用 type:id 格式
-                  id: link.id,
+                  id: linkId,  // 使用唯一的linkId而不是原始的link.id
                   type: linkType.name,
                   data: link,
                 });
@@ -342,7 +348,7 @@ export default function GraphView() {
                 linkList.push({
                   source: sourceNodeKey,  // 使用 type:id 格式
                   target: targetNodeKey,  // 使用 type:id 格式
-                  id: link.id,
+                  id: linkId,  // 使用唯一的linkId而不是原始的link.id
                   type: linkType.name,
                   data: link,
                 });
@@ -401,7 +407,7 @@ export default function GraphView() {
                 linkList.push({
                   source: sourceNodeKey,  // 使用 type:id 格式
                   target: targetNodeKey,  // 使用 type:id 格式
-                  id: link.id,
+                  id: linkId,  // 使用唯一的linkId而不是原始的link.id
                   type: linkType.name,
                   data: link,
                 });
@@ -508,7 +514,7 @@ export default function GraphView() {
                 const newLink = {
                   source: sourceNodeKey,  // 使用 type:id 格式
                   target: targetNodeKey,  // 使用 type:id 格式
-                  id: link.id,
+                  id: linkId,  // 使用唯一的linkId而不是原始的link.id
                   type: linkType.name,
                   data: link,
                 };
@@ -638,10 +644,11 @@ export default function GraphView() {
                     group: getTypeGroup(targetType, objectTypes),
                   });
                 }
+                const linkId = `${link.id}_${centerNodeKey}_${targetNodeKey}`;
                 linkList.push({
                   source: centerNodeKey,  // 使用 type:id 格式
                   target: targetNodeKey,  // 使用 type:id 格式
-                  id: link.id,
+                  id: linkId,  // 使用唯一的linkId而不是原始的link.id
                   type: linkType.name,
                   data: link,
                 });
@@ -687,10 +694,11 @@ export default function GraphView() {
                     console.log(`[loadInstanceGraph-direct] 节点 ${sourceNodeKey} 已存在于图中`);
                   }
                   
+                  const linkId = `${link.id}_${sourceNodeKey}_${centerNodeKey}`;
                   const newLink = {
                     source: sourceNodeKey,  // 使用 type:id 格式
                     target: centerNodeKey,  // 使用 type:id 格式
-                    id: link.id,
+                    id: linkId,  // 使用唯一的linkId而不是原始的link.id
                     type: linkType.name,
                     data: link,
                   };
@@ -827,10 +835,11 @@ export default function GraphView() {
             nodeDegree.set(sourceNodeKey, (nodeDegree.get(sourceNodeKey) || 0) + 1);
             nodeDegree.set(targetNodeKey, (nodeDegree.get(targetNodeKey) || 0) + 1);
             
+            const linkId = `${link.id}_${sourceNodeKey}_${targetNodeKey}`;
             linkList.push({
               source: sourceNodeKey,  // 使用 type:id 格式
               target: targetNodeKey,  // 使用 type:id 格式
-              id: link.id,
+              id: linkId,  // 使用唯一的linkId而不是原始的link.id
               type: linkType.name,
               data: link,
             });
@@ -1527,17 +1536,96 @@ export default function GraphView() {
     return { nodes: resultNodes, links: resultLinks };
   }, [links]);
 
+  // 递归查找所有前驱节点（反向依赖，传递性）
+  const findAllAncestors = useCallback((startNodeId: string, visitedNodes: Set<string> = new Set()): { nodes: Set<string>; links: Set<string> } => {
+    const resultNodes = new Set<string>();
+    const resultLinks = new Set<string>();
+    
+    // 如果已经访问过，直接返回
+    if (visitedNodes.has(startNodeId)) {
+      return { nodes: resultNodes, links: resultLinks };
+    }
+    
+    visitedNodes.add(startNodeId);
+    
+    // 找到所有指向该节点的连接（入边）
+    const incomingLinks = links.filter(link => link.target === startNodeId);
+    
+    incomingLinks.forEach(link => {
+      resultLinks.add(link.id);
+      const sourceId = link.source;
+      
+      if (!visitedNodes.has(sourceId)) {
+        resultNodes.add(sourceId);
+        
+        // 递归查找源节点的前驱节点
+        const ancestors = findAllAncestors(sourceId, visitedNodes);
+        ancestors.nodes.forEach(n => resultNodes.add(n));
+        ancestors.links.forEach(l => resultLinks.add(l));
+      }
+    });
+    
+    return { nodes: resultNodes, links: resultLinks };
+  }, [links]);
+
   // 处理节点点击，高亮后续节点（递归传递）
   const handleNodeClickInHierarchical = useCallback((node: GraphNode) => {
+    const now = Date.now();
+    const timeSinceLastClick = now - lastClickTimeRef.current;
+    
+    // 如果距离上次点击时间很短（小于300ms），可能是双击，延迟执行单击操作
+    if (timeSinceLastClick < 300) {
+      // 清除之前的延迟单击
+      if (clickTimeoutRef.current) {
+        clearTimeout(clickTimeoutRef.current);
+      }
+      return;
+    }
+    
+    lastClickTimeRef.current = now;
+    
+    // 延迟执行单击操作，以便检测是否是双击
+    if (clickTimeoutRef.current) {
+      clearTimeout(clickTimeoutRef.current);
+    }
+    
+    clickTimeoutRef.current = setTimeout(() => {
+      setSelectedNode(node);
+      
+      // 递归查找所有后续节点和连接
+      const { nodes: descendantNodes, links: descendantLinks } = findAllDescendants(node.id);
+      
+      // 设置高亮状态（正向影响）
+      setHighlightedNodes(descendantNodes);
+      setHighlightedLinks(descendantLinks);
+      
+      // 清除反向依赖高亮
+      setReverseHighlightedNodes(new Set());
+      setReverseHighlightedLinks(new Set());
+    }, 300);
+  }, [findAllDescendants]);
+
+  // 处理节点双击，高亮反向依赖节点（递归传递）
+  const handleNodeDoubleClickInHierarchical = useCallback((node: GraphNode) => {
+    // 取消延迟的单击操作
+    if (clickTimeoutRef.current) {
+      clearTimeout(clickTimeoutRef.current);
+      clickTimeoutRef.current = null;
+    }
+    
     setSelectedNode(node);
     
-    // 递归查找所有后续节点和连接
-    const { nodes: descendantNodes, links: descendantLinks } = findAllDescendants(node.id);
+    // 递归查找所有前驱节点和连接
+    const { nodes: ancestorNodes, links: ancestorLinks } = findAllAncestors(node.id);
     
-    // 设置高亮状态
-    setHighlightedNodes(descendantNodes);
-    setHighlightedLinks(descendantLinks);
-  }, [findAllDescendants]);
+    // 设置反向依赖高亮状态
+    setReverseHighlightedNodes(ancestorNodes);
+    setReverseHighlightedLinks(ancestorLinks);
+    
+    // 清除正向影响高亮
+    setHighlightedNodes(new Set());
+    setHighlightedLinks(new Set());
+  }, [findAllAncestors]);
 
   // 分层视图组件
   const HierarchicalView = () => {
@@ -1652,9 +1740,21 @@ export default function GraphView() {
             const x2 = targetBox.x;
             const y2 = targetY;
 
-            // 检查是否应该高亮此连接线
+            // 检查是否应该高亮此连接线（正向影响或反向依赖）
             const isHighlighted = highlightedLinks.has(link.id);
+            const isReverseHighlighted = reverseHighlightedLinks.has(link.id);
             const linkColor = getLinkTypeColor(link.type);
+            
+            // 确定连接线的颜色和样式
+            let strokeColor = linkColor;
+            let strokeWidth = 2;
+            if (isHighlighted) {
+              strokeColor = '#ef4444'; // 红色表示正向影响
+              strokeWidth = 4;
+            } else if (isReverseHighlighted) {
+              strokeColor = '#3b82f6'; // 蓝色表示反向依赖
+              strokeWidth = 4;
+            }
 
             return (
               <line
@@ -1663,11 +1763,11 @@ export default function GraphView() {
                 y1={y1}
                 x2={x2}
                 y2={y2}
-                stroke={isHighlighted ? '#ef4444' : linkColor}
-                strokeWidth={isHighlighted ? 4 : 2}
+                stroke={strokeColor}
+                strokeWidth={strokeWidth}
                 markerEnd="url(#arrowhead)"
-                opacity={isHighlighted ? 1 : 0.6}
-                className={isHighlighted ? 'transition-all duration-200' : ''}
+                opacity={isHighlighted || isReverseHighlighted ? 1 : 0.6}
+                className={(isHighlighted || isReverseHighlighted) ? 'transition-all duration-200' : ''}
               />
             );
           })}
@@ -1728,36 +1828,46 @@ export default function GraphView() {
                         const nodeIdOnly = node.id.includes(':') ? node.id.split(':')[1] : node.id;
                         const isSelected = selectedNode?.id === node.id;
                         const isHighlighted = highlightedNodes.has(node.id);
+                        const isReverseHighlighted = reverseHighlightedNodes.has(node.id);
+                        
+                        // 确定节点样式（优先级：选中 > 反向依赖高亮 > 正向影响高亮）
+                        let nodeClassName = 'hover:bg-blue-50';
+                        let textClassName = 'text-gray-800';
+                        
+                        if (isSelected) {
+                          nodeClassName = 'bg-blue-100 border-blue-300 border-l-4';
+                          textClassName = 'text-blue-900';
+                        } else if (isReverseHighlighted) {
+                          nodeClassName = 'bg-indigo-100 border-indigo-300 border-l-4 shadow-md';
+                          textClassName = 'text-indigo-900';
+                        } else if (isHighlighted) {
+                          nodeClassName = 'bg-yellow-100 border-yellow-300 border-l-4 shadow-md';
+                          textClassName = 'text-yellow-900';
+                        }
                         
                         return (
                           <div
                             key={node.id}
                             onClick={() => handleNodeClickInHierarchical(node)}
-                            className={`px-4 py-2 border-b border-gray-100 cursor-pointer transition-all duration-200 ${
-                              isSelected 
-                                ? 'bg-blue-100 border-blue-300 border-l-4' 
-                                : isHighlighted 
-                                ? 'bg-yellow-100 border-yellow-300 border-l-4 shadow-md' 
-                                : 'hover:bg-blue-50'
-                            }`}
+                            onDoubleClick={(e) => {
+                              e.stopPropagation();
+                              handleNodeDoubleClickInHierarchical(node);
+                            }}
+                            className={`px-4 py-2 border-b border-gray-100 cursor-pointer transition-all duration-200 ${nodeClassName}`}
                             style={{
                               height: nodeItemHeight,
                               marginBottom: index < typeNodes.length - 1 ? nodeItemSpacing : 0,
                             }}
+                            title="单击：高亮影响分析（后续节点）| 双击：高亮反向依赖（前驱节点）"
                           >
                             <div className="flex items-center justify-between">
-                              <span className={`text-sm truncate flex-1 font-medium ${
-                                isSelected 
-                                  ? 'text-blue-900' 
-                                  : isHighlighted 
-                                  ? 'text-yellow-900' 
-                                  : 'text-gray-800'
-                              }`} title={node.name}>
+                              <span className={`text-sm truncate flex-1 font-medium ${textClassName}`} title={node.name}>
                                 {node.name || nodeIdOnly.substring(0, 16)}
                               </span>
                               <div
                                 className={`w-3 h-3 rounded-full ml-2 flex-shrink-0 transition-all ${
-                                  isHighlighted ? 'ring-2 ring-yellow-500 ring-offset-1' : ''
+                                  isHighlighted ? 'ring-2 ring-yellow-500 ring-offset-1' : 
+                                  isReverseHighlighted ? 'ring-2 ring-indigo-500 ring-offset-1' : ''
                                 }`}
                                 style={{ backgroundColor: nodeColor(node) }}
                               />
@@ -1912,6 +2022,8 @@ export default function GraphView() {
                   localStorage.setItem('graphView_viewMode', 'force');
                   setHighlightedNodes(new Set());
                   setHighlightedLinks(new Set());
+                  setReverseHighlightedNodes(new Set());
+                  setReverseHighlightedLinks(new Set());
                 }}
                 className={`flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                   viewMode === 'force'
@@ -1929,6 +2041,8 @@ export default function GraphView() {
                   localStorage.setItem('graphView_viewMode', 'hierarchical');
                   setHighlightedNodes(new Set());
                   setHighlightedLinks(new Set());
+                  setReverseHighlightedNodes(new Set());
+                  setReverseHighlightedLinks(new Set());
                 }}
                 className={`flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                   viewMode === 'hierarchical'
@@ -2508,6 +2622,13 @@ export default function GraphView() {
               <p>💡 点击节点查看详情</p>
               <p>🖱️ 拖拽节点移动位置</p>
               <p>🔍 鼠标悬停查看标签</p>
+              {viewMode === 'hierarchical' && (
+                <>
+                  <p className="mt-2 pt-2 border-t border-gray-200">分层视图：</p>
+                  <p>🖱️ 单击：高亮影响分析（黄色）</p>
+                  <p>🖱️ 双击：高亮反向依赖（蓝色）</p>
+                </>
+              )}
             </div>
             </div>
           </div>
