@@ -12,7 +12,9 @@ import {
   ArrowLeftIcon,
   ArrowsRightLeftIcon,
   Squares2X2Icon,
-  LinkIcon
+  LinkIcon,
+  SparklesIcon,
+  TableCellsIcon
 } from '@heroicons/react/24/outline';
 
 interface GraphNode {
@@ -148,6 +150,25 @@ export default function GraphView() {
   const [viewMode, setViewMode] = useState<'force' | 'hierarchical'>(() => {
     const saved = localStorage.getItem('graphView_viewMode');
     return (saved === 'hierarchical' ? 'hierarchical' : 'force') as 'force' | 'hierarchical';
+  });
+  
+  // 力导向图布局选项
+  const [layoutType, setLayoutType] = useState<'force' | 'circle' | 'grid' | 'radial'>(() => {
+    const saved = localStorage.getItem('graphView_layoutType');
+    return (saved === 'circle' || saved === 'grid' || saved === 'radial' ? saved : 'force') as 'force' | 'circle' | 'grid' | 'radial';
+  });
+  
+  // 力导向图参数
+  const [forceParams, setForceParams] = useState(() => {
+    const saved = localStorage.getItem('graphView_forceParams');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        return { linkDistance: 90, chargeStrength: -300, centerStrength: 0.1, alphaDecay: 0.0228, velocityDecay: 0.4 };
+      }
+    }
+    return { linkDistance: 90, chargeStrength: -300, centerStrength: 0.1, alphaDecay: 0.0228, velocityDecay: 0.4 };
   });
   
   // ForceGraph2D 引用
@@ -997,19 +1018,331 @@ export default function GraphView() {
   };
 
   useEffect(() => {
-    setGraphData({ nodes, links });
+    // 更新 graphData，但保留现有的节点位置信息（fx, fy）
+    setGraphData(prevData => {
+      // 创建一个节点 ID 到位置的映射
+      const positionMap = new Map<string, { fx?: number; fy?: number }>();
+      if (prevData.nodes) {
+        prevData.nodes.forEach((node: any) => {
+          if (node.fx !== undefined || node.fy !== undefined) {
+            positionMap.set(node.id, { fx: node.fx, fy: node.fy });
+          }
+        });
+      }
+      
+      // 合并新的节点数据和保留的位置信息
+      const updatedNodes = nodes.map(node => {
+        const position = positionMap.get(node.id);
+        return {
+          ...node,
+          ...(position || {})
+        };
+      });
+      
+      return { nodes: updatedNodes, links };
+    });
   }, [nodes, links]);
 
-  // 配置力导向图的参数，增加连线默认长度
-  useEffect(() => {
-    if (fgRef.current && nodes.length > 0) {
-      // 使用 d3Force 配置 linkDistance
-      const linkForce = fgRef.current.d3Force('link');
-      if (linkForce) {
-        linkForce.distance(90); // 增加连线默认长度，使图形更清晰
-      }
+  // 圆形布局函数
+  const applyCircleLayout = useCallback(() => {
+    if (nodes.length === 0 || !fgRef.current) return;
+    
+    const centerX = 0;
+    const centerY = 0;
+    const radius = Math.max(200, Math.sqrt(nodes.length) * 30);
+    const angleStep = (2 * Math.PI) / nodes.length;
+    
+    // 创建新的节点数组，添加固定位置
+    const updatedNodes = nodes.map((node, index) => {
+      const angle = index * angleStep;
+      const x = centerX + radius * Math.cos(angle);
+      const y = centerY + radius * Math.sin(angle);
+      
+      return {
+        ...node,
+        fx: x,
+        fy: y
+      };
+    });
+    
+    // 更新图形数据
+    setGraphData({ nodes: updatedNodes, links });
+    
+    // 重新启动力导向图
+    if (fgRef.current) {
+      setTimeout(() => {
+        if (fgRef.current) {
+          fgRef.current.d3Force('charge', null);
+          fgRef.current.d3Force('link', null);
+          fgRef.current.d3Force('center', null);
+          fgRef.current.d3ReheatSimulation();
+        }
+      }, 0);
     }
   }, [nodes, links]);
+
+  // 网格布局函数
+  const applyGridLayout = useCallback(() => {
+    if (nodes.length === 0 || !fgRef.current) return;
+    
+    const cols = Math.ceil(Math.sqrt(nodes.length));
+    const rows = Math.ceil(nodes.length / cols);
+    const spacing = 150;
+    const startX = -(cols - 1) * spacing / 2;
+    const startY = -(rows - 1) * spacing / 2;
+    
+    // 创建新的节点数组，添加固定位置
+    const updatedNodes = nodes.map((node, index) => {
+      const col = index % cols;
+      const row = Math.floor(index / cols);
+      const x = startX + col * spacing;
+      const y = startY + row * spacing;
+      
+      return {
+        ...node,
+        fx: x,
+        fy: y
+      };
+    });
+    
+    // 更新图形数据
+    setGraphData({ nodes: updatedNodes, links });
+    
+    // 重新启动力导向图
+    if (fgRef.current) {
+      setTimeout(() => {
+        if (fgRef.current) {
+          fgRef.current.d3Force('charge', null);
+          fgRef.current.d3Force('link', null);
+          fgRef.current.d3Force('center', null);
+          fgRef.current.d3ReheatSimulation();
+        }
+      }, 0);
+    }
+  }, [nodes, links]);
+
+  // 径向布局函数（以中心节点为圆心，其他节点按层级分布）
+  const applyRadialLayout = useCallback(() => {
+    if (nodes.length === 0 || !fgRef.current) return;
+    
+    // 找到度数最高的节点作为中心节点
+    const nodeDegrees = new Map<string, number>();
+    links.forEach(link => {
+      nodeDegrees.set(link.source, (nodeDegrees.get(link.source) || 0) + 1);
+      nodeDegrees.set(link.target, (nodeDegrees.get(link.target) || 0) + 1);
+    });
+    
+    let centerNodeId = nodes[0]?.id;
+    let maxDegree = 0;
+    nodes.forEach(node => {
+      const degree = nodeDegrees.get(node.id) || 0;
+      if (degree > maxDegree) {
+        maxDegree = degree;
+        centerNodeId = node.id;
+      }
+    });
+    
+    // 计算每个节点到中心节点的最短距离（层级）
+    const nodeLevels = new Map<string, number>();
+    const visited = new Set<string>();
+    const queue: { id: string; level: number }[] = [{ id: centerNodeId!, level: 0 }];
+    
+    while (queue.length > 0) {
+      const { id, level } = queue.shift()!;
+      if (visited.has(id)) continue;
+      visited.add(id);
+      nodeLevels.set(id, level);
+      
+      links.forEach(link => {
+        if (link.source === id && !visited.has(link.target)) {
+          queue.push({ id: link.target, level: level + 1 });
+        } else if (link.target === id && !visited.has(link.source)) {
+          queue.push({ id: link.source, level: level + 1 });
+        }
+      });
+    }
+    
+    // 按层级分组节点
+    const nodesByLevel = new Map<number, string[]>();
+    nodes.forEach(node => {
+      const level = nodeLevels.get(node.id) || 0;
+      if (!nodesByLevel.has(level)) {
+        nodesByLevel.set(level, []);
+      }
+      nodesByLevel.get(level)!.push(node.id);
+    });
+    
+    // 计算布局
+    const centerX = 0;
+    const centerY = 0;
+    const baseRadius = 100;
+    const radiusStep = 120;
+    
+    // 创建新的节点数组，添加固定位置
+    const updatedNodes = nodes.map((node) => {
+      if (node.id === centerNodeId) {
+        // 中心节点
+        return {
+          ...node,
+          fx: centerX,
+          fy: centerY
+        };
+      } else {
+        const level = nodeLevels.get(node.id) || 1;
+        const levelNodes = nodesByLevel.get(level) || [];
+        const indexInLevel = levelNodes.indexOf(node.id);
+        const nodesInLevel = levelNodes.length;
+        
+        const radius = baseRadius + (level - 1) * radiusStep;
+        const angle = (2 * Math.PI * indexInLevel) / nodesInLevel;
+        const x = centerX + radius * Math.cos(angle);
+        const y = centerY + radius * Math.sin(angle);
+        
+        return {
+          ...node,
+          fx: x,
+          fy: y
+        };
+      }
+    });
+    
+    // 更新图形数据
+    setGraphData({ nodes: updatedNodes, links });
+    
+    // 重新启动力导向图
+    if (fgRef.current) {
+      setTimeout(() => {
+        if (fgRef.current) {
+          fgRef.current.d3Force('charge', null);
+          fgRef.current.d3Force('link', null);
+          fgRef.current.d3Force('center', null);
+          fgRef.current.d3ReheatSimulation();
+        }
+      }, 0);
+    }
+  }, [nodes, links]);
+
+  // 配置力导向图参数
+  const configureForceGraph = useCallback(() => {
+    if (!fgRef.current || nodes.length === 0) return;
+    
+    // 配置连接距离
+    const linkForce = fgRef.current.d3Force('link');
+    if (linkForce) {
+      linkForce.distance(forceParams.linkDistance);
+    }
+    
+    // 配置电荷力（节点之间的排斥力）
+    const chargeForce = fgRef.current.d3Force('charge');
+    if (chargeForce) {
+      chargeForce.strength(forceParams.chargeStrength);
+    }
+    
+    // 配置中心力（注意：d3 forceCenter 没有 strength 方法，我们通过其他方式控制）
+    // 如果需要调整中心力，可以通过调整 alpha 衰减来实现
+  }, [nodes, forceParams]);
+
+  // 力导向参数预设
+  const applyForcePreset = useCallback((preset: 'uniform' | 'compact' | 'spread' | 'default') => {
+    let newParams: typeof forceParams;
+    
+    switch (preset) {
+      case 'uniform':
+        // 均匀分布：中等连接距离，强排斥力，使节点分布更均匀
+        newParams = {
+          linkDistance: 120,
+          chargeStrength: -500,
+          centerStrength: 0.05,
+          alphaDecay: 0.0228,
+          velocityDecay: 0.5
+        };
+        break;
+      case 'compact':
+        // 紧凑：短连接距离，弱排斥力，节点更紧密
+        newParams = {
+          linkDistance: 60,
+          chargeStrength: -150,
+          centerStrength: 0.15,
+          alphaDecay: 0.0228,
+          velocityDecay: 0.6
+        };
+        break;
+      case 'spread':
+        // 分散：长连接距离，强排斥力，节点更分散
+        newParams = {
+          linkDistance: 150,
+          chargeStrength: -800,
+          centerStrength: 0.02,
+          alphaDecay: 0.0228,
+          velocityDecay: 0.3
+        };
+        break;
+      case 'default':
+      default:
+        // 默认参数
+        newParams = {
+          linkDistance: 90,
+          chargeStrength: -300,
+          centerStrength: 0.1,
+          alphaDecay: 0.0228,
+          velocityDecay: 0.4
+        };
+        break;
+    }
+    
+    setForceParams(newParams);
+    localStorage.setItem('graphView_forceParams', JSON.stringify(newParams));
+    configureForceGraph();
+    if (fgRef.current) {
+      fgRef.current.d3ReheatSimulation();
+    }
+  }, [configureForceGraph]);
+
+  // 释放固定位置，恢复力导向
+  const releaseFixedPositions = useCallback(() => {
+    if (!fgRef.current) return;
+    
+    // 创建新的节点数组，移除固定位置
+    const updatedNodes = nodes.map((node) => ({
+      ...node,
+      fx: undefined,
+      fy: undefined
+    }));
+    
+    // 更新图形数据
+    setGraphData({ nodes: updatedNodes, links });
+    
+    // 重新配置力导向参数
+    setTimeout(() => {
+      if (fgRef.current) {
+        configureForceGraph();
+        fgRef.current.d3ReheatSimulation();
+      }
+    }, 0);
+  }, [nodes, links, configureForceGraph]);
+
+  // 配置力导向图的参数
+  useEffect(() => {
+    if (fgRef.current && nodes.length > 0) {
+      configureForceGraph();
+    }
+  }, [nodes, links, configureForceGraph]);
+
+  // 当布局类型改变时应用布局
+  useEffect(() => {
+    if (viewMode !== 'force' || nodes.length === 0 || !fgRef.current) return;
+    
+    if (layoutType === 'circle') {
+      applyCircleLayout();
+    } else if (layoutType === 'grid') {
+      applyGridLayout();
+    } else if (layoutType === 'radial') {
+      applyRadialLayout();
+    } else {
+      // 力导向布局：释放固定位置
+      releaseFixedPositions();
+    }
+  }, [layoutType, viewMode, nodes.length, applyCircleLayout, applyGridLayout, applyRadialLayout, releaseFixedPositions]);
 
   const handleNodeClick = useCallback((node: GraphNode) => {
     setSelectedNode(node);
@@ -1101,7 +1434,7 @@ export default function GraphView() {
     const typeQueue: { type: string; layer: number }[] = [];
     
     // 找到所有没有入边的类型（根类型）
-    nodesByType.forEach((typeNodes, type) => {
+    nodesByType.forEach((_typeNodes, type) => {
       const inDegree = typeInEdges.get(type)?.size || 0;
       if (inDegree === 0) {
         typeQueue.push({ type, layer: 0 });
@@ -1609,6 +1942,223 @@ export default function GraphView() {
               </button>
             </div>
           </div>
+          
+          {/* 力导向图布局选项（仅在力导向图模式下显示） */}
+          {viewMode === 'force' && (
+            <div className="mb-4 border-t border-gray-200 pt-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                自动排布选项
+              </label>
+              <div className="flex flex-wrap gap-2 mb-3">
+                <button
+                  onClick={() => {
+                    setLayoutType('force');
+                    localStorage.setItem('graphView_layoutType', 'force');
+                    releaseFixedPositions();
+                  }}
+                  className={`flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    layoutType === 'force'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                  title="力导向布局：使用物理模拟自动排布"
+                >
+                  <LinkIcon className="w-4 h-4 mr-2" />
+                  力导向
+                </button>
+                <button
+                  onClick={() => {
+                    setLayoutType('circle');
+                    localStorage.setItem('graphView_layoutType', 'circle');
+                    setTimeout(() => applyCircleLayout(), 100);
+                  }}
+                  className={`flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    layoutType === 'circle'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                  title="圆形布局：将节点均匀分布在圆周上"
+                >
+                  <SparklesIcon className="w-4 h-4 mr-2" />
+                  圆形布局
+                </button>
+                <button
+                  onClick={() => {
+                    setLayoutType('grid');
+                    localStorage.setItem('graphView_layoutType', 'grid');
+                    setTimeout(() => applyGridLayout(), 100);
+                  }}
+                  className={`flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    layoutType === 'grid'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                  title="网格布局：将节点排列成网格状"
+                >
+                  <TableCellsIcon className="w-4 h-4 mr-2" />
+                  网格布局
+                </button>
+                <button
+                  onClick={() => {
+                    setLayoutType('radial');
+                    localStorage.setItem('graphView_layoutType', 'radial');
+                    setTimeout(() => applyRadialLayout(), 100);
+                  }}
+                  className={`flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    layoutType === 'radial'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                  title="径向布局：以中心节点为圆心，其他节点按层级分布"
+                >
+                  <CircleStackIcon className="w-4 h-4 mr-2" />
+                  径向布局
+                </button>
+                <button
+                  onClick={() => {
+                    if (layoutType === 'circle') {
+                      applyCircleLayout();
+                    } else if (layoutType === 'grid') {
+                      applyGridLayout();
+                    } else if (layoutType === 'radial') {
+                      applyRadialLayout();
+                    } else {
+                      releaseFixedPositions();
+                      configureForceGraph();
+                      if (fgRef.current) {
+                        fgRef.current.d3ReheatSimulation();
+                      }
+                    }
+                  }}
+                  className="flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-colors bg-green-600 text-white hover:bg-green-700"
+                  title="重新应用当前布局"
+                >
+                  <ArrowPathIcon className="w-4 h-4 mr-2" />
+                  重新布局
+                </button>
+              </div>
+              
+              {/* 力导向参数预设（仅在力导向布局时显示） */}
+              {layoutType === 'force' && (
+                <div className="mb-3">
+                  <label className="block text-xs font-medium text-gray-600 mb-2">
+                    快速预设
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={() => applyForcePreset('uniform')}
+                      className="px-3 py-1.5 text-xs font-medium rounded-lg bg-indigo-100 text-indigo-700 hover:bg-indigo-200 transition-colors"
+                      title="均匀分布：节点分布更均匀，便于观察"
+                    >
+                      均匀分布
+                    </button>
+                    <button
+                      onClick={() => applyForcePreset('compact')}
+                      className="px-3 py-1.5 text-xs font-medium rounded-lg bg-purple-100 text-purple-700 hover:bg-purple-200 transition-colors"
+                      title="紧凑：节点更紧密排列"
+                    >
+                      紧凑
+                    </button>
+                    <button
+                      onClick={() => applyForcePreset('spread')}
+                      className="px-3 py-1.5 text-xs font-medium rounded-lg bg-pink-100 text-pink-700 hover:bg-pink-200 transition-colors"
+                      title="分散：节点更分散，减少重叠"
+                    >
+                      分散
+                    </button>
+                    <button
+                      onClick={() => applyForcePreset('default')}
+                      className="px-3 py-1.5 text-xs font-medium rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
+                      title="恢复默认参数"
+                    >
+                      默认
+                    </button>
+                  </div>
+                </div>
+              )}
+              
+              {/* 力导向参数调整 */}
+              {layoutType === 'force' && (
+                <div className="grid grid-cols-2 gap-4 mt-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      连接距离: {forceParams.linkDistance}
+                    </label>
+                    <input
+                      type="range"
+                      min="30"
+                      max="200"
+                      step="10"
+                      value={forceParams.linkDistance}
+                      onChange={(e) => {
+                        const newParams = { ...forceParams, linkDistance: parseInt(e.target.value, 10) };
+                        setForceParams(newParams);
+                        localStorage.setItem('graphView_forceParams', JSON.stringify(newParams));
+                        configureForceGraph();
+                      }}
+                      className="w-full"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      电荷强度: {forceParams.chargeStrength}
+                    </label>
+                    <input
+                      type="range"
+                      min="-1000"
+                      max="-50"
+                      step="50"
+                      value={forceParams.chargeStrength}
+                      onChange={(e) => {
+                        const newParams = { ...forceParams, chargeStrength: parseInt(e.target.value, 10) };
+                        setForceParams(newParams);
+                        localStorage.setItem('graphView_forceParams', JSON.stringify(newParams));
+                        configureForceGraph();
+                      }}
+                      className="w-full"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      中心力强度: {forceParams.centerStrength.toFixed(2)}
+                    </label>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.1"
+                      value={forceParams.centerStrength}
+                      onChange={(e) => {
+                        const newParams = { ...forceParams, centerStrength: parseFloat(e.target.value) };
+                        setForceParams(newParams);
+                        localStorage.setItem('graphView_forceParams', JSON.stringify(newParams));
+                        configureForceGraph();
+                      }}
+                      className="w-full"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      速度衰减: {forceParams.velocityDecay.toFixed(2)}
+                    </label>
+                    <input
+                      type="range"
+                      min="0.1"
+                      max="0.9"
+                      step="0.1"
+                      value={forceParams.velocityDecay}
+                      onChange={(e) => {
+                        const newParams = { ...forceParams, velocityDecay: parseFloat(e.target.value) };
+                        setForceParams(newParams);
+                        localStorage.setItem('graphView_forceParams', JSON.stringify(newParams));
+                      }}
+                      className="w-full"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -1772,6 +2322,8 @@ export default function GraphView() {
               document.body.style.cursor = link ? 'pointer' : 'default';
             }}
             cooldownTicks={100}
+            d3AlphaDecay={forceParams.alphaDecay}
+            d3VelocityDecay={forceParams.velocityDecay}
             onEngineStop={() => {
               // 图形稳定后停止
             }}
