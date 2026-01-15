@@ -12,6 +12,7 @@ import MetricBrowser from './pages/MetricBrowser';
 import MetricBuilder from './pages/MetricBuilder';
 import MetricDetail from './pages/MetricDetail';
 import NaturalLanguageQuery from './pages/NaturalLanguageQuery';
+import ProfileTemplateEditor from './pages/ProfileTemplateEditor';
 
 
 function App() {
@@ -32,6 +33,7 @@ function App() {
           <Route path="/metrics/builder" element={<MetricBuilder />} />
           <Route path="/metrics/:id" element={<MetricDetail />} />
           <Route path="/natural-language-query" element={<NaturalLanguageQuery />} />
+          <Route path="/profile-editor" element={<ProfileTemplateEditor />} />
 
         </Routes>
       </Layout>

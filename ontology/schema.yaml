@@ -560,6 +560,12 @@ object_types:
     display_name: ETC门架计费流水
     description: "ETC门架计费流水"
     properties:
+      - name: id
+        display_name: 交易流水号
+        data_type: string
+        required: true
+        description: "交易流水号"
+
       - name: trade_id
         display_name: 计费交易编号
         data_type: string
@@ -798,6 +804,12 @@ object_types:
     display_name: 车辆通行路径
     description: "车辆通行路径"
     properties:
+      - name: id
+        display_name: 路径记录号
+        data_type: string
+        required: true
+        description: "路径记录号"
+
       - name: pass_id
         display_name: 通行标识
         data_type: string
@@ -950,6 +962,12 @@ object_types:
     display_name: 拆分明细
     description: "拆分明细"
     properties:
+      - name: id
+        display_name: 拆分明细记录号
+        data_type: string
+        required: true
+        description: "拆分明细记录号"
+      
       - name: pass_id
         display_name: 通行标识
         data_type: string
@@ -1150,6 +1168,12 @@ object_types:
     display_name: 清分结果
     description: "清分结果"
     properties:
+      - name: id
+        display_name: 清分结果记录号
+        data_type: string
+        required: true
+        description: "清分结果记录号"
+      
       - name: pass_id
         display_name: 通行标识
         data_type: string
@@ -1226,6 +1250,12 @@ object_types:
     display_name: 清分报表
     description: "清分报表"
     properties:
+      - name: id
+        display_name: 清分报表记录号
+        data_type: string
+        required: true
+        description: "清分报表记录号"
+      
       - name: crop_id
         display_name: 收费路段业主
         data_type: integer

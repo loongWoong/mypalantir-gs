@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link, useSearchParams } from 'react-router-dom';
-import type { Instance, ObjectType, QueryRequest } from '../api/client';
+import type { Instance, ObjectType, QueryRequest, FilterExpression } from '../api/client';
 import { instanceApi, schemaApi, queryApi, databaseApi, mappingApi } from '../api/client';
 import { useWorkspace } from '../WorkspaceContext';
 import { PlusIcon, PencilIcon, TrashIcon, ArrowPathIcon, CloudArrowDownIcon, XMarkIcon, LinkIcon, ArrowDownTrayIcon, FunnelIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline';
@@ -107,7 +107,7 @@ export default function InstanceList() {
         }
         
         // 构建过滤条件（转换为 OntologyQuery 格式）
-        const queryFilters: Array<[string, string, any]> = [];
+        const queryFilters: FilterExpression[] = [];
         Object.entries(filterParams).forEach(([key, value]) => {
           queryFilters.push(['=', key, value]);
         });
@@ -517,8 +517,8 @@ export default function InstanceList() {
                   </td>
                 </tr>
               ) : (
-                instances.map((instance) => (
-                  <tr key={instance.id} className="hover:bg-gray-50">
+                instances.map((instance, index) => (
+                  <tr key={instance.id || `instance-${index}`} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <Link
                         to={`/instances/${objectType}/${instance.id || ''}`}
