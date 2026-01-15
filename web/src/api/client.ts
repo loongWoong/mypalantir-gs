@@ -10,6 +10,32 @@ const apiClient = axios.create({
   },
 });
 
+// 响应拦截器：检查业务错误码
+apiClient.interceptors.response.use(
+  (response) => {
+    // 检查响应中的业务错误码
+    if (response.data && response.data.code && response.data.code !== 200) {
+      const errorMessage = response.data.message || '请求失败';
+      return Promise.reject(new Error(errorMessage));
+    }
+    return response;
+  },
+  (error) => {
+    // 处理HTTP错误
+    if (error.response) {
+      // 服务器返回了错误响应
+      const errorMessage = error.response.data?.message || error.message || '请求失败';
+      return Promise.reject(new Error(errorMessage));
+    } else if (error.request) {
+      // 请求已发出但没有收到响应
+      return Promise.reject(new Error('网络错误，请检查网络连接'));
+    } else {
+      // 其他错误
+      return Promise.reject(error);
+    }
+  }
+);
+
 // 类型定义（匹配后端返回的小写字段名）
 export interface ObjectType {
   name: string;

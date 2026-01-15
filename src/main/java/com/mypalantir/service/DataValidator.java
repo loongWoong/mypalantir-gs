@@ -1,6 +1,8 @@
 package com.mypalantir.service;
 
 import com.mypalantir.meta.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
@@ -13,6 +15,8 @@ import java.util.regex.Pattern;
 
 @Component
 public class DataValidator {
+    private static final Logger logger = LoggerFactory.getLogger(DataValidator.class);
+    
     private final Loader loader;
 
     public DataValidator(Loader loader) {
@@ -44,7 +48,28 @@ public class DataValidator {
             for (Property prop : objectType.getProperties()) {
                 if (data.containsKey(prop.getName())) {
                     Object value = data.get(prop.getName());
-                    validatePropertyValue(prop, value);
+                    logger.debug("验证字段: {} = {} (实际类型: {}, 期望类型: {}, required: {})", 
+                        prop.getName(), 
+                        value, 
+                        value != null ? value.getClass().getSimpleName() : "null",
+                        prop.getDataType(),
+                        prop.isRequired());
+                    
+                    // 对于非 required 字段，如果值为 null，跳过类型验证
+                    if (value == null && !prop.isRequired()) {
+                        logger.debug("字段 '{}' 为非 required 字段且值为 null，跳过类型验证", prop.getName());
+                        continue;
+                    }
+                    
+                    try {
+                        validatePropertyValue(prop, value);
+                    } catch (ValidationException e) {
+                        logger.error("字段 '{}' 验证失败: {} (值: {}, 实际类型: {}, 期望类型: {})", 
+                            prop.getName(), e.getMessage(), value, 
+                            value != null ? value.getClass().getSimpleName() : "null",
+                            prop.getDataType());
+                        throw new ValidationException("Field '" + prop.getName() + "': " + e.getMessage());
+                    }
                 }
             }
         }
@@ -100,7 +125,7 @@ public class DataValidator {
         // 处理数组类型
         if (dataType.startsWith("array<")) {
             if (!(value instanceof List)) {
-                throw new ValidationException("expected array type");
+                throw new ValidationException("expected array type, got " + (value != null ? value.getClass().getSimpleName() : "null"));
             }
             return;
         }
@@ -108,27 +133,27 @@ public class DataValidator {
         switch (dataType) {
             case "string":
                 if (!(value instanceof String)) {
-                    throw new ValidationException("expected string type");
+                    throw new ValidationException("expected string type, got " + (value != null ? value.getClass().getSimpleName() : "null"));
                 }
                 break;
             case "int":
                 if (!(value instanceof Integer) && !(value instanceof Long) && !(value instanceof Number)) {
-                    throw new ValidationException("expected int type");
+                    throw new ValidationException("expected int type, got " + (value != null ? value.getClass().getSimpleName() : "null"));
                 }
                 break;
             case "float":
                 if (!(value instanceof Float) && !(value instanceof Double) && !(value instanceof Number)) {
-                    throw new ValidationException("expected float type");
+                    throw new ValidationException("expected float type, got " + (value != null ? value.getClass().getSimpleName() : "null"));
                 }
                 break;
             case "bool":
                 if (!(value instanceof Boolean)) {
-                    throw new ValidationException("expected bool type");
+                    throw new ValidationException("expected bool type, got " + (value != null ? value.getClass().getSimpleName() : "null"));
                 }
                 break;
             case "date":
                 if (!(value instanceof String)) {
-                    throw new ValidationException("expected date string");
+                    throw new ValidationException("expected date string, got " + (value != null ? value.getClass().getSimpleName() : "null"));
                 }
                 try {
                     LocalDate.parse((String) value, DateTimeFormatter.ISO_LOCAL_DATE);
@@ -138,7 +163,7 @@ public class DataValidator {
                 break;
             case "datetime":
                 if (!(value instanceof String)) {
-                    throw new ValidationException("expected datetime string");
+                    throw new ValidationException("expected datetime string, got " + (value != null ? value.getClass().getSimpleName() : "null"));
                 }
                 try {
                     LocalDateTime.parse((String) value, DateTimeFormatter.ISO_DATE_TIME);

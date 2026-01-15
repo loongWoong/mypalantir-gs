@@ -278,7 +278,16 @@ public class MetricController {
     @PostMapping("/calculate")
     public ResponseEntity<ApiResponse<MetricResult>> calculateMetric(@RequestBody Map<String, Object> request) {
         try {
+            System.out.println("MetricController.calculateMetric - 收到请求: " + request);
+            
             String metricId = (String) request.get("metric_id");
+            if (metricId == null || metricId.isEmpty()) {
+                System.err.println("MetricController.calculateMetric - metric_id 为空");
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(ApiResponse.error(400, "metric_id 不能为空"));
+            }
+            
+            System.out.println("MetricController.calculateMetric - metricId: " + metricId);
             
             MetricQuery query = new MetricQuery();
             query.setMetricId(metricId);
@@ -288,36 +297,49 @@ public class MetricController {
             @SuppressWarnings("unchecked")
             Map<String, Object> timeRangeMap = (Map<String, Object>) request.get("time_range");
             if (timeRangeMap != null) {
-                MetricQuery.TimeRange timeRange = new MetricQuery.TimeRange(
-                        (String) timeRangeMap.get("start"),
-                        (String) timeRangeMap.get("end")
-                );
+                String start = (String) timeRangeMap.get("start");
+                String end = (String) timeRangeMap.get("end");
+                System.out.println("MetricController.calculateMetric - timeRange: " + start + " to " + end);
+                MetricQuery.TimeRange timeRange = new MetricQuery.TimeRange(start, end);
                 query.setTimeRange(timeRange);
             }
 
             // 解析维度
             @SuppressWarnings("unchecked")
             Map<String, Object> dimensions = (Map<String, Object>) request.get("dimensions");
+            if (dimensions != null) {
+                System.out.println("MetricController.calculateMetric - dimensions: " + dimensions);
+            }
             query.setDimensions(dimensions);
 
             MetricResult result;
             // 先尝试获取原子指标
             try {
+                System.out.println("MetricController.calculateMetric - 尝试获取原子指标: " + metricId);
                 AtomicMetric atomicMetric = atomicMetricService.getAtomicMetric(metricId);
+                System.out.println("MetricController.calculateMetric - 找到原子指标，开始计算");
                 result = metricCalculator.calculateAtomicMetric(atomicMetric, query);
+                System.out.println("MetricController.calculateMetric - 原子指标计算成功");
             } catch (IOException e) {
+                System.out.println("MetricController.calculateMetric - 不是原子指标，尝试获取指标定义: " + e.getMessage());
                 // 如果不是原子指标，尝试获取指标定义
                 try {
                     MetricDefinition metricDefinition = metricService.getMetricDefinition(metricId);
+                    System.out.println("MetricController.calculateMetric - 找到指标定义，开始计算");
                     result = metricCalculator.calculateMetric(metricDefinition, query);
+                    System.out.println("MetricController.calculateMetric - 指标定义计算成功");
                 } catch (IOException ex) {
+                    System.err.println("MetricController.calculateMetric - 指标不存在: " + metricId);
+                    ex.printStackTrace();
                     return ResponseEntity.status(HttpStatus.NOT_FOUND)
                             .body(ApiResponse.error(404, "指标不存在: " + metricId));
                 }
             }
             
+            System.out.println("MetricController.calculateMetric - 返回结果");
             return ResponseEntity.ok(ApiResponse.success(result));
         } catch (Exception e) {
+            System.err.println("MetricController.calculateMetric - 发生异常: " + e.getMessage());
             e.printStackTrace();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(ApiResponse.error(500, "Failed to calculate metric: " + e.getMessage()));

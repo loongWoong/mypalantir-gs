@@ -17,25 +17,40 @@ export const MetricCardWidget: UserComponent<MetricCardWidgetProps> = (props) =>
 
   // 预览模式：实时获取数据
   useEffect(() => {
-    if (props.metricId) {
+    // 只有在有有效的 metricId 时才获取数据
+    if (props.metricId && props.metricId.trim() !== '') {
       fetchMetricData();
+    } else {
+      // 如果没有 metricId，清空数据和错误状态
+      setData(null);
+      setError(null);
+      setLoading(false);
     }
   }, [props.metricId]);
 
   const fetchMetricData = async () => {
+    if (!props.metricId || props.metricId.trim() === '') {
+      console.warn('MetricCardWidget: metricId 为空，跳过数据获取');
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
+      console.log('MetricCardWidget: 开始获取指标数据，metricId:', props.metricId);
       // 使用示例时间范围，实际使用时需要从上下文获取
       const result = await metricApi.calculateMetric({
-        metric_id: props.metricId!,
+        metric_id: props.metricId,
         time_range: { start: '2024-01-01', end: '2024-12-31' },
         dimensions: {},
       });
+      console.log('MetricCardWidget: 获取指标数据成功', result);
       setData(result);
-    } catch (err) {
-      console.error('Failed to fetch metric data:', err);
-      setError('加载失败');
+    } catch (err: any) {
+      console.error('MetricCardWidget: 获取指标数据失败:', err);
+      const errorMessage = err?.response?.data?.message || err?.message || '加载失败';
+      setError(errorMessage);
+      // 不设置 data 为 null，保留之前的数据（如果有）
     } finally {
       setLoading(false);
     }
@@ -92,10 +107,14 @@ export const MetricCardWidget: UserComponent<MetricCardWidgetProps> = (props) =>
       </div>
       
       <div className="flex items-baseline">
-        {loading ? (
+        {!props.metricId ? (
+          <div className="text-gray-400 text-sm">请选择指标</div>
+        ) : loading ? (
           <div className="text-gray-400">加载中...</div>
         ) : error ? (
-          <div className="text-red-500 text-sm">{error}</div>
+          <div className="text-red-500 text-sm" title={error}>
+            {error.length > 30 ? error.substring(0, 30) + '...' : error}
+          </div>
         ) : (
           <>
             <span className="text-3xl font-bold text-gray-900">
@@ -168,7 +187,30 @@ const MetricCardSettings = () => {
         <label className="block text-sm font-medium mb-1">选择指标</label>
         <select
           value={metricId || ''}
-          onChange={(e) => setProp((props: MetricCardWidgetProps) => (props.metricId = e.target.value))}
+          onChange={(e) => {
+            const selectedMetricId = e.target.value;
+            setProp((props: MetricCardWidgetProps) => {
+              props.metricId = selectedMetricId;
+              
+              // 如果选择了指标，自动填充标题和单位（作为默认值）
+              if (selectedMetricId) {
+                const selectedMetric = metrics.find((m) => m.id === selectedMetricId);
+                if (selectedMetric) {
+                  // 自动填充标题为指标的名称（默认值）
+                  const metricName = selectedMetric.displayName || selectedMetric.display_name || selectedMetric.name;
+                  if (metricName) {
+                    props.title = metricName;
+                  }
+                  
+                  // 自动填充单位为指标的单位（默认值）
+                  const metricUnit = selectedMetric.unit;
+                  if (metricUnit) {
+                    props.unit = metricUnit;
+                  }
+                }
+              }
+            });
+          }}
           className="w-full p-2 border rounded text-sm"
           disabled={loading}
         >

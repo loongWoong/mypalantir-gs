@@ -17,11 +17,23 @@ export const profileTemplateApi = {
    * 创建模板
    */
   create: async (request: CreateTemplateRequest): Promise<{ id: string }> => {
-    const response = await apiClient.post<ApiResponse<{ id: string }>>(
-      '/profile-templates',
-      request
-    );
-    return response.data.data;
+    try {
+      const response = await apiClient.post<ApiResponse<{ id: string }>>(
+        '/profile-templates',
+        request
+      );
+      // 响应拦截器已经处理了错误码，这里只需要检查数据
+      if (!response.data?.data) {
+        throw new Error('创建模板失败：服务器返回数据为空');
+      }
+      if (!response.data.data.id) {
+        throw new Error('创建模板失败：返回数据缺少ID');
+      }
+      return response.data.data;
+    } catch (error) {
+      // 重新抛出错误，让调用者处理
+      throw error;
+    }
   },
 
   /**
@@ -47,7 +59,8 @@ export const profileTemplateApi = {
       '/profile-templates',
       { params }
     );
-    return response.data.data;
+    // 确保返回数组，即使 data 为 null 或 undefined
+    return response.data?.data || [];
   },
 
   /**
@@ -57,6 +70,9 @@ export const profileTemplateApi = {
     const response = await apiClient.get<ApiResponse<ProfileTemplate>>(
       `/profile-templates/${templateId}`
     );
+    if (!response.data || !response.data.data) {
+      throw new Error('模板不存在');
+    }
     return response.data.data;
   },
 
