@@ -532,37 +532,38 @@ export default function InstanceList() {
   }
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold text-gray-900">{objectTypeDef.name}</h1>
-          {queryMode === 'mapping' && fromMapping && (
-            <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-lg text-sm font-medium">
-              实例存储查询
-            </span>
-          )}
-          {queryMode === 'storage' && !fromMapping && (
-            <span className="px-3 py-1 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium">
-              映射数据查询
-            </span>
-          )}
+    <div className="flex flex-col h-screen overflow-hidden">
+      <div className="flex-shrink-0 sticky top-0 z-10 bg-white border-b border-gray-200 pb-6 pt-4 px-4">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-bold text-gray-900">{objectTypeDef.name}</h1>
+            {queryMode === 'mapping' && fromMapping && (
+              <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-lg text-sm font-medium">
+                实例存储查询
+              </span>
+            )}
+            {queryMode === 'storage' && !fromMapping && (
+              <span className="px-3 py-1 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium">
+                映射数据查询
+              </span>
+            )}
+            </div>
+            {objectTypeDef.description && (
+              <p className="text-gray-600 mt-1">{objectTypeDef.description}</p>
+            )}
+            {queryMode === 'mapping' && fromMapping && (
+              <p className="text-sm text-gray-500 mt-1">
+                数据来自本地实例存储
+              </p>
+            )}
+            {queryMode === 'storage' && !fromMapping && (
+              <p className="text-sm text-gray-500 mt-1">
+               数据来自数据库映射，实时查询 
+              </p>
+            )}
           </div>
-          {objectTypeDef.description && (
-            <p className="text-gray-600 mt-1">{objectTypeDef.description}</p>
-          )}
-          {queryMode === 'mapping' && fromMapping && (
-            <p className="text-sm text-gray-500 mt-1">
-              数据来自本地实例存储
-            </p>
-          )}
-          {queryMode === 'storage' && !fromMapping && (
-            <p className="text-sm text-gray-500 mt-1">
-             数据来自数据库映射，实时查询 
-            </p>
-          )}
-        </div>
-        <div className="flex gap-2">
+          <div className="flex gap-2">
           {/* 视图切换按钮 */}
           <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-1">
             <button
@@ -703,7 +704,10 @@ export default function InstanceList() {
           </button>
         </div>
       </div>
+      </div>
 
+      {/* 可滚动内容区域 */}
+      <div className="flex-1 overflow-y-auto px-4 pb-4">
       {/* 筛选面板 - 仅在列表视图显示 */}
       {viewMode === 'list' && showFilters && !fromMapping && objectTypeDef && (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-4">
@@ -1238,6 +1242,7 @@ export default function InstanceList() {
 
       {/* Toast 通知 */}
       <ToastContainer toasts={toasts} onClose={removeToast} />
+      </div>
     </div>
   );
 }
