@@ -1,5 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom';
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
 import type { Instance, ObjectType, QueryRequest, FilterExpression } from '../api/client';
 import { instanceApi, schemaApi, queryApi, databaseApi, mappingApi } from '../api/client';
 import { useWorkspace } from '../WorkspaceContext';
@@ -45,8 +47,20 @@ export default function InstanceList() {
     showNumericStats: true,
     showChart: true,
   });
+  const [showPropertyFilter, setShowPropertyFilter] = useState(false);
+  const [visibleProperties, setVisibleProperties] = useState<Set<string>>(new Set());
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const analysisRef = useRef<HTMLDivElement>(null);
+
   const limit = 20;
   const { toasts, showToast, removeToast } = useToast();
+
+  // Initialize visible properties when object type definition is loaded
+  useEffect(() => {
+    if (objectTypeDef?.properties) {
+      setVisibleProperties(new Set(objectTypeDef.properties.map(p => p.name)));
+    }
+  }, [objectTypeDef]);
 
   // 判断是否为系统对象类型（不需要关联按钮）
   const isSystemObjectType = (type: string | undefined) => {
@@ -461,6 +475,52 @@ export default function InstanceList() {
     }
   };
 
+  const handleExport = async (type: 'png' | 'pdf') => {
+    if (!analysisRef.current) return;
+    
+    try {
+      showToast('正在生成导出文件...', 'info');
+      // 等待一点时间确保UI渲染完成
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      const canvas = await html2canvas(analysisRef.current, {
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff',
+        scale: 2 // 提高清晰度
+      });
+      
+      const fileName = `${objectTypeDef?.name || 'analysis'}_properties.${type}`;
+      
+      if (type === 'png') {
+        const link = document.createElement('a');
+        link.download = fileName;
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+      } else {
+        const imgData = canvas.toDataURL('image/png');
+        const imgWidth = canvas.width;
+        const imgHeight = canvas.height;
+        
+        // 创建与图片尺寸匹配的PDF
+        const pdf = new jsPDF({
+          orientation: imgWidth > imgHeight ? 'landscape' : 'portrait',
+          unit: 'px',
+          format: [imgWidth, imgHeight]
+        });
+        
+        pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
+        pdf.save(fileName);
+      }
+      
+      setShowExportMenu(false);
+      showToast('导出成功', 'success');
+    } catch (error) {
+      console.error('Export failed:', error);
+      showToast('导出失败', 'error');
+    }
+  };
+
   // 在属性分析视图下，即使 loading 为 true，只要 objectTypeDef 已加载，就显示页面
   // 在列表视图下，需要等待 loading 完成
   if (viewMode === 'list' && loading) {
@@ -479,12 +539,12 @@ export default function InstanceList() {
             <h1 className="text-2xl font-bold text-gray-900">{objectTypeDef.name}</h1>
           {queryMode === 'mapping' && fromMapping && (
             <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-lg text-sm font-medium">
-              映射数据查询
+              实例存储查询
             </span>
           )}
           {queryMode === 'storage' && !fromMapping && (
             <span className="px-3 py-1 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium">
-              实例存储查询
+              映射数据查询
             </span>
           )}
           </div>
@@ -493,12 +553,12 @@ export default function InstanceList() {
           )}
           {queryMode === 'mapping' && fromMapping && (
             <p className="text-sm text-gray-500 mt-1">
-              数据来自数据库映射，实时查询
+              数据来自本地实例存储
             </p>
           )}
           {queryMode === 'storage' && !fromMapping && (
             <p className="text-sm text-gray-500 mt-1">
-              数据来自本地实例存储
+             数据来自数据库映射，实时查询 
             </p>
           )}
         </div>
@@ -554,7 +614,7 @@ export default function InstanceList() {
                 title="映射数据查询：使用 mappingId 从数据库实时查询"
               >
                 <CircleStackIcon className="w-5 h-5 mr-2" />
-                映射数据查询
+                映射数据
               </button>
               
               <div className="flex items-center px-1">
@@ -585,7 +645,7 @@ export default function InstanceList() {
                 title="实例存储查询：使用 instance 从本地存储查询"
               >
                 <ServerIcon className="w-5 h-5 mr-2" />
-                实例存储查询
+                实例存储
               </button>
             </div>
           )}
@@ -732,15 +792,110 @@ export default function InstanceList() {
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-semibold text-gray-900">Properties 分析</h2>
-              <button
-                onClick={() => setShowAnalysisSettings(!showAnalysisSettings)}
-                className="flex items-center px-3 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
-                title="分析设置"
-              >
-                <Cog6ToothIcon className="w-5 h-5 mr-2" />
-                设置
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowPropertyFilter(!showPropertyFilter)}
+                  className={`flex items-center px-3 py-2 text-sm rounded-lg transition-colors ${
+                    showPropertyFilter 
+                      ? 'bg-blue-100 text-blue-700' 
+                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                  }`}
+                  title="筛选属性"
+                >
+                  <FunnelIcon className="w-5 h-5 mr-2" />
+                  筛选属性
+                </button>
+                <button
+                  onClick={() => setShowAnalysisSettings(!showAnalysisSettings)}
+                  className={`flex items-center px-3 py-2 text-sm rounded-lg transition-colors ${
+                    showAnalysisSettings 
+                      ? 'bg-gray-200 text-gray-900' 
+                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                  }`}
+                  title="分析设置"
+                >
+                  <Cog6ToothIcon className="w-5 h-5 mr-2" />
+                  设置
+                </button>
+                <div className="relative">
+                  <button
+                    onClick={() => setShowExportMenu(!showExportMenu)}
+                    className={`flex items-center px-3 py-2 text-sm rounded-lg transition-colors ${
+                      showExportMenu 
+                        ? 'bg-gray-200 text-gray-900' 
+                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                    }`}
+                    title="导出分析"
+                  >
+                    <ArrowDownTrayIcon className="w-5 h-5 mr-2" />
+                    导出
+                  </button>
+                  {showExportMenu && (
+                    <div className="absolute right-0 mt-2 w-32 bg-white rounded-lg shadow-lg border border-gray-100 z-10 py-1">
+                      <button
+                        onClick={() => handleExport('png')}
+                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center"
+                      >
+                        <span className="w-8">PNG</span>
+                        <span className="text-xs text-gray-400">图片</span>
+                      </button>
+                      <button
+                        onClick={() => handleExport('pdf')}
+                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center"
+                      >
+                        <span className="w-8">PDF</span>
+                        <span className="text-xs text-gray-400">文档</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
+
+            {/* 属性筛选面板 */}
+            {showPropertyFilter && (
+              <div className="mb-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                <div className="flex justify-between items-center mb-3">
+                  <h3 className="text-sm font-semibold text-gray-900">选择显示的属性</h3>
+                  <div className="flex gap-2 text-xs">
+                    <button 
+                      onClick={() => setVisibleProperties(new Set(objectTypeDef.properties.map(p => p.name)))}
+                      className="text-blue-600 hover:text-blue-800 font-medium"
+                    >
+                      全选
+                    </button>
+                    <span className="text-gray-300">|</span>
+                    <button 
+                      onClick={() => setVisibleProperties(new Set())}
+                      className="text-gray-500 hover:text-gray-700"
+                    >
+                      清空
+                    </button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                  {objectTypeDef.properties.map(prop => (
+                    <label key={prop.name} className="flex items-center cursor-pointer hover:bg-white p-1.5 rounded border border-transparent hover:border-gray-200 transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={visibleProperties.has(prop.name)}
+                        onChange={(e) => {
+                          const newSet = new Set(visibleProperties);
+                          if (e.target.checked) {
+                            newSet.add(prop.name);
+                          } else {
+                            newSet.delete(prop.name);
+                          }
+                          setVisibleProperties(newSet);
+                        }}
+                        className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 border-gray-300"
+                      />
+                      <span className="ml-2 text-sm text-gray-700 truncate select-none" title={prop.name}>{prop.name}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* 分析设置面板 */}
             {showAnalysisSettings && (
@@ -798,8 +953,10 @@ export default function InstanceList() {
                 <p className="text-sm text-gray-400 mt-2">请先创建实例或同步数据</p>
               </div>
             ) : (
-              <div className="space-y-3">
-                {objectTypeDef.properties.map((prop) => (
+              <div className="space-y-3" ref={analysisRef}>
+                {objectTypeDef.properties
+                  .filter(prop => visibleProperties.has(prop.name))
+                  .map((prop) => (
                   <PropertyStatistics
                     key={prop.name}
                     property={prop}
