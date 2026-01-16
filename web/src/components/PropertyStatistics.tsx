@@ -2,9 +2,16 @@ import { useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import type { Property, Instance } from '../api/client';
 
+export interface AnalysisDisplayOptions {
+  showSummary: boolean;      // 统计摘要
+  showNumericStats: boolean;  // 数值统计
+  showChart: boolean;         // 分布图表
+}
+
 interface PropertyStatisticsProps {
   property: Property;
   instances: Instance[];
+  displayOptions: AnalysisDisplayOptions;
 }
 
 interface Statistics {
@@ -23,7 +30,7 @@ interface Statistics {
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
 
-export default function PropertyStatistics({ property, instances }: PropertyStatisticsProps) {
+export default function PropertyStatistics({ property, instances, displayOptions }: PropertyStatisticsProps) {
   const stats = useMemo<Statistics>(() => {
     const values = instances
       .map(inst => inst[property.name])
@@ -91,66 +98,72 @@ export default function PropertyStatistics({ property, instances }: PropertyStat
   const showPieChart = !isNumeric && stats.uniqueValues <= 10 && stats.distribution.length > 0;
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-4">
-      <div className="mb-4">
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="text-lg font-semibold text-gray-900">{property.name}</h3>
-          <span className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded">
+    <div className="bg-white rounded-lg border border-gray-200 p-3">
+      {/* 属性标题行 - 紧凑布局 */}
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <h3 className="text-base font-semibold text-gray-900">{property.name}</h3>
+          <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded">
             {property.data_type}
           </span>
         </div>
         {property.description && (
-          <p className="text-sm text-gray-600 mt-1">{property.description}</p>
+          <span className="text-xs text-gray-500 truncate max-w-md">{property.description}</span>
         )}
       </div>
 
-      {/* 统计摘要 */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-        <div className="bg-gray-50 rounded-lg p-3">
-          <div className="text-xs text-gray-500 mb-1">总数</div>
-          <div className="text-lg font-semibold text-gray-900">{stats.total}</div>
-        </div>
-        <div className="bg-gray-50 rounded-lg p-3">
-          <div className="text-xs text-gray-500 mb-1">非空值</div>
-          <div className="text-lg font-semibold text-green-600">{stats.nonNull}</div>
-        </div>
-        <div className="bg-gray-50 rounded-lg p-3">
-          <div className="text-xs text-gray-500 mb-1">空值</div>
-          <div className="text-lg font-semibold text-red-600">{stats.nullCount}</div>
-        </div>
-        <div className="bg-gray-50 rounded-lg p-3">
-          <div className="text-xs text-gray-500 mb-1">唯一值</div>
-          <div className="text-lg font-semibold text-blue-600">{stats.uniqueValues}</div>
-        </div>
+      {/* 统计信息 - 单行紧凑布局 */}
+      <div className="flex flex-wrap items-center gap-3 mb-2">
+        {/* 统计摘要 */}
+        {displayOptions.showSummary && (
+          <>
+            <div className="flex items-center gap-1.5 text-sm">
+              <span className="text-gray-500">总数:</span>
+              <span className="font-semibold text-gray-900">{stats.total}</span>
+            </div>
+            <div className="flex items-center gap-1.5 text-sm">
+              <span className="text-gray-500">非空:</span>
+              <span className="font-semibold text-green-600">{stats.nonNull}</span>
+            </div>
+            <div className="flex items-center gap-1.5 text-sm">
+              <span className="text-gray-500">空值:</span>
+              <span className="font-semibold text-red-600">{stats.nullCount}</span>
+            </div>
+            <div className="flex items-center gap-1.5 text-sm">
+              <span className="text-gray-500">唯一值:</span>
+              <span className="font-semibold text-blue-600">{stats.uniqueValues}</span>
+            </div>
+          </>
+        )}
+
+        {/* 数值统计信息 - 紧凑显示 */}
+        {displayOptions.showNumericStats && stats.numericStats && (
+          <>
+            <div className="flex items-center gap-1.5 text-sm">
+              <span className="text-gray-500">最小值:</span>
+              <span className="font-semibold text-blue-700">{stats.numericStats.min.toFixed(2)}</span>
+            </div>
+            <div className="flex items-center gap-1.5 text-sm">
+              <span className="text-gray-500">最大值:</span>
+              <span className="font-semibold text-blue-700">{stats.numericStats.max.toFixed(2)}</span>
+            </div>
+            <div className="flex items-center gap-1.5 text-sm">
+              <span className="text-gray-500">平均值:</span>
+              <span className="font-semibold text-blue-700">{stats.numericStats.avg.toFixed(2)}</span>
+            </div>
+            <div className="flex items-center gap-1.5 text-sm">
+              <span className="text-gray-500">中位数:</span>
+              <span className="font-semibold text-blue-700">{stats.numericStats.median.toFixed(2)}</span>
+            </div>
+          </>
+        )}
       </div>
 
-      {/* 数值统计信息 */}
-      {stats.numericStats && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-          <div className="bg-blue-50 rounded-lg p-3">
-            <div className="text-xs text-gray-500 mb-1">最小值</div>
-            <div className="text-lg font-semibold text-blue-900">{stats.numericStats.min.toFixed(2)}</div>
-          </div>
-          <div className="bg-blue-50 rounded-lg p-3">
-            <div className="text-xs text-gray-500 mb-1">最大值</div>
-            <div className="text-lg font-semibold text-blue-900">{stats.numericStats.max.toFixed(2)}</div>
-          </div>
-          <div className="bg-blue-50 rounded-lg p-3">
-            <div className="text-xs text-gray-500 mb-1">平均值</div>
-            <div className="text-lg font-semibold text-blue-900">{stats.numericStats.avg.toFixed(2)}</div>
-          </div>
-          <div className="bg-blue-50 rounded-lg p-3">
-            <div className="text-xs text-gray-500 mb-1">中位数</div>
-            <div className="text-lg font-semibold text-blue-900">{stats.numericStats.median.toFixed(2)}</div>
-          </div>
-        </div>
-      )}
-
-      {/* 图表 */}
-      {stats.distribution.length > 0 && (
-        <div className="mt-4">
+      {/* 图表 - 紧凑高度 */}
+      {displayOptions.showChart && stats.distribution.length > 0 && (
+        <div className="mt-2">
           {showPieChart ? (
-            <ResponsiveContainer width="100%" height={300}>
+            <ResponsiveContainer width="100%" height={200}>
               <PieChart>
                 <Pie
                   data={stats.distribution}
@@ -158,7 +171,7 @@ export default function PropertyStatistics({ property, instances }: PropertyStat
                   cy="50%"
                   labelLine={false}
                   label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-                  outerRadius={80}
+                  outerRadius={60}
                   fill="#8884d8"
                   dataKey="value"
                 >
@@ -171,19 +184,19 @@ export default function PropertyStatistics({ property, instances }: PropertyStat
               </PieChart>
             </ResponsiveContainer>
           ) : (
-            <ResponsiveContainer width="100%" height={300}>
+            <ResponsiveContainer width="100%" height={200}>
               <BarChart data={stats.distribution}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis 
                   dataKey="name" 
                   angle={-45}
                   textAnchor="end"
-                  height={100}
+                  height={80}
                   interval={0}
+                  tick={{ fontSize: 10 }}
                 />
-                <YAxis />
+                <YAxis tick={{ fontSize: 10 }} />
                 <Tooltip />
-                <Legend />
                 <Bar dataKey="value" fill="#3b82f6" />
               </BarChart>
             </ResponsiveContainer>
@@ -191,8 +204,8 @@ export default function PropertyStatistics({ property, instances }: PropertyStat
         </div>
       )}
 
-      {stats.distribution.length === 0 && (
-        <div className="text-center py-8 text-gray-500">
+      {displayOptions.showChart && stats.distribution.length === 0 && (
+        <div className="text-center py-4 text-gray-400 text-sm">
           暂无数据分布信息
         </div>
       )}

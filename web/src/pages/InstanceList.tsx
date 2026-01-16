@@ -3,10 +3,10 @@ import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom'
 import type { Instance, ObjectType, QueryRequest, FilterExpression } from '../api/client';
 import { instanceApi, schemaApi, queryApi, databaseApi, mappingApi } from '../api/client';
 import { useWorkspace } from '../WorkspaceContext';
-import { PlusIcon, PencilIcon, TrashIcon, CloudArrowDownIcon, XMarkIcon, LinkIcon, ArrowDownTrayIcon, FunnelIcon, MagnifyingGlassIcon, CircleStackIcon, ServerIcon, ArrowRightIcon, ChartBarIcon, TableCellsIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, PencilIcon, TrashIcon, CloudArrowDownIcon, XMarkIcon, LinkIcon, ArrowDownTrayIcon, FunnelIcon, MagnifyingGlassIcon, CircleStackIcon, ServerIcon, ArrowRightIcon, ChartBarIcon, TableCellsIcon, Cog6ToothIcon } from '@heroicons/react/24/outline';
 import InstanceForm from '../components/InstanceForm';
 import DataMappingDialog from '../components/DataMappingDialog';
-import PropertyStatistics from '../components/PropertyStatistics';
+import PropertyStatistics, { type AnalysisDisplayOptions } from '../components/PropertyStatistics';
 import { ToastContainer, useToast } from '../components/Toast';
 
 export default function InstanceList() {
@@ -39,6 +39,12 @@ export default function InstanceList() {
   const [viewMode, setViewMode] = useState<'properties' | 'list'>('properties'); // 'properties' 表示属性分析视图，'list' 表示数据列表视图
   const [allInstances, setAllInstances] = useState<Instance[]>([]); // 用于统计分析的所有实例数据
   const [loadingStats, setLoadingStats] = useState(false);
+  const [showAnalysisSettings, setShowAnalysisSettings] = useState(false);
+  const [analysisDisplayOptions, setAnalysisDisplayOptions] = useState<AnalysisDisplayOptions>({
+    showSummary: true,
+    showNumericStats: true,
+    showChart: true,
+  });
   const limit = 20;
   const { toasts, showToast, removeToast } = useToast();
 
@@ -722,9 +728,65 @@ export default function InstanceList() {
 
       {/* 属性分析视图 */}
       {viewMode === 'properties' && objectTypeDef && (
-        <div className="space-y-6">
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">Properties 分析</h2>
+        <div className="space-y-4">
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold text-gray-900">Properties 分析</h2>
+              <button
+                onClick={() => setShowAnalysisSettings(!showAnalysisSettings)}
+                className="flex items-center px-3 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+                title="分析设置"
+              >
+                <Cog6ToothIcon className="w-5 h-5 mr-2" />
+                设置
+              </button>
+            </div>
+
+            {/* 分析设置面板 */}
+            {showAnalysisSettings && (
+              <div className="mb-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                <h3 className="text-sm font-semibold text-gray-900 mb-3">显示选项</h3>
+                <div className="flex flex-wrap gap-4">
+                  <label className="flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={analysisDisplayOptions.showSummary}
+                      onChange={(e) => setAnalysisDisplayOptions({
+                        ...analysisDisplayOptions,
+                        showSummary: e.target.checked,
+                      })}
+                      className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                    />
+                    <span className="ml-2 text-sm text-gray-700">统计摘要</span>
+                  </label>
+                  <label className="flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={analysisDisplayOptions.showNumericStats}
+                      onChange={(e) => setAnalysisDisplayOptions({
+                        ...analysisDisplayOptions,
+                        showNumericStats: e.target.checked,
+                      })}
+                      className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                    />
+                    <span className="ml-2 text-sm text-gray-700">数值统计</span>
+                  </label>
+                  <label className="flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={analysisDisplayOptions.showChart}
+                      onChange={(e) => setAnalysisDisplayOptions({
+                        ...analysisDisplayOptions,
+                        showChart: e.target.checked,
+                      })}
+                      className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                    />
+                    <span className="ml-2 text-sm text-gray-700">分布图表</span>
+                  </label>
+                </div>
+              </div>
+            )}
+
             {loadingStats ? (
               <div className="text-center py-12">
                 <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
@@ -736,12 +798,13 @@ export default function InstanceList() {
                 <p className="text-sm text-gray-400 mt-2">请先创建实例或同步数据</p>
               </div>
             ) : (
-              <div className="space-y-6">
+              <div className="space-y-3">
                 {objectTypeDef.properties.map((prop) => (
                   <PropertyStatistics
                     key={prop.name}
                     property={prop}
                     instances={allInstances}
+                    displayOptions={analysisDisplayOptions}
                   />
                 ))}
               </div>
