@@ -286,17 +286,43 @@ public class RelNodeBuilder {
         // 如果没有有效的字段，返回所有字段
         if (projects.isEmpty()) {
             // 返回所有字段
-            for (int i = 0; i < rowType.getFieldCount(); i++) {
-                projects.add(rexBuilder.makeInputRef(rowType.getFieldList().get(i).getType(), i));
-                fieldNames.add(rowType.getFieldList().get(i).getName());
+            int fieldCount = rowType.getFieldCount();
+            if (fieldCount > 0) {
+                for (int i = 0; i < fieldCount; i++) {
+                    projects.add(rexBuilder.makeInputRef(rowType.getFieldList().get(i).getType(), i));
+                    fieldNames.add(rowType.getFieldList().get(i).getName());
+                }
+            } else {
+                // 如果行类型没有字段，直接返回输入（不应该发生，但为了安全）
+                System.err.println("Warning: RowType has no fields. Returning input as-is.");
+                return input;
             }
         }
         
-        if (!projects.isEmpty()) {
-            relBuilder.project(projects, fieldNames);
+        // 确保 projects 和 fieldNames 大小一致
+        if (projects.size() != fieldNames.size()) {
+            System.err.println("Warning: projects size (" + projects.size() + ") != fieldNames size (" + fieldNames.size() + "). Adjusting...");
+            // 调整大小，取较小的
+            int minSize = Math.min(projects.size(), fieldNames.size());
+            projects = projects.subList(0, minSize);
+            fieldNames = fieldNames.subList(0, minSize);
         }
         
-        return relBuilder.build();
+        if (!projects.isEmpty() && projects.size() == fieldNames.size()) {
+            try {
+                relBuilder.project(projects, fieldNames);
+                return relBuilder.build();
+            } catch (Exception e) {
+                System.err.println("Error building project: " + e.getMessage());
+                e.printStackTrace();
+                // 如果 project 失败，返回输入（不进行投影）
+                return input;
+            }
+        } else {
+            // 如果仍然没有有效的字段（不应该发生，但为了安全），直接返回输入
+            System.err.println("Warning: No valid fields to project. Returning input as-is.");
+            return input;
+        }
     }
     
     /**
@@ -410,9 +436,11 @@ public class RelNodeBuilder {
         if (!fieldCollations.isEmpty()) {
             RelCollation collation = RelCollations.of(fieldCollations);
             relBuilder.sort(collation);
+            return relBuilder.build();
+        } else {
+            // 如果没有有效的排序字段，直接返回输入（不创建 Sort 节点）
+            return input;
         }
-        
-        return relBuilder.build();
     }
     
     /**

@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import { useParams, Link, useSearchParams } from 'react-router-dom';
-import type { Instance, ObjectType, QueryRequest } from '../api/client';
+import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom';
+import type { Instance, ObjectType, QueryRequest, FilterExpression } from '../api/client';
 import { instanceApi, schemaApi, queryApi, databaseApi, mappingApi } from '../api/client';
 import { useWorkspace } from '../WorkspaceContext';
-import { PlusIcon, PencilIcon, TrashIcon, ArrowPathIcon, CloudArrowDownIcon, XMarkIcon, LinkIcon, ArrowDownTrayIcon, FunnelIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, PencilIcon, TrashIcon, CloudArrowDownIcon, XMarkIcon, LinkIcon, ArrowDownTrayIcon, FunnelIcon, MagnifyingGlassIcon, CircleStackIcon, ServerIcon, ArrowRightIcon } from '@heroicons/react/24/outline';
 import InstanceForm from '../components/InstanceForm';
 import DataMappingDialog from '../components/DataMappingDialog';
 import { ToastContainer, useToast } from '../components/Toast';
@@ -11,6 +11,7 @@ import { ToastContainer, useToast } from '../components/Toast';
 export default function InstanceList() {
   const { objectType } = useParams<{ objectType: string }>();
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const mappingId = searchParams.get('mappingId');
   const { selectedWorkspace } = useWorkspace();
   const [instances, setInstances] = useState<Instance[]>([]);
@@ -32,6 +33,8 @@ export default function InstanceList() {
   const [extracting, setExtracting] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState<Array<{ property: string; value: string }>>([]);
+  const [availableMappings, setAvailableMappings] = useState<any[]>([]);
+  const [queryMode, setQueryMode] = useState<'mapping' | 'storage'>('storage'); // 'mapping' 表示映射数据查询，'storage' 表示实例存储查询
   const limit = 20;
   const { toasts, showToast, removeToast } = useToast();
 
@@ -48,12 +51,19 @@ export default function InstanceList() {
     return wsName === 'system' || wsDisplayName === 'system' || selectedWorkspace.id === 'system';
   };
 
+  // 加载可用的映射配置
+  useEffect(() => {
+    if (objectType && !isSystemObjectType(objectType)) {
+      loadAvailableMappings();
+    }
+  }, [objectType]);
+
   useEffect(() => {
     if (objectType) {
       loadData();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [objectType, offset, mappingId]);
+  }, [objectType, offset, mappingId, queryMode]);
 
   // 当筛选条件改变时，重置offset并重新加载数据
   useEffect(() => {
@@ -68,6 +78,27 @@ export default function InstanceList() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters]);
 
+  // 加载可用的映射配置
+  const loadAvailableMappings = async () => {
+    if (!objectType || isSystemObjectType(objectType)) return;
+    try {
+      const mappingsList = await mappingApi.getByObjectType(objectType);
+      setAvailableMappings(mappingsList);
+      // 如果URL中有mappingId，设置为映射查询模式
+      if (mappingId && mappingsList.some(m => m.id === mappingId)) {
+        setQueryMode('mapping');
+      } else {
+        // 如果没有mappingId，设置为存储查询模式
+        setQueryMode('storage');
+      }
+    } catch (error) {
+      console.error('Failed to load mappings:', error);
+      setAvailableMappings([]);
+      // 出错时默认使用存储查询模式
+      setQueryMode('storage');
+    }
+  };
+
   const loadData = async () => {
     if (!objectType) return;
     try {
@@ -77,14 +108,23 @@ export default function InstanceList() {
       const objectTypeData = await schemaApi.getObjectType(objectType);
       setObjectTypeDef(objectTypeData);
       
-      // 如果使用 mapping 查询，使用直接 API 调用
-      if (mappingId) {
-        const instancesData = await instanceApi.listWithMapping(objectType, mappingId, offset, limit);
-        setInstances(instancesData.items);
-        setTotal(instancesData.total);
-        setFromMapping(true);
-        return;
+      // 根据查询模式决定使用哪种查询方式
+      // 映射数据查询：使用 mappingId 从数据库实时查询
+      if (queryMode === 'mapping' && availableMappings.length > 0) {
+        // 优先使用URL中的mappingId，否则使用第一个可用的mapping
+        const targetMappingId = mappingId || availableMappings[0]?.id;
+        if (targetMappingId) {
+          // 使用 mappingId 查询数据库（通过 MappedDataService）
+          const instancesData = await instanceApi.listWithMapping(objectType, targetMappingId, offset, limit);
+          setInstances(instancesData.items);
+          setTotal(instancesData.total);
+          setFromMapping(true);
+          return;
+        }
       }
+      
+      // 实例存储查询：使用 instance 从本地存储查询（OntologyQuery 或直接 API）
+      setFromMapping(false);
       
       // 构建筛选条件
       const filterParams: Record<string, any> = {};
@@ -107,9 +147,9 @@ export default function InstanceList() {
         }
         
         // 构建过滤条件（转换为 OntologyQuery 格式）
-        const queryFilters: Array<[string, string, any]> = [];
+        const queryFilters: FilterExpression[] = [];
         Object.entries(filterParams).forEach(([key, value]) => {
-          queryFilters.push(['=', key, value]);
+          queryFilters.push(['=' as const, key, value]);
         });
         
         const queryRequest: QueryRequest = {
@@ -134,7 +174,6 @@ export default function InstanceList() {
         
         setInstances(instances);
         setTotal(queryResult.rowCount || instances.length);
-        setFromMapping(false);
         return;
       } catch (queryError) {
         console.warn('OntologyQuery failed, falling back to direct API:', queryError);
@@ -144,7 +183,6 @@ export default function InstanceList() {
       const instancesData = await instanceApi.list(objectType, offset, limit, Object.keys(filterParams).length > 0 ? filterParams : undefined);
       setInstances(instancesData.items);
       setTotal(instancesData.total);
-      setFromMapping(false);
     } catch (error) {
       console.error('Failed to load data:', error);
     } finally {
@@ -319,22 +357,91 @@ export default function InstanceList() {
         <div>
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold text-gray-900">{objectTypeDef.name}</h1>
-            {fromMapping && (
-              <span className="px-3 py-1 bg-green-100 text-green-700 rounded-lg text-sm font-medium">
-                数据源映射
-              </span>
-            )}
+          {queryMode === 'mapping' && fromMapping && (
+            <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-lg text-sm font-medium">
+              映射数据查询
+            </span>
+          )}
+          {queryMode === 'storage' && !fromMapping && (
+            <span className="px-3 py-1 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium">
+              实例存储查询
+            </span>
+          )}
           </div>
           {objectTypeDef.description && (
             <p className="text-gray-600 mt-1">{objectTypeDef.description}</p>
           )}
-          {fromMapping && (
+          {queryMode === 'mapping' && fromMapping && (
             <p className="text-sm text-gray-500 mt-1">
               数据来自数据库映射，实时查询
             </p>
           )}
+          {queryMode === 'storage' && !fromMapping && (
+            <p className="text-sm text-gray-500 mt-1">
+              数据来自本地实例存储
+            </p>
+          )}
         </div>
         <div className="flex gap-2">
+          {/* 查询模式切换按钮组 */}
+          {!isSystemObjectType(objectType) && availableMappings.length > 0 && (
+            <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-1">
+              <button
+                onClick={() => {
+                  // 切换到实例存储查询模式：使用 instance 从本地存储查询
+                  setQueryMode('storage');
+                  setOffset(0); // 切换模式时重置分页
+                  
+                  // 更新URL参数，移除 mappingId
+                  const newParams = new URLSearchParams(searchParams);
+                  newParams.delete('mappingId');
+                  
+                  // 使用navigate更新URL
+                  navigate(`/instances/${objectType}${newParams.toString() ? '?' + newParams.toString() : ''}`, { replace: true });
+                }}
+                className={`flex items-center px-4 py-2 rounded-md transition-all ${
+                  queryMode === 'storage'
+                    ? 'bg-blue-600 text-white shadow-sm font-medium'
+                    : 'bg-transparent text-gray-600 hover:bg-gray-200'
+                }`}
+                title="映射数据查询：使用 mappingId 从数据库实时查询"
+              >
+                <CircleStackIcon className="w-5 h-5 mr-2" />
+                映射数据查询
+              </button>
+              
+              <div className="flex items-center px-1">
+                <ArrowRightIcon className="w-5 h-5 text-gray-500" />
+              </div>
+              
+              <button
+                onClick={() => {
+                  // 切换到映射数据查询模式：使用 mappingId 查询数据库
+                  setQueryMode('mapping');
+                  setOffset(0); // 切换模式时重置分页
+                  
+                  // 更新URL参数，添加 mappingId
+                  const newParams = new URLSearchParams(searchParams);
+                  const targetMappingId = mappingId || availableMappings[0]?.id;
+                  if (targetMappingId) {
+                    newParams.set('mappingId', targetMappingId);
+                  }
+                  
+                  // 使用navigate更新URL
+                  navigate(`/instances/${objectType}${newParams.toString() ? '?' + newParams.toString() : ''}`, { replace: true });
+                }}
+                className={`flex items-center px-4 py-2 rounded-md transition-all ${
+                  queryMode === 'mapping'
+                    ? 'bg-blue-600 text-white shadow-sm font-medium'
+                    : 'bg-transparent text-gray-600 hover:bg-gray-200'
+                }`}
+                title="实例存储查询：使用 instance 从本地存储查询"
+              >
+                <ServerIcon className="w-5 h-5 mr-2" />
+                实例存储查询
+              </button>
+            </div>
+          )}
           {objectType === 'database' && (
             <button
               onClick={handleSyncClick}
@@ -361,19 +468,6 @@ export default function InstanceList() {
                 同步抽取
               </button>
             </>
-          )}
-          {fromMapping && (
-            <button
-              onClick={() => {
-                const newParams = new URLSearchParams(searchParams);
-                newParams.delete('mappingId');
-                window.location.href = `/instances/${objectType}`;
-              }}
-              className="flex items-center px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
-            >
-              <ArrowPathIcon className="w-5 h-5 mr-2" />
-              查看本地实例
-            </button>
           )}
           {!fromMapping && (
             <button
@@ -668,6 +762,7 @@ export default function InstanceList() {
           onClose={() => setShowMappingDialog(false)}
           onSuccess={() => {
             setShowMappingDialog(false);
+            loadAvailableMappings(); // 重新加载映射列表
             loadData();
           }}
         />

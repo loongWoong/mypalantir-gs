@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>本体智能 本体论重塑高速数据中台</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', 'PingFang SC', 'Helvetica Neue', Arial, sans-serif;
+            background: #0a0e27;
+            color: #ffffff;
+            overflow: hidden;
+        }
+
+        .presentation-container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .slide {
+            width: 100%;
+            height: 100%;
+            display: none;
+            padding: 80px 100px;
+            position: relative;
+            animation: fadeIn 0.5s ease-in;
+        }
+
+        .slide.active {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* 引子页样式 */
+        .intro-slide {
+            background: linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%);
+            text-align: left;
+        }
+
+        .intro-slide .slide-content {
+            font-size: 1.6em;
+            line-height: 2;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .intro-slide .quote {
+            font-size: 1.4em;
+            font-style: italic;
+            color: #f093fb;
+            margin: 30px 0;
+            padding: 30px;
+            background: rgba(255, 255, 255, 0.05);
+            border-left: 4px solid #f093fb;
+            border-radius: 10px;
+        }
+
+        .intro-slide .question {
+            font-size: 2em;
+            font-weight: 700;
+            color: #f093fb;
+            margin-top: 50px;
+            text-align: center;
+        }
+
+        /* 标题页样式 */
+        .title-slide {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+            text-align: center;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .title-slide h1 {
+            font-size: 4.5em;
+            font-weight: 700;
+            margin-bottom: 30px;
+            text-shadow: 2px 2px 10px rgba(0, 0, 0, 0.3);
+            line-height: 1.2;
+        }
+
+        .title-slide .subtitle {
+            font-size: 2em;
+            opacity: 0.95;
+            font-weight: 300;
+            margin-top: 20px;
+        }
+
+        /* 内容页样式 */
+        .content-slide {
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+        }
+
+        .slide-header {
+            font-size: 3.5em;
+            font-weight: 700;
+            margin-bottom: 60px;
+            padding-bottom: 30px;
+            border-bottom: 4px solid rgba(255, 255, 255, 0.3);
+            text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.3);
+        }
+
+        .slide-content {
+            font-size: 1.8em;
+            line-height: 1.8;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .slide-content ul {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        .slide-content li {
+            margin: 25px 0;
+            padding-left: 50px;
+            position: relative;
+        }
+
+        .slide-content li:before {
+            content: "▸";
+            position: absolute;
+            left: 0;
+            color: #f093fb;
+            font-size: 1.2em;
+        }
+
+        .slide-content p {
+            margin: 20px 0;
+            text-align: justify;
+        }
+
+        .highlight-box {
+            background: rgba(255, 255, 255, 0.1);
+            border-left: 5px solid #f093fb;
+            padding: 30px;
+            margin: 30px 0;
+            border-radius: 10px;
+            backdrop-filter: blur(10px);
+        }
+
+        .two-column {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 50px;
+            margin-top: 40px;
+        }
+
+        .column {
+            background: rgba(255, 255, 255, 0.08);
+            padding: 40px;
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+        }
+
+        .column h3 {
+            font-size: 2em;
+            margin-bottom: 25px;
+            color: #f093fb;
+        }
+
+        .column ul {
+            font-size: 1.4em;
+        }
+
+        .icon-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 40px;
+            margin-top: 40px;
+        }
+
+        .icon-item {
+            text-align: center;
+            padding: 30px;
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+            transition: transform 0.3s;
+        }
+
+        .icon-item:hover {
+            transform: translateY(-5px);
+        }
+
+        .icon-item .icon {
+            font-size: 4em;
+            margin-bottom: 20px;
+        }
+
+        .icon-item h3 {
+            font-size: 1.6em;
+            margin-bottom: 15px;
+            color: #f093fb;
+        }
+
+        .icon-item p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+
+        /* 导航控制 */
+        .nav-controls {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            display: flex;
+            gap: 15px;
+            z-index: 1000;
+        }
+
+        .nav-btn {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.2);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            font-size: 1.5em;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s;
+            backdrop-filter: blur(10px);
+        }
+
+        .nav-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: scale(1.1);
+        }
+
+        .nav-btn:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+
+        .slide-indicator {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 10px;
+            z-index: 1000;
+        }
+
+        .indicator-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.3);
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .indicator-dot.active {
+            background: #f093fb;
+            transform: scale(1.3);
+        }
+
+        .slide-number {
+            position: fixed;
+            top: 30px;
+            right: 30px;
+            font-size: 1.2em;
+            opacity: 0.7;
+            z-index: 1000;
+        }
+
+        /* 特殊样式 */
+        .problem-list {
+            font-size: 1.6em;
+        }
+
+        .problem-list li {
+            margin: 30px 0;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            border-left: 4px solid #ff6b6b;
+        }
+
+        .solution-list {
+            font-size: 1.6em;
+        }
+
+        .solution-list li {
+            margin: 30px 0;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            border-left: 4px solid #51cf66;
+        }
+
+        .progress-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 30px;
+            margin-top: 40px;
+        }
+
+        .progress-item {
+            background: rgba(255, 255, 255, 0.08);
+            padding: 30px;
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+        }
+
+        .progress-item h3 {
+            font-size: 1.8em;
+            margin-bottom: 20px;
+            color: #f093fb;
+        }
+
+        .progress-item ul {
+            font-size: 1.4em;
+        }
+
+        .future-plan {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 40px;
+            border-radius: 15px;
+            margin-top: 30px;
+            backdrop-filter: blur(10px);
+        }
+
+        .future-plan h3 {
+            font-size: 2em;
+            margin-bottom: 25px;
+            color: #f093fb;
+        }
+
+        .future-plan ul {
+            font-size: 1.5em;
+        }
+
+        @media (max-width: 768px) {
+            .slide {
+                padding: 40px 30px;
+            }
+
+            .title-slide h1 {
+                font-size: 2.5em;
+            }
+
+            .slide-header {
+                font-size: 2em;
+            }
+
+            .slide-content {
+                font-size: 1.3em;
+            }
+
+            .intro-slide .slide-content {
+                font-size: 1.2em;
+            }
+
+            .intro-slide .quote {
+                font-size: 1.1em;
+                padding: 20px;
+            }
+
+            .intro-slide .question {
+                font-size: 1.5em;
+            }
+
+            .two-column {
+                grid-template-columns: 1fr;
+            }
+
+            .icon-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="presentation-container">
+        <!-- 引子页 -->
+        <div class="slide intro-slide active">
+            <div class="slide-content">
+                <p style="font-size: 1.8em; margin-bottom: 40px; text-align: center; font-weight: 300;">
+                    一个值得关注的现象
+                </p>
+                <div style="text-align: center; margin-bottom: 50px;">
+                    <h2 style="font-size: 3em; color: #f093fb; margin-bottom: 20px;">Palantir</h2>
+                    <p style="font-size: 1.6em; opacity: 0.9;">一家专注于数据分析和知识图谱的公司</p>
+                </div>
+                <div class="highlight-box" style="margin-bottom: 40px;">
+                    <p style="font-size: 1.5em; margin-bottom: 20px; text-align: center;">
+                        <strong style="color: #f093fb;">市值变化</strong>
+                    </p>
+                    <div style="display: flex; justify-content: space-around; align-items: center; margin-top: 30px;">
+                        <div style="text-align: center;">
+                            <div style="font-size: 2.5em; color: #51cf66; font-weight: 700;">2023年</div>
+                            <div style="font-size: 1.3em; margin-top: 10px;">约200-300亿美元</div>
+                        </div>
+                        <div style="font-size: 3em; color: #f093fb;">→</div>
+                        <div style="text-align: center;">
+                            <div style="font-size: 2.5em; color: #ff6b6b; font-weight: 700;">2026年</div>
+                            <div style="font-size: 1.3em; margin-top: 10px;">4220亿美元</div>
+                        </div>
+                    </div>
+                    <p style="text-align: center; font-size: 1.3em; margin-top: 30px; color: #f093fb;">
+                        <strong>两年时间，市值增长22倍</strong>
+                    </p>
+                </div>
+                <p style="margin-top: 40px; margin-bottom: 30px; font-size: 1.4em;">
+                    这种在极短时间内实现的指数级成长，本身就是一个值得深入研究的商业和技术现象。Palantir到底做对了什么？是什么让它从一家技术公司，一跃成为资本市场的新宠？
+                </p>
+                <div class="quote">
+                    "当我们深入研究Palantir的核心技术架构时，发现它的成功并非偶然。其核心产品Foundry平台，正是基于<strong style="color: #f093fb;">本体论（Ontology）</strong>构建的数据中台解决方案。通过建立业务概念与物理数据之间的语义映射，实现了数据的统一管理和智能查询。"
+                </div>
+                <p style="margin-top: 40px; margin-bottom: 30px; font-size: 1.4em;">
+                    在高速数据中台的建设过程中，我们同样面临着数据孤岛、语义鸿沟、查询复杂性等核心挑战。传统的数据库中心化方案已经难以应对日益复杂的业务需求。
+                </p>
+                <div class="question">
+                    那么，本体论能否成为重塑数据中台的关键？
+                </div>
+            </div>
+        </div>
+
+        <!-- 标题页 -->
+        <div class="slide title-slide">
+            <h1>本体智能</h1>
+            <div class="subtitle">本体论重塑高速数据中台</div>
+        </div>
+
+        <!-- 为什么是本体 -->
+        <div class="slide content-slide">
+            <h2 class="slide-header">为什么是本体</h2>
+            <div class="slide-content">
+                <div class="highlight-box">
+                    <p style="font-size: 1.5em; margin-bottom: 20px;">
+                        在高速数据中台建设中，我们面临的核心挑战是如何实现<strong style="color: #f093fb;">业务语义与物理存储的解耦</strong>。
+                    </p>
+                </div>
+                <ul style="font-size: 1.5em;">
+                    <li><strong>数据孤岛问题</strong>：多个业务系统使用不同的数据模型和命名规范，导致数据难以统一理解和使用</li>
+                    <li><strong>语义鸿沟</strong>：业务人员使用业务术语（如"车辆"、"收费站"），而技术人员需要理解表名、列名等物理结构</li>
+                    <li><strong>数据源多样性</strong>：数据分散在PostgreSQL、MySQL、H2、Neo4j、文件系统等多种存储中</li>
+                    <li><strong>关系复杂性</strong>：业务对象间的关系通过外键、中间表等多种方式实现，缺乏统一抽象</li>
+                    <li><strong>查询复杂性</strong>：跨数据源、跨表的关联查询需要编写复杂的SQL，维护成本高</li>
+                </ul>
+                <div class="highlight-box" style="margin-top: 40px;">
+                    <p style="font-size: 1.4em;">
+                        本体论（Ontology）提供了一种<strong style="color: #f093fb;">形式化的知识表示方法</strong>，能够建立业务概念与物理数据之间的映射桥梁，实现语义化的数据访问。
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 什么是本体论 -->
+        <div class="slide content-slide">
+            <h2 class="slide-header">什么是本体论</h2>
+            <div class="slide-content">
+                <div class="highlight-box">
+                    <p style="font-size: 1.6em; text-align: center; margin-bottom: 20px;">
+                        本体论（Ontology）是<strong style="color: #f093fb;">对领域知识的形式化、显式化表示</strong>
+                    </p>
+                </div>
+                <div class="two-column">
+                    <div class="column">
+                        <h3>核心要素</h3>
+                        <ul>
+                            <li><strong>对象类型（ObjectType）</strong>：定义业务实体，如"车辆"、"收费站"、"收费记录"</li>
+                            <li><strong>关系类型（LinkType）</strong>：定义实体间的关系，如"拥有收费记录"、"持有通行介质"</li>
+                            <li><strong>属性（Property）</strong>：定义对象的特征，如"车牌号"、"收费站名称"</li>
+                            <li><strong>数据源映射（DataSourceMapping）</strong>：建立概念与物理存储的映射关系</li>
+                        </ul>
+                    </div>
+                    <div class="column">
+                        <h3>设计原则</h3>
+                        <ul>
+                            <li><strong>概念优先</strong>：查询和操作基于业务概念，而非物理表结构</li>
+                            <li><strong>映射灵活</strong>：支持多种数据源映射模式，适应不同数据库设计</li>
+                            <li><strong>语义统一</strong>：提供统一的业务语义层，屏蔽底层差异</li>
+                            <li><strong>关系抽象</strong>：通过LinkType抽象对象间关系，支持多种物理实现</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="highlight-box" style="margin-top: 40px;">
+                    <p style="font-size: 1.4em;">
+                        在我们的系统中，本体论通过<strong style="color: #f093fb;">YAML配置文件</strong>定义，实现了业务概念与物理数据源的完全解耦。
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 解决了什么问题 -->
+        <div class="slide content-slide">
+            <h2 class="slide-header">解决了什么问题</h2>
+            <div class="slide-content">
+                <div class="two-column">
+                    <div class="column">
+                        <h3>传统方式的问题</h3>
+                        <ul class="problem-list">
+                            <li>直接操作数据库表结构，业务语义丢失</li>
+                            <li>跨数据源查询需要编写复杂的ETL脚本</li>
+                            <li>数据模型变更影响大量业务代码</li>
+                            <li>不同系统对同一概念理解不一致</li>
+                            <li>关系查询需要手动编写JOIN语句</li>
+                        </ul>
+                    </div>
+                    <div class="column">
+                        <h3>本体论解决方案</h3>
+                        <ul class="solution-list">
+                            <li>使用业务概念进行查询，语义清晰</li>
+                            <li>统一查询接口，自动处理数据源差异</li>
+                            <li>业务概念层与物理层解耦，变更影响小</li>
+                            <li>统一的语义定义，保证一致性</li>
+                            <li>自动生成JOIN逻辑，支持复杂关联查询</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="icon-grid" style="margin-top: 50px;">
+                    <div class="icon-item">
+                        <div class="icon">🔍</div>
+                        <h3>语义化查询</h3>
+                        <p>使用业务概念而非表名列名</p>
+                    </div>
+                    <div class="icon-item">
+                        <div class="icon">🔗</div>
+                        <h3>统一接口</h3>
+                        <p>屏蔽底层数据源差异</p>
+                    </div>
+                    <div class="icon-item">
+                        <div class="icon">⚡</div>
+                        <h3>自动优化</h3>
+                        <p>基于Apache Calcite查询优化</p>
+                    </div>
+                    <div class="icon-item">
+                        <div class="icon">🔄</div>
+                        <h3>灵活映射</h3>
+                        <p>支持多种数据源映射模式</p>
+                    </div>
+                    <div class="icon-item">
+                        <div class="icon">📊</div>
+                        <h3>关系抽象</h3>
+                        <p>通过LinkType抽象对象关系</p>
+                    </div>
+                    <div class="icon-item">
+                        <div class="icon">🛡️</div>
+                        <h3>类型安全</h3>
+                        <p>完整的Schema验证机制</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 我们为什么要研究本体论 -->
+        <div class="slide content-slide">
+            <h2 class="slide-header">我们为什么要研究本体论</h2>
+            <div class="slide-content">
+                <div class="highlight-box">
+                    <p style="font-size: 1.5em; margin-bottom: 30px;">
+                        在高速数据中台的实际建设中，我们深刻认识到传统数据管理方式的局限性，迫切需要一种新的方法论来应对日益复杂的数据挑战。
+                    </p>
+                </div>
+                <ul style="font-size: 1.6em;">
+                    <li><strong>业务驱动需求</strong>：业务人员需要以业务术语进行数据查询和分析，而不是学习复杂的SQL和数据库结构</li>
+                    <li><strong>数据整合挑战</strong>：高速收费系统涉及车辆、收费站、收费记录、通行介质等多个业务实体，数据分散在多个系统中</li>
+                    <li><strong>关系复杂性</strong>：业务对象间存在复杂的关联关系（如车辆持有通行介质、收费站拥有收费记录），需要统一的关系抽象</li>
+                    <li><strong>可扩展性要求</strong>：随着业务发展，需要快速接入新的数据源和业务概念，传统方式难以应对</li>
+                    <li><strong>查询性能优化</strong>：跨表、跨数据源的复杂查询需要智能优化，而不是手动编写SQL</li>
+                    <li><strong>数据治理需求</strong>：需要建立统一的数据语义标准，确保不同系统对同一概念的理解一致</li>
+                </ul>
+                <div class="highlight-box" style="margin-top: 40px;">
+                    <p style="font-size: 1.4em;">
+                        本体论为我们提供了一套<strong style="color: #f093fb;">系统化的方法论</strong>，能够从根本上解决这些问题，实现数据中台的智能化升级。
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 通过本体论解决了哪些业务问题 -->
+        <div class="slide content-slide">
+            <h2 class="slide-header">通过本体论解决了哪些业务问题</h2>
+            <div class="slide-content">
+                <div class="progress-grid">
+                    <div class="progress-item">
+                        <h3>🚗 车辆管理</h3>
+                        <ul>
+                            <li>统一车辆信息查询接口</li>
+                            <li>支持跨数据源的车辆数据整合</li>
+                            <li>车辆与通行介质的关联查询</li>
+                            <li>车辆通行记录追溯</li>
+                        </ul>
+                    </div>
+                    <div class="progress-item">
+                        <h3>🛣️ 收费站管理</h3>
+                        <ul>
+                            <li>收费站信息统一管理</li>
+                            <li>收费站与收费记录的关联</li>
+                            <li>按省份、中心等维度查询</li>
+                            <li>收费数据聚合分析</li>
+                        </ul>
+                    </div>
+                    <div class="progress-item">
+                        <h3>💰 收费记录分析</h3>
+                        <ul>
+                            <li>语义化查询收费记录</li>
+                            <li>支持时间范围、金额等条件筛选</li>
+                            <li>自动关联收费站信息</li>
+                            <li>支持聚合统计（按收费站、时间等）</li>
+                        </ul>
+                    </div>
+                    <div class="progress-item">
+                        <h3>🔗 关系查询</h3>
+                        <ul>
+                            <li>自动生成JOIN逻辑</li>
+                            <li>支持有向和无向关系</li>
+                            <li>关系自动同步（基于属性映射）</li>
+                            <li>血缘查询和影响分析</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="highlight-box" style="margin-top: 40px;">
+                    <h3 style="font-size: 1.8em; margin-bottom: 20px; color: #f093fb;">典型应用场景</h3>
+                    <ul style="font-size: 1.4em;">
+                        <li><strong>查询示例</strong>：查询"江苏省所有收费站在2024年1月的收费总额"，系统自动处理表关联、筛选和聚合</li>
+                        <li><strong>数据映射</strong>：将外部数据库的表和字段映射到本体对象，实现数据的统一访问</li>
+                        <li><strong>关系探索</strong>：通过图形界面探索车辆、收费站、收费记录之间的复杂关系</li>
+                        <li><strong>自然语言查询</strong>：支持使用自然语言进行数据查询，系统自动转换为本体查询</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- 当前进展 -->
+        <div class="slide content-slide">
+            <h2 class="slide-header">当前进展</h2>
+            <div class="slide-content">
+                <div class="two-column">
+                    <div class="column">
+                        <h3>✅ 已完成功能</h3>
+                        <ul style="font-size: 1.4em;">
+                            <li>本体Schema定义（YAML配置）</li>
+                            <li>对象类型和关系类型管理</li>
+                            <li>数据源映射配置</li>
+                            <li>OntologyQuery查询DSL</li>
+                            <li>基于Apache Calcite的查询引擎</li>
+                            <li>自动SQL生成和优化</li>
+                            <li>多数据源支持（JDBC、文件系统、Neo4j）</li>
+                            <li>关系自动同步</li>
+                            <li>工作空间管理</li>
+                            <li>数据映射功能</li>
+                        </ul>
+                    </div>
+                    <div class="column">
+                        <h3>🎯 技术实现</h3>
+                        <ul style="font-size: 1.4em;">
+                            <li>后端：Java 17 + Spring Boot 3.2.0</li>
+                            <li>查询引擎：Apache Calcite 1.37.0</li>
+                            <li>前端：React 18 + TypeScript</li>
+                            <li>Schema浏览器和关系图可视化</li>
+                            <li>查询构建器（可视化）</li>
+                            <li>实例列表和详情页面</li>
+                            <li>图形化关系视图</li>
+                            <li>血缘查询功能</li>
+                            <li>自然语言查询接口</li>
+                            <li>指标计算和聚合</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="highlight-box" style="margin-top: 40px;">
+                    <h3 style="font-size: 1.8em; margin-bottom: 20px; color: #f093fb;">核心成果</h3>
+                    <p style="font-size: 1.4em;">
+                        成功构建了<strong style="color: #f093fb;">基于本体论的数据中台原型系统</strong>，实现了业务概念与物理存储的完全解耦，
+                        支持语义化查询、多数据源整合、关系抽象等核心功能，为高速数据中台的智能化升级奠定了坚实基础。
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 后续计划与启示 -->
+        <div class="slide content-slide">
+            <h2 class="slide-header">后续计划与启示</h2>
+            <div class="slide-content">
+                <div class="future-plan">
+                    <h3>📋 后续计划</h3>
+                    <ul style="font-size: 1.5em;">
+                        <li><strong>性能优化</strong>：进一步优化查询引擎，支持更大规模的数据查询和更复杂的关联查询</li>
+                        <li><strong>扩展数据源</strong>：支持更多数据源类型（如API接口、流式数据源等）</li>
+                        <li><strong>智能推荐</strong>：基于本体关系推荐相关查询和数据探索路径</li>
+                        <li><strong>版本管理</strong>：支持本体Schema的版本管理和演进</li>
+                        <li><strong>权限控制</strong>：基于本体的细粒度权限控制机制</li>
+                        <li><strong>数据质量</strong>：集成数据质量检查规则，基于本体进行数据验证</li>
+                        <li><strong>知识图谱</strong>：将本体关系构建为知识图谱，支持更复杂的推理和查询</li>
+                    </ul>
+                </div>
+                <div class="highlight-box" style="margin-top: 40px;">
+                    <h3 style="font-size: 1.8em; margin-bottom: 20px; color: #f093fb;">💡 启示与思考</h3>
+                    <ul style="font-size: 1.4em;">
+                        <li><strong>语义化是数据中台的核心</strong>：只有建立统一的业务语义层，才能真正实现数据的统一管理和使用</li>
+                        <li><strong>抽象层的重要性</strong>：通过本体抽象层，我们实现了业务逻辑与物理存储的解耦，大大提高了系统的灵活性和可维护性</li>
+                        <li><strong>查询引擎的价值</strong>：基于Apache Calcite的查询引擎不仅提供了查询优化能力，更重要的是实现了查询逻辑的自动生成</li>
+                        <li><strong>关系即数据</strong>：在数据中台中，对象间的关系同样重要，需要统一的关系抽象和管理机制</li>
+                        <li><strong>持续演进</strong>：本体论不是一次性的工作，需要随着业务发展持续演进和优化</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- 结束页 -->
+        <div class="slide title-slide">
+            <h1>谢谢观看</h1>
+            <div class="subtitle">本体智能 · 重塑数据中台</div>
+        </div>
+    </div>
+
+    <!-- 导航控制 -->
+    <div class="nav-controls">
+        <button class="nav-btn" id="prevBtn" onclick="previousSlide()">‹</button>
+        <button class="nav-btn" id="nextBtn" onclick="nextSlide()">›</button>
+    </div>
+
+    <!-- 幻灯片指示器 -->
+    <div class="slide-indicator" id="slideIndicator"></div>
+
+    <!-- 幻灯片编号 -->
+    <div class="slide-number">
+        <span id="currentSlide">1</span> / <span id="totalSlides">9</span>
+    </div>
+
+    <script>
+        let currentSlideIndex = 0;
+        const slides = document.querySelectorAll('.slide');
+        const totalSlides = slides.length;
+
+        // 初始化指示器
+        function initIndicators() {
+            const indicator = document.getElementById('slideIndicator');
+            for (let i = 0; i < totalSlides; i++) {
+                const dot = document.createElement('div');
+                dot.className = 'indicator-dot';
+                if (i === 0) dot.classList.add('active');
+                dot.onclick = () => goToSlide(i);
+                indicator.appendChild(dot);
+            }
+            document.getElementById('totalSlides').textContent = totalSlides;
+        }
+
+        // 显示指定幻灯片
+        function showSlide(index) {
+            if (index < 0) index = 0;
+            if (index >= totalSlides) index = totalSlides - 1;
+
+            slides.forEach((slide, i) => {
+                slide.classList.remove('active');
+                if (i === index) {
+                    slide.classList.add('active');
+                }
+            });
+
+            // 更新指示器
+            document.querySelectorAll('.indicator-dot').forEach((dot, i) => {
+                dot.classList.toggle('active', i === index);
+            });
+
+            // 更新按钮状态
+            document.getElementById('prevBtn').disabled = index === 0;
+            document.getElementById('nextBtn').disabled = index === totalSlides - 1;
+
+            // 更新幻灯片编号
+            document.getElementById('currentSlide').textContent = index + 1;
+
+            currentSlideIndex = index;
+        }
+
+        // 下一张
+        function nextSlide() {
+            showSlide(currentSlideIndex + 1);
+        }
+
+        // 上一张
+        function previousSlide() {
+            showSlide(currentSlideIndex - 1);
+        }
+
+        // 跳转到指定幻灯片
+        function goToSlide(index) {
+            showSlide(index);
+        }
+
+        // 键盘导航
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') {
+                e.preventDefault();
+                nextSlide();
+            } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+                e.preventDefault();
+                previousSlide();
+            } else if (e.key === 'Home') {
+                e.preventDefault();
+                goToSlide(0);
+            } else if (e.key === 'End') {
+                e.preventDefault();
+                goToSlide(totalSlides - 1);
+            }
+        });
+
+        // 点击幻灯片切换
+        document.querySelectorAll('.slide').forEach((slide, index) => {
+            slide.addEventListener('click', (e) => {
+                // 如果点击的不是按钮或链接，则切换幻灯片
+                if (!e.target.closest('.nav-btn') && !e.target.closest('a')) {
+                    const rect = slide.getBoundingClientRect();
+                    const clickX = e.clientX - rect.left;
+                    const middleX = rect.width / 2;
+                    if (clickX < middleX) {
+                        previousSlide();
+                    } else {
+                        nextSlide();
+                    }
+                }
+            });
+        });
+
+        // 初始化
+        initIndicators();
+        showSlide(0);
+    </script>
+</body>
+</html>

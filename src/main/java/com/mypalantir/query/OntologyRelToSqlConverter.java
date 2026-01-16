@@ -458,8 +458,15 @@ public class OntologyRelToSqlConverter extends RelToSqlConverter {
             // 替换不带引号的 id（带表名前缀）
             sql = sql.replaceAll("(?i)\\b" + java.util.regex.Pattern.quote(objectTypeName) + "\\.id\\b",
                                 dbTableNameQuoted + "." + idColumnNameQuoted);
+            
+            // 处理 Calcite 自动生成的别名（如 AS id0, AS id1）
+            // 这些别名应该被替换为 AS id，因为 id 是模型中的实际属性名
+            // 匹配模式：列名 AS id0, 列名 AS id1 等
+            sql = sql.replaceAll("(?i)\\bAS\\s+id(\\d+)\\b", " AS id");
+            
             // 替换不带引号的 id（不带表名前缀）
-            sql = sql.replaceAll("(?i)\\bid\\b", idColumnNameQuoted);
+            // 使用负向前瞻，确保 id 后面不是数字（避免替换 id0, id1 等中的 id）
+            sql = sql.replaceAll("(?i)\\bid(?!\\d)", idColumnNameQuoted);
         }
         
         // 最后，根据数据库类型清理剩余的引号
