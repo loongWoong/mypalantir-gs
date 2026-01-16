@@ -7,6 +7,7 @@ import { instanceApi, schemaApi, queryApi, databaseApi, mappingApi } from '../ap
 import { useWorkspace } from '../WorkspaceContext';
 import { PlusIcon, PencilIcon, TrashIcon, CloudArrowDownIcon, XMarkIcon, LinkIcon, ArrowDownTrayIcon, FunnelIcon, MagnifyingGlassIcon, CircleStackIcon, ServerIcon, ArrowRightIcon, ChartBarIcon, TableCellsIcon, Cog6ToothIcon } from '@heroicons/react/24/outline';
 import InstanceForm from '../components/InstanceForm';
+import ButtonGroup from '../components/ButtonGroup';
 import DataMappingDialog from '../components/DataMappingDialog';
 import PropertyStatistics, { type AnalysisDisplayOptions } from '../components/PropertyStatistics';
 import { ToastContainer, useToast } from '../components/Toast';
@@ -668,32 +669,14 @@ export default function InstanceList() {
           </div>
           <div className="flex gap-2">
           {/* 视图切换按钮 */}
-          <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-1">
-            <button
-              onClick={() => setViewMode('properties')}
-              className={`flex items-center px-4 py-2 rounded-md transition-all ${
-                viewMode === 'properties'
-                  ? 'bg-blue-600 text-white shadow-sm font-medium'
-                  : 'bg-transparent text-gray-600 hover:bg-gray-200'
-              }`}
-              title="属性分析视图"
-            >
-              <ChartBarIcon className="w-5 h-5 mr-2" />
-              属性分析
-            </button>
-            <button
-              onClick={() => setViewMode('list')}
-              className={`flex items-center px-4 py-2 rounded-md transition-all ${
-                viewMode === 'list'
-                  ? 'bg-blue-600 text-white shadow-sm font-medium'
-                  : 'bg-transparent text-gray-600 hover:bg-gray-200'
-              }`}
-              title="数据列表视图"
-            >
-              <TableCellsIcon className="w-5 h-5 mr-2" />
-              数据列表
-            </button>
-          </div>
+          <ButtonGroup
+            value={viewMode}
+            onChange={(val) => setViewMode(val as 'properties' | 'list')}
+            options={[
+              { value: 'properties', label: '属性分析', icon: ChartBarIcon, title: '属性分析视图' },
+              { value: 'list', label: '数据列表', icon: TableCellsIcon, title: '数据列表视图' },
+            ]}
+          />
           {/* 查询模式切换按钮组 */}
           {!isSystemObjectType(objectType) && availableMappings.length > 0 && (
             <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-1">
