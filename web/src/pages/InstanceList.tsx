@@ -3,9 +3,10 @@ import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom'
 import type { Instance, ObjectType, QueryRequest, FilterExpression } from '../api/client';
 import { instanceApi, schemaApi, queryApi, databaseApi, mappingApi } from '../api/client';
 import { useWorkspace } from '../WorkspaceContext';
-import { PlusIcon, PencilIcon, TrashIcon, CloudArrowDownIcon, XMarkIcon, LinkIcon, ArrowDownTrayIcon, FunnelIcon, MagnifyingGlassIcon, CircleStackIcon, ServerIcon, ArrowRightIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, PencilIcon, TrashIcon, CloudArrowDownIcon, XMarkIcon, LinkIcon, ArrowDownTrayIcon, FunnelIcon, MagnifyingGlassIcon, CircleStackIcon, ServerIcon, ArrowRightIcon, ChartBarIcon, TableCellsIcon } from '@heroicons/react/24/outline';
 import InstanceForm from '../components/InstanceForm';
 import DataMappingDialog from '../components/DataMappingDialog';
+import PropertyStatistics from '../components/PropertyStatistics';
 import { ToastContainer, useToast } from '../components/Toast';
 
 export default function InstanceList() {
@@ -35,6 +36,9 @@ export default function InstanceList() {
   const [filters, setFilters] = useState<Array<{ property: string; value: string }>>([]);
   const [availableMappings, setAvailableMappings] = useState<any[]>([]);
   const [queryMode, setQueryMode] = useState<'mapping' | 'storage'>('storage'); // 'mapping' 表示映射数据查询，'storage' 表示实例存储查询
+  const [viewMode, setViewMode] = useState<'properties' | 'list'>('properties'); // 'properties' 表示属性分析视图，'list' 表示数据列表视图
+  const [allInstances, setAllInstances] = useState<Instance[]>([]); // 用于统计分析的所有实例数据
+  const [loadingStats, setLoadingStats] = useState(false);
   const limit = 20;
   const { toasts, showToast, removeToast } = useToast();
 
@@ -60,14 +64,20 @@ export default function InstanceList() {
 
   useEffect(() => {
     if (objectType) {
-      loadData();
+      // 如果当前是属性分析视图，加载所有数据用于统计分析
+      if (viewMode === 'properties') {
+        loadAllDataForStats();
+      } else {
+        // 列表视图时加载分页数据
+        loadData();
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [objectType, offset, mappingId, queryMode]);
+  }, [objectType, offset, mappingId, queryMode, viewMode]);
 
-  // 当筛选条件改变时，重置offset并重新加载数据
+  // 当筛选条件改变时，重置offset并重新加载数据（仅在列表视图）
   useEffect(() => {
-    if (objectType) {
+    if (objectType && viewMode === 'list') {
       setOffset(0);
       // 延迟加载，避免在filters变化时立即触发
       const timer = setTimeout(() => {
@@ -76,7 +86,7 @@ export default function InstanceList() {
       return () => clearTimeout(timer);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters]);
+  }, [filters, viewMode]);
 
   // 加载可用的映射配置
   const loadAvailableMappings = async () => {
@@ -96,6 +106,108 @@ export default function InstanceList() {
       setAvailableMappings([]);
       // 出错时默认使用存储查询模式
       setQueryMode('storage');
+    }
+  };
+
+  // 加载所有数据用于统计分析
+  const loadAllDataForStats = async () => {
+    if (!objectType) return;
+    try {
+      setLoading(true);
+      setLoadingStats(true);
+      
+      // 首先获取对象类型定义
+      const objectTypeData = await schemaApi.getObjectType(objectType);
+      setObjectTypeDef(objectTypeData); // 设置对象类型定义，这样页面才能渲染
+      
+      // 根据查询模式决定使用哪种查询方式
+      if (queryMode === 'mapping' && availableMappings.length > 0) {
+        // 映射数据查询：加载所有数据（使用较大的 limit）
+        const targetMappingId = mappingId || availableMappings[0]?.id;
+        if (targetMappingId) {
+          try {
+            const instancesData = await instanceApi.listWithMapping(objectType, targetMappingId, 0, 5000);
+            setAllInstances(instancesData.items);
+            setFromMapping(true);
+            setLoading(false);
+            setLoadingStats(false);
+            return;
+          } catch (error) {
+            console.warn('Failed to load mapping data for stats, trying smaller limit:', error);
+            // 尝试更小的 limit
+            try {
+              const instancesData = await instanceApi.listWithMapping(objectType, targetMappingId, 0, 1000);
+              setAllInstances(instancesData.items);
+              setFromMapping(true);
+              setLoading(false);
+              setLoadingStats(false);
+              return;
+            } catch (error2) {
+              console.error('Failed to load mapping data with smaller limit:', error2);
+              // 如果映射查询失败，继续尝试实例存储查询
+            }
+          }
+        }
+      }
+      
+      // 实例存储查询：优先使用直接 API 调用（更稳定）
+      setFromMapping(false);
+      try {
+        // 先尝试使用较大的 limit
+        const instancesData = await instanceApi.list(objectType, 0, 5000);
+        setAllInstances(instancesData.items);
+        setLoading(false);
+        setLoadingStats(false);
+      } catch (apiError) {
+        console.warn('Direct API call failed, trying smaller limit:', apiError);
+        try {
+          // 尝试更小的 limit
+          const instancesData = await instanceApi.list(objectType, 0, 1000);
+          setAllInstances(instancesData.items);
+          setLoading(false);
+          setLoadingStats(false);
+        } catch (apiError2) {
+          console.warn('Direct API call with smaller limit failed, trying OntologyQuery:', apiError2);
+          // 最后尝试使用 OntologyQuery
+          try {
+            const selectFields: string[] = ['id'];
+            if (objectTypeData.properties) {
+              objectTypeData.properties.forEach(prop => {
+                selectFields.push(prop.name);
+              });
+            }
+            
+            const queryRequest: QueryRequest = {
+              object: objectType,
+              select: selectFields,
+              limit: 1000, // 使用较小的 limit
+              offset: 0,
+            };
+            
+            const queryResult = await queryApi.execute(queryRequest);
+            const instances: Instance[] = queryResult.rows.map((row: Record<string, any>) => ({
+              id: row.id || '',
+              ...row,
+            }));
+            
+            setAllInstances(instances);
+            setLoading(false);
+            setLoadingStats(false);
+          } catch (queryError) {
+            console.error('All methods failed to load data for statistics:', queryError);
+            setAllInstances([]);
+            setLoading(false);
+            setLoadingStats(false);
+            showToast('加载统计数据失败，请稍后重试', 'error');
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load all data for statistics:', error);
+      setAllInstances([]);
+      setLoading(false);
+      setLoadingStats(false);
+      showToast('加载统计数据失败', 'error');
     }
   };
 
@@ -343,12 +455,14 @@ export default function InstanceList() {
     }
   };
 
-  if (loading) {
+  // 在属性分析视图下，即使 loading 为 true，只要 objectTypeDef 已加载，就显示页面
+  // 在列表视图下，需要等待 loading 完成
+  if (viewMode === 'list' && loading) {
     return <div className="text-center py-12">Loading...</div>;
   }
 
   if (!objectTypeDef) {
-    return <div className="text-center py-12">Object type not found</div>;
+    return <div className="text-center py-12">Loading...</div>;
   }
 
   return (
@@ -383,6 +497,33 @@ export default function InstanceList() {
           )}
         </div>
         <div className="flex gap-2">
+          {/* 视图切换按钮 */}
+          <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-1">
+            <button
+              onClick={() => setViewMode('properties')}
+              className={`flex items-center px-4 py-2 rounded-md transition-all ${
+                viewMode === 'properties'
+                  ? 'bg-blue-600 text-white shadow-sm font-medium'
+                  : 'bg-transparent text-gray-600 hover:bg-gray-200'
+              }`}
+              title="属性分析视图"
+            >
+              <ChartBarIcon className="w-5 h-5 mr-2" />
+              属性分析
+            </button>
+            <button
+              onClick={() => setViewMode('list')}
+              className={`flex items-center px-4 py-2 rounded-md transition-all ${
+                viewMode === 'list'
+                  ? 'bg-blue-600 text-white shadow-sm font-medium'
+                  : 'bg-transparent text-gray-600 hover:bg-gray-200'
+              }`}
+              title="数据列表视图"
+            >
+              <TableCellsIcon className="w-5 h-5 mr-2" />
+              数据列表
+            </button>
+          </div>
           {/* 查询模式切换按钮组 */}
           {!isSystemObjectType(objectType) && availableMappings.length > 0 && (
             <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-1">
@@ -469,7 +610,7 @@ export default function InstanceList() {
               </button>
             </>
           )}
-          {!fromMapping && (
+          {viewMode === 'list' && !fromMapping && (
             <button
               onClick={() => setShowFilters(!showFilters)}
               className={`flex items-center px-4 py-2 rounded-lg transition-colors ${
@@ -497,8 +638,8 @@ export default function InstanceList() {
         </div>
       </div>
 
-      {/* 筛选面板 */}
-      {showFilters && !fromMapping && objectTypeDef && (
+      {/* 筛选面板 - 仅在列表视图显示 */}
+      {viewMode === 'list' && showFilters && !fromMapping && objectTypeDef && (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-4">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-gray-900 flex items-center">
@@ -579,6 +720,38 @@ export default function InstanceList() {
         />
       )}
 
+      {/* 属性分析视图 */}
+      {viewMode === 'properties' && objectTypeDef && (
+        <div className="space-y-6">
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">Properties 分析</h2>
+            {loadingStats ? (
+              <div className="text-center py-12">
+                <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                <p className="mt-4 text-gray-600">正在加载统计数据...</p>
+              </div>
+            ) : allInstances.length === 0 ? (
+              <div className="text-center py-12 text-gray-500">
+                <p>暂无数据，无法进行统计分析</p>
+                <p className="text-sm text-gray-400 mt-2">请先创建实例或同步数据</p>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {objectTypeDef.properties.map((prop) => (
+                  <PropertyStatistics
+                    key={prop.name}
+                    property={prop}
+                    instances={allInstances}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 数据列表视图 */}
+      {viewMode === 'list' && (
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
@@ -684,6 +857,7 @@ export default function InstanceList() {
           </div>
         )}
       </div>
+      )}
 
       {/* 同步对话框 */}
       {showSyncDialog && (
