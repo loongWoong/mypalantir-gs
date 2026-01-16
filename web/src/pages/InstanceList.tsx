@@ -679,62 +679,35 @@ export default function InstanceList() {
           />
           {/* 查询模式切换按钮组 */}
           {!isSystemObjectType(objectType) && availableMappings.length > 0 && (
-            <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-1">
-              <button
-                onClick={() => {
-                  // 切换到实例存储查询模式：使用 instance 从本地存储查询
+            <ButtonGroup
+              value={queryMode}
+              onChange={(val) => {
+                const mode = val as 'mapping' | 'storage';
+                if (mode === 'storage') {
+                  // 切换到实例存储查询模式
                   setQueryMode('storage');
-                  setOffset(0); // 切换模式时重置分页
-                  
-                  // 更新URL参数，移除 mappingId
+                  setOffset(0);
                   const newParams = new URLSearchParams(searchParams);
                   newParams.delete('mappingId');
-                  
-                  // 使用navigate更新URL
                   navigate(`/instances/${objectType}${newParams.toString() ? '?' + newParams.toString() : ''}`, { replace: true });
-                }}
-                className={`flex items-center px-4 py-2 rounded-md transition-all ${
-                  queryMode === 'storage'
-                    ? 'bg-blue-600 text-white shadow-sm font-medium'
-                    : 'bg-transparent text-gray-600 hover:bg-gray-200'
-                }`}
-                title="映射数据查询：使用 mappingId 从数据库实时查询"
-              >
-                <CircleStackIcon className="w-5 h-5 mr-2" />
-                映射数据
-              </button>
-              
-              <div className="flex items-center px-1">
-                <ArrowRightIcon className="w-5 h-5 text-gray-500" />
-              </div>
-              
-              <button
-                onClick={() => {
-                  // 切换到映射数据查询模式：使用 mappingId 查询数据库
+                } else {
+                  // 切换到映射数据查询模式
                   setQueryMode('mapping');
-                  setOffset(0); // 切换模式时重置分页
-                  
-                  // 更新URL参数，添加 mappingId
+                  setOffset(0);
                   const newParams = new URLSearchParams(searchParams);
                   const targetMappingId = mappingId || availableMappings[0]?.id;
                   if (targetMappingId) {
                     newParams.set('mappingId', targetMappingId);
                   }
-                  
-                  // 使用navigate更新URL
                   navigate(`/instances/${objectType}${newParams.toString() ? '?' + newParams.toString() : ''}`, { replace: true });
-                }}
-                className={`flex items-center px-4 py-2 rounded-md transition-all ${
-                  queryMode === 'mapping'
-                    ? 'bg-blue-600 text-white shadow-sm font-medium'
-                    : 'bg-transparent text-gray-600 hover:bg-gray-200'
-                }`}
-                title="实例存储查询：使用 instance 从本地存储查询"
-              >
-                <ServerIcon className="w-5 h-5 mr-2" />
-                实例存储
-              </button>
-            </div>
+                }
+              }}
+              options={[
+                { value: 'mapping', label: '映射数据', icon: CircleStackIcon, title: '映射数据查询：使用 mappingId 从数据库实时查询' },
+                { value: 'storage', label: '实例存储', icon: ServerIcon, title: '实例存储查询：使用 instance 从本地存储查询' },
+              ]}
+              activeClassName="bg-indigo-600 text-white"
+            />
           )}
           {objectType === 'database' && (
             <button

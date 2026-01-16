@@ -12,6 +12,7 @@ interface ButtonGroupProps<T extends string> {
   value: T;
   onChange: (value: T) => void;
   className?: string;
+  activeClassName?: string;
 }
 
 export default function ButtonGroup<T extends string>({
@@ -19,6 +20,7 @@ export default function ButtonGroup<T extends string>({
   value,
   onChange,
   className = '',
+  activeClassName = 'bg-blue-600 text-white',
 }: ButtonGroupProps<T>) {
   return (
     <div className={`flex items-center gap-2 bg-gray-100 rounded-lg p-1 ${className}`}>
@@ -31,7 +33,7 @@ export default function ButtonGroup<T extends string>({
             onClick={() => onChange(option.value)}
             className={`flex items-center px-4 py-2 rounded-md transition-all ${
               isActive
-                ? 'bg-blue-600 text-white shadow-sm font-medium'
+                ? `${activeClassName} shadow-sm font-medium`
                 : 'bg-transparent text-gray-600 hover:bg-gray-200'
             }`}
             title={option.title || option.label}
