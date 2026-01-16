@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
-import type { Instance, ObjectType, QueryRequest, FilterExpression } from '../api/client';
+import type { Instance, ObjectType, QueryRequest, FilterExpression, OrderBy } from '../api/client';
 import { instanceApi, schemaApi, queryApi, databaseApi, mappingApi } from '../api/client';
 import { useWorkspace } from '../WorkspaceContext';
 import { PlusIcon, PencilIcon, TrashIcon, CloudArrowDownIcon, XMarkIcon, LinkIcon, ArrowDownTrayIcon, FunnelIcon, MagnifyingGlassIcon, CircleStackIcon, ServerIcon, ArrowRightIcon, ChartBarIcon, TableCellsIcon, Cog6ToothIcon } from '@heroicons/react/24/outline';
@@ -51,6 +51,21 @@ export default function InstanceList() {
   const [visibleProperties, setVisibleProperties] = useState<Set<string>>(new Set());
   const [showExportMenu, setShowExportMenu] = useState(false);
   const analysisRef = useRef<HTMLDivElement>(null);
+  
+  // 查询配置相关状态（用于UI编辑，不立即触发查询）
+  const [queryFilterExpressions, setQueryFilterExpressions] = useState<FilterExpression[]>([]);
+  const [queryOrderBy, setQueryOrderBy] = useState<OrderBy[]>([]);
+  const [queryLimit, setQueryLimit] = useState(20);
+  const [queryOffset, setQueryOffset] = useState(0);
+  const [querySelectedFields, setQuerySelectedFields] = useState<Set<string>>(new Set());
+  const [showQueryConfig, setShowQueryConfig] = useState(false);
+  
+  // 实际应用的查询配置（用于查询）
+  const [appliedFilterExpressions, setAppliedFilterExpressions] = useState<FilterExpression[]>([]);
+  const [appliedOrderBy, setAppliedOrderBy] = useState<OrderBy[]>([]);
+  const [appliedLimit, setAppliedLimit] = useState(20);
+  const [appliedOffset, setAppliedOffset] = useState(0);
+  const [appliedSelectedFields, setAppliedSelectedFields] = useState<Set<string>>(new Set());
 
   const limit = 20;
   const { toasts, showToast, removeToast } = useToast();
@@ -75,12 +90,73 @@ export default function InstanceList() {
     return wsName === 'system' || wsDisplayName === 'system' || selectedWorkspace.id === 'system';
   };
 
+  // 查询条件管理函数
+  const addFilterExpression = () => {
+    setQueryFilterExpressions([...queryFilterExpressions, ['=', '', ''] as FilterExpression]);
+  };
+
+  const removeFilterExpression = (index: number) => {
+    setQueryFilterExpressions(queryFilterExpressions.filter((_, i) => i !== index));
+  };
+
+  const updateFilterExpression = (index: number, expr: FilterExpression) => {
+    const updated = [...queryFilterExpressions];
+    updated[index] = expr;
+    setQueryFilterExpressions(updated);
+  };
+
+  // 排序管理函数
+  const addOrderBy = () => {
+    setQueryOrderBy([...queryOrderBy, { field: '', direction: 'ASC' }]);
+  };
+
+  const removeOrderBy = (index: number) => {
+    setQueryOrderBy(queryOrderBy.filter((_, i) => i !== index));
+  };
+
+  const updateOrderBy = (index: number, field: string, direction: 'ASC' | 'DESC') => {
+    const orderBy = [...queryOrderBy];
+    orderBy[index] = { field, direction };
+    setQueryOrderBy(orderBy);
+  };
+
   // 加载可用的映射配置
   useEffect(() => {
     if (objectType && !isSystemObjectType(objectType)) {
       loadAvailableMappings();
     }
   }, [objectType]);
+
+
+  // 当对象类型改变时，重置查询配置
+  useEffect(() => {
+    if (objectType) {
+      setQueryFilterExpressions([]);
+      setQueryOrderBy([]);
+      setQueryLimit(20);
+      setQueryOffset(0);
+      setQuerySelectedFields(new Set());
+      setAppliedFilterExpressions([]);
+      setAppliedOrderBy([]);
+      setAppliedLimit(20);
+      setAppliedOffset(0);
+      setAppliedSelectedFields(new Set());
+      setOffset(0);
+    }
+  }, [objectType]);
+
+  // 当对象类型定义加载时，初始化字段选择（默认全选）
+  useEffect(() => {
+    if (objectTypeDef?.properties) {
+      const allFields = new Set(objectTypeDef.properties.map(p => p.name));
+      if (querySelectedFields.size === 0) {
+        setQuerySelectedFields(new Set(allFields));
+      }
+      if (appliedSelectedFields.size === 0) {
+        setAppliedSelectedFields(new Set(allFields));
+      }
+    }
+  }, [objectTypeDef]);
 
   useEffect(() => {
     if (objectType) {
@@ -93,12 +169,14 @@ export default function InstanceList() {
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [objectType, offset, mappingId, queryMode, viewMode]);
+  }, [objectType, offset, mappingId, queryMode, viewMode, appliedFilterExpressions, appliedOrderBy, appliedLimit, appliedOffset, appliedSelectedFields]);
 
   // 当筛选条件改变时，重置offset并重新加载数据（仅在列表视图）
   useEffect(() => {
     if (objectType && viewMode === 'list') {
       setOffset(0);
+      setQueryOffset(0);
+      setAppliedOffset(0);
       // 延迟加载，避免在filters变化时立即触发
       const timer = setTimeout(() => {
         loadData();
@@ -271,11 +349,21 @@ export default function InstanceList() {
         // 构建 ontology query：查询当前 object type 的所有实例
         const selectFields: string[] = ['id']; // 首先添加 id 字段（查询系统会自动映射 id_column 为 id）
         
-        // 添加所有属性字段
+        // 添加选中的属性字段（如果未选择任何字段，则选择所有字段）
         if (objectTypeData.properties) {
-          objectTypeData.properties.forEach(prop => {
-            selectFields.push(prop.name);
-          });
+          if (appliedSelectedFields.size > 0) {
+            // 只选择已选中的字段
+            objectTypeData.properties.forEach(prop => {
+              if (appliedSelectedFields.has(prop.name)) {
+                selectFields.push(prop.name);
+              }
+            });
+          } else {
+            // 如果没有选择任何字段，默认选择所有字段
+            objectTypeData.properties.forEach(prop => {
+              selectFields.push(prop.name);
+            });
+          }
         }
         
         // 构建过滤条件（转换为 OntologyQuery 格式）
@@ -284,12 +372,21 @@ export default function InstanceList() {
           queryFilters.push(['=' as const, key, value]);
         });
         
+        // 合并查询配置中的过滤条件（使用应用的配置）
+        const allFilters: FilterExpression[] = [...queryFilters, ...appliedFilterExpressions.filter(expr => {
+          // 只保留有效的过滤表达式（有字段和值）
+          const field = expr[1] as string;
+          const value = expr[2];
+          return field && value !== undefined && value !== null && value !== '';
+        })];
+        
         const queryRequest: QueryRequest = {
           object: objectType,
           select: selectFields,
-          limit: limit,
-          offset: offset,
-          ...(queryFilters.length > 0 && { filter: queryFilters }),
+          limit: appliedLimit || limit,
+          offset: appliedOffset !== undefined ? appliedOffset : offset,
+          ...(allFilters.length > 0 && { filter: allFilters }),
+          ...(appliedOrderBy.length > 0 && { orderBy: appliedOrderBy }),
         };
         
         // 执行 ontology query
@@ -312,7 +409,13 @@ export default function InstanceList() {
       }
       
       // 回退到直接 API 调用（支持筛选）
-      const instancesData = await instanceApi.list(objectType, offset, limit, Object.keys(filterParams).length > 0 ? filterParams : undefined);
+      // 注意：直接 API 调用不支持 links 和 orderBy，所以只在 OntologyQuery 失败时使用
+      const instancesData = await instanceApi.list(
+        objectType, 
+        appliedOffset !== undefined ? appliedOffset : offset, 
+        appliedLimit || limit, 
+        Object.keys(filterParams).length > 0 ? filterParams : undefined
+      );
       setInstances(instancesData.items);
       setTotal(instancesData.total);
     } catch (error) {
@@ -976,6 +1079,268 @@ export default function InstanceList() {
 
       {/* 数据列表视图 */}
       {viewMode === 'list' && (
+      <>
+      {/* 查询配置面板 */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-4">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+            <Cog6ToothIcon className="w-5 h-5 mr-2" />
+            查询配置
+          </h3>
+          <button
+            onClick={() => setShowQueryConfig(!showQueryConfig)}
+            className="text-sm text-gray-600 hover:text-gray-900"
+          >
+            {showQueryConfig ? '收起' : '展开'}
+          </button>
+        </div>
+
+        {showQueryConfig && (
+          <div className="space-y-4">
+            {/* 显示字段选择 */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium text-gray-700">显示字段</label>
+                <div className="flex gap-2 text-xs">
+                  <button
+                    onClick={() => {
+                      if (objectTypeDef?.properties) {
+                        setQuerySelectedFields(new Set(objectTypeDef.properties.map(p => p.name)));
+                      }
+                    }}
+                    className="text-blue-600 hover:text-blue-800 font-medium"
+                  >
+                    全选
+                  </button>
+                  <span className="text-gray-300">|</span>
+                  <button
+                    onClick={() => setQuerySelectedFields(new Set())}
+                    className="text-gray-500 hover:text-gray-700"
+                  >
+                    清空
+                  </button>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 border border-gray-300 rounded-lg p-3 bg-gray-50 max-h-48 overflow-y-auto">
+                {objectTypeDef?.properties.map(prop => (
+                  <label key={prop.name} className="flex items-center cursor-pointer hover:bg-white p-1.5 rounded border border-transparent hover:border-gray-200 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={querySelectedFields.has(prop.name)}
+                      onChange={(e) => {
+                        const newSet = new Set(querySelectedFields);
+                        if (e.target.checked) {
+                          newSet.add(prop.name);
+                        } else {
+                          newSet.delete(prop.name);
+                        }
+                        setQuerySelectedFields(newSet);
+                      }}
+                      className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 border-gray-300"
+                    />
+                    <span className="ml-2 text-sm text-gray-700 truncate select-none" title={prop.name}>{prop.name}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {/* 查询条件 */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium text-gray-700">查询条件</label>
+                <button
+                  onClick={addFilterExpression}
+                  disabled={!objectTypeDef}
+                  className="text-sm text-blue-600 hover:text-blue-800 flex items-center disabled:text-gray-400 disabled:cursor-not-allowed"
+                >
+                  <PlusIcon className="w-4 h-4 mr-1" />
+                  添加查询条件
+                </button>
+              </div>
+              <div className="space-y-2">
+                {queryFilterExpressions.map((expr, index) => {
+                  const operator = expr[0];
+                  const fieldPath = expr[1] as string;
+                  const value1 = expr[2];
+                  const value2 = expr.length > 3 ? expr[3] : undefined;
+                  
+                  return (
+                    <div key={index} className="flex gap-2 items-center border border-gray-300 rounded p-2 bg-white">
+                      <select
+                        value={operator}
+                        onChange={(e) => {
+                          const newOp = e.target.value;
+                          if (newOp === 'between') {
+                            updateFilterExpression(index, [newOp as any, fieldPath, value1 || '', value2 || ''] as FilterExpression);
+                          } else {
+                            updateFilterExpression(index, [newOp as any, fieldPath, value1 || ''] as FilterExpression);
+                          }
+                        }}
+                        className="border border-gray-300 rounded px-2 py-1 text-sm"
+                      >
+                        <option value="=">=</option>
+                        <option value=">">&gt;</option>
+                        <option value="<">&lt;</option>
+                        <option value=">=">&gt;=</option>
+                        <option value="<=">&lt;=</option>
+                        <option value="between">BETWEEN</option>
+                        <option value="LIKE">LIKE</option>
+                      </select>
+                      <select
+                        value={fieldPath}
+                        onChange={(e) => {
+                          if (operator === 'between') {
+                            updateFilterExpression(index, [operator as any, e.target.value, value1 || '', value2 || ''] as FilterExpression);
+                          } else {
+                            updateFilterExpression(index, [operator as any, e.target.value, value1 || ''] as FilterExpression);
+                          }
+                        }}
+                        className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm"
+                      >
+                        <option value="">选择属性...</option>
+                        {objectTypeDef?.properties.map(prop => (
+                          <option key={prop.name} value={prop.name}>{prop.name}</option>
+                        ))}
+                      </select>
+                      {operator === 'between' ? (
+                        <>
+                          <input
+                            type="text"
+                            value={value1 || ''}
+                            onChange={(e) => updateFilterExpression(index, [operator as any, fieldPath, e.target.value, value2 || ''] as FilterExpression)}
+                            placeholder="起始值"
+                            className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm"
+                          />
+                          <span className="text-sm text-gray-500">和</span>
+                          <input
+                            type="text"
+                            value={value2 || ''}
+                            onChange={(e) => updateFilterExpression(index, [operator as any, fieldPath, value1 || '', e.target.value] as FilterExpression)}
+                            placeholder="结束值"
+                            className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm"
+                          />
+                        </>
+                      ) : (
+                        <input
+                          type="text"
+                          value={value1 || ''}
+                          onChange={(e) => updateFilterExpression(index, [operator as any, fieldPath, e.target.value] as FilterExpression)}
+                          placeholder="值"
+                          className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm"
+                        />
+                      )}
+                      <button
+                        onClick={() => removeFilterExpression(index)}
+                        className="text-red-600 hover:text-red-800"
+                      >
+                        <TrashIcon className="w-4 h-4" />
+                      </button>
+                    </div>
+                  );
+                })}
+                {queryFilterExpressions.length === 0 && (
+                  <div className="text-center py-4 text-gray-500 text-sm">
+                    点击"添加查询条件"开始配置查询条件
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* 排序 */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium text-gray-700">排序</label>
+                <button
+                  onClick={addOrderBy}
+                  className="text-sm text-blue-600 hover:text-blue-800 flex items-center"
+                >
+                  <PlusIcon className="w-4 h-4 mr-1" />
+                  添加排序
+                </button>
+              </div>
+              <div className="space-y-2">
+                {queryOrderBy.map((order, index) => (
+                  <div key={index} className="flex gap-2 items-center">
+                    <select
+                      value={order.field}
+                      onChange={(e) => updateOrderBy(index, e.target.value, order.direction)}
+                      className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm"
+                    >
+                      <option value="">选择属性...</option>
+                      {objectTypeDef?.properties.map(prop => (
+                        <option key={prop.name} value={prop.name}>{prop.name}</option>
+                      ))}
+                    </select>
+                    <select
+                      value={order.direction}
+                      onChange={(e) => updateOrderBy(index, order.field, e.target.value as 'ASC' | 'DESC')}
+                      className="border border-gray-300 rounded px-2 py-1 text-sm"
+                    >
+                      <option value="ASC">ASC</option>
+                      <option value="DESC">DESC</option>
+                    </select>
+                    <button
+                      onClick={() => removeOrderBy(index)}
+                      className="text-red-600 hover:text-red-800"
+                    >
+                      <TrashIcon className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+                {queryOrderBy.length === 0 && (
+                  <div className="text-center py-2 text-gray-500 text-sm">
+                    点击"添加排序"开始配置排序
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* 分页设置 */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">每页数量</label>
+                <input
+                  type="number"
+                  value={queryLimit}
+                  onChange={(e) => setQueryLimit(parseInt(e.target.value) || 20)}
+                  className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
+                  min="1"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">偏移量</label>
+                <input
+                  type="number"
+                  value={queryOffset}
+                  onChange={(e) => setQueryOffset(parseInt(e.target.value) || 0)}
+                  className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
+                  min="0"
+                />
+              </div>
+            </div>
+
+            {/* 应用查询按钮 */}
+            <div className="flex justify-end">
+              <button
+                onClick={() => {
+                  // 将配置状态应用到实际查询状态
+                  setAppliedFilterExpressions([...queryFilterExpressions]);
+                  setAppliedOrderBy([...queryOrderBy]);
+                  setAppliedLimit(queryLimit);
+                  setAppliedOffset(queryOffset);
+                  setAppliedSelectedFields(new Set(querySelectedFields));
+                  setOffset(queryOffset);
+                  // loadData 会在 useEffect 中自动触发，因为 applied* 状态改变了
+                }}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                应用查询
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
@@ -984,14 +1349,16 @@ export default function InstanceList() {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   ID
                 </th>
-                {objectTypeDef.properties.map((prop) => (
-                  <th
-                    key={prop.name}
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
-                    {prop.name}
-                  </th>
-                ))}
+                {objectTypeDef.properties
+                  .filter(prop => appliedSelectedFields.size === 0 || appliedSelectedFields.has(prop.name))
+                  .map((prop) => (
+                    <th
+                      key={prop.name}
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                    >
+                      {prop.name}
+                    </th>
+                  ))}
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Actions
                 </th>
@@ -1001,7 +1368,9 @@ export default function InstanceList() {
               {instances.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={objectTypeDef.properties.length + 2}
+                    colSpan={(appliedSelectedFields.size === 0 
+                      ? objectTypeDef.properties.length 
+                      : objectTypeDef.properties.filter(p => appliedSelectedFields.has(p.name)).length) + 2}
                     className="px-6 py-8 text-center text-gray-500"
                   >
                     No instances found. Create one to get started.
@@ -1018,15 +1387,17 @@ export default function InstanceList() {
                         {instance.id ? `${instance.id.substring(0, 8)}...` : '-'}
                       </Link>
                     </td>
-                    {objectTypeDef.properties.map((prop) => (
-                      <td key={prop.name} className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {instance[prop.name] !== null && instance[prop.name] !== undefined
-                          ? typeof instance[prop.name] === 'object'
-                            ? JSON.stringify(instance[prop.name])
-                            : String(instance[prop.name])
-                          : '-'}
-                      </td>
-                    ))}
+                    {objectTypeDef.properties
+                      .filter(prop => appliedSelectedFields.size === 0 || appliedSelectedFields.has(prop.name))
+                      .map((prop) => (
+                        <td key={prop.name} className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {instance[prop.name] !== null && instance[prop.name] !== undefined
+                            ? typeof instance[prop.name] === 'object'
+                              ? JSON.stringify(instance[prop.name])
+                              : String(instance[prop.name])
+                            : '-'}
+                        </td>
+                      ))}
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       {!fromMapping && (
                         <div className="flex items-center justify-end gap-2">
@@ -1057,22 +1428,30 @@ export default function InstanceList() {
           </table>
         </div>
 
-        {total > limit && (
+        {total > (appliedLimit || limit) && (
           <div className="bg-gray-50 px-6 py-3 flex items-center justify-between border-t border-gray-200">
             <div className="text-sm text-gray-700">
-              Showing {offset + 1} to {Math.min(offset + limit, total)} of {total} instances
+              Showing {(appliedOffset !== undefined ? appliedOffset : offset) + 1} to {Math.min((appliedOffset !== undefined ? appliedOffset : offset) + (appliedLimit || limit), total)} of {total} instances
             </div>
             <div className="flex gap-2">
               <button
-                onClick={() => setOffset(Math.max(0, offset - limit))}
-                disabled={offset === 0}
+                onClick={() => {
+                  const newOffset = Math.max(0, (appliedOffset !== undefined ? appliedOffset : offset) - (appliedLimit || limit));
+                  setAppliedOffset(newOffset);
+                  setOffset(newOffset);
+                }}
+                disabled={(appliedOffset !== undefined ? appliedOffset : offset) === 0}
                 className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Previous
               </button>
               <button
-                onClick={() => setOffset(offset + limit)}
-                disabled={offset + limit >= total}
+                onClick={() => {
+                  const newOffset = (appliedOffset !== undefined ? appliedOffset : offset) + (appliedLimit || limit);
+                  setAppliedOffset(newOffset);
+                  setOffset(newOffset);
+                }}
+                disabled={(appliedOffset !== undefined ? appliedOffset : offset) + (appliedLimit || limit) >= total}
                 className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Next
@@ -1081,6 +1460,7 @@ export default function InstanceList() {
           </div>
         )}
       </div>
+      </>
       )}
 
       {/* 同步对话框 */}
