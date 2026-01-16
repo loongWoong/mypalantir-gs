@@ -98,117 +98,152 @@ export default function PropertyStatistics({ property, instances, displayOptions
   const showPieChart = !isNumeric && stats.uniqueValues <= 10 && stats.distribution.length > 0;
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-3">
-      {/* 属性标题行 - 紧凑布局 */}
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <h3 className="text-base font-semibold text-gray-900">{property.name}</h3>
-          <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded">
-            {property.data_type}
-          </span>
-        </div>
+    <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm hover:shadow-md transition-all duration-200">
+      {/* 属性标题行 */}
+      <div className="flex items-center mb-4 border-b border-gray-100 pb-3 gap-3">
+        <h3 className="text-lg font-bold text-gray-900">{property.name}</h3>
+        <span className={`px-2.5 py-1 text-xs font-medium rounded-full flex-shrink-0 ${
+          isNumeric ? 'bg-indigo-100 text-indigo-700' : 'bg-blue-100 text-blue-700'
+        }`}>
+          {property.data_type}
+        </span>
         {property.description && (
-          <span className="text-xs text-gray-500 truncate max-w-md">{property.description}</span>
+          <span className="text-sm text-gray-500 truncate" title={property.description}>
+            {property.description}
+          </span>
         )}
       </div>
 
-      {/* 统计信息 - 单行紧凑布局 */}
-      <div className="flex flex-wrap items-center gap-3 mb-2">
+      <div className="flex flex-col lg:flex-row gap-4 items-stretch">
         {/* 统计摘要 */}
         {displayOptions.showSummary && (
-          <>
-            <div className="flex items-center gap-1.5 text-sm">
-              <span className="text-gray-500">总数:</span>
-              <span className="font-semibold text-gray-900">{stats.total}</span>
+          <div className="lg:w-48 flex-shrink-0 bg-gray-50 rounded-lg p-3 border border-gray-100 flex flex-col justify-center">
+            <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">统计摘要</h4>
+            <div className="space-y-1.5">
+              <div className="flex justify-between items-baseline">
+                <span className="text-xs text-gray-500">总数</span>
+                <span className="text-sm font-bold text-gray-900">{stats.total.toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between items-baseline">
+                <span className="text-xs text-gray-500">有效</span>
+                <span className="text-sm font-bold text-green-600">{stats.nonNull.toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between items-baseline">
+                <span className="text-xs text-gray-500">空值</span>
+                <span className="text-sm font-bold text-red-500">{stats.nullCount.toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between items-baseline">
+                <span className="text-xs text-gray-500">唯一</span>
+                <span className="text-sm font-bold text-blue-600">{stats.uniqueValues.toLocaleString()}</span>
+              </div>
             </div>
-            <div className="flex items-center gap-1.5 text-sm">
-              <span className="text-gray-500">非空:</span>
-              <span className="font-semibold text-green-600">{stats.nonNull}</span>
-            </div>
-            <div className="flex items-center gap-1.5 text-sm">
-              <span className="text-gray-500">空值:</span>
-              <span className="font-semibold text-red-600">{stats.nullCount}</span>
-            </div>
-            <div className="flex items-center gap-1.5 text-sm">
-              <span className="text-gray-500">唯一值:</span>
-              <span className="font-semibold text-blue-600">{stats.uniqueValues}</span>
-            </div>
-          </>
+          </div>
         )}
 
-        {/* 数值统计信息 - 紧凑显示 */}
+        {/* 数值统计信息 */}
         {displayOptions.showNumericStats && stats.numericStats && (
-          <>
-            <div className="flex items-center gap-1.5 text-sm">
-              <span className="text-gray-500">最小值:</span>
-              <span className="font-semibold text-blue-700">{stats.numericStats.min.toFixed(2)}</span>
+          <div className="lg:w-48 flex-shrink-0 bg-indigo-50 rounded-lg p-3 border border-indigo-100 flex flex-col justify-center">
+            <h4 className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider mb-2">数值统计</h4>
+            <div className="space-y-1.5">
+              <div className="flex justify-between items-baseline">
+                <span className="text-xs text-indigo-600/70">Min</span>
+                <span className="text-sm font-mono font-bold text-indigo-700">{stats.numericStats.min.toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between items-baseline">
+                <span className="text-xs text-indigo-600/70">Max</span>
+                <span className="text-sm font-mono font-bold text-indigo-700">{stats.numericStats.max.toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between items-baseline">
+                <span className="text-xs text-indigo-600/70">Avg</span>
+                <span className="text-sm font-mono font-bold text-indigo-700">{stats.numericStats.avg.toLocaleString(undefined, { maximumFractionDigits: 1 })}</span>
+              </div>
+              <div className="flex justify-between items-baseline">
+                <span className="text-xs text-indigo-600/70">Med</span>
+                <span className="text-sm font-mono font-bold text-indigo-700">{stats.numericStats.median.toLocaleString(undefined, { maximumFractionDigits: 1 })}</span>
+              </div>
             </div>
-            <div className="flex items-center gap-1.5 text-sm">
-              <span className="text-gray-500">最大值:</span>
-              <span className="font-semibold text-blue-700">{stats.numericStats.max.toFixed(2)}</span>
-            </div>
-            <div className="flex items-center gap-1.5 text-sm">
-              <span className="text-gray-500">平均值:</span>
-              <span className="font-semibold text-blue-700">{stats.numericStats.avg.toFixed(2)}</span>
-            </div>
-            <div className="flex items-center gap-1.5 text-sm">
-              <span className="text-gray-500">中位数:</span>
-              <span className="font-semibold text-blue-700">{stats.numericStats.median.toFixed(2)}</span>
-            </div>
-          </>
+          </div>
+        )}
+
+        {/* 右侧图表区域 */}
+        {displayOptions.showChart && (
+          <div className="flex-1 min-w-0 min-h-[160px] h-[160px]">
+            {stats.distribution.length > 0 ? (
+              <div className="bg-white rounded-lg h-full flex flex-col">
+                <div className="flex-1 w-full h-full">
+                  {showPieChart ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={stats.distribution}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={40}
+                          outerRadius={70}
+                          paddingAngle={2}
+                          dataKey="value"
+                        >
+                          {stats.distribution.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} stroke="fff" strokeWidth={2} />
+                          ))}
+                        </Pie>
+                        <Tooltip 
+                          contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}
+                        />
+                        <Legend 
+                          layout="vertical" 
+                          verticalAlign="middle" 
+                          align="right"
+                          wrapperStyle={{ paddingLeft: '10px', fontSize: '11px' }}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={stats.distribution} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
+                        <XAxis 
+                          dataKey="name" 
+                          axisLine={false}
+                          tickLine={false}
+                          tick={{ fontSize: 10, fill: '#6B7280' }}
+                          dy={5}
+                          interval={0}
+                          angle={stats.distribution.length > 10 ? -45 : 0}
+                          textAnchor={stats.distribution.length > 10 ? 'end' : 'middle'}
+                          height={30}
+                        />
+                        <YAxis 
+                          axisLine={false}
+                          tickLine={false}
+                          tick={{ fontSize: 10, fill: '#6B7280' }}
+                        />
+                        <Tooltip 
+                          cursor={{ fill: '#F3F4F6' }}
+                          contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}
+                        />
+                        <Bar 
+                          dataKey="value" 
+                          fill="#3B82F6" 
+                          radius={[4, 4, 0, 0]}
+                          maxBarSize={40}
+                        />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="h-full flex flex-col items-center justify-center text-gray-400 bg-gray-50 rounded-lg border border-dashed border-gray-200">
+                <svg className="w-8 h-8 mb-2 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+                <p className="text-xs">暂无数据</p>
+              </div>
+            )}
+          </div>
         )}
       </div>
-
-      {/* 图表 - 紧凑高度 */}
-      {displayOptions.showChart && stats.distribution.length > 0 && (
-        <div className="mt-2">
-          {showPieChart ? (
-            <ResponsiveContainer width="100%" height={200}>
-              <PieChart>
-                <Pie
-                  data={stats.distribution}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-                  outerRadius={60}
-                  fill="#8884d8"
-                  dataKey="value"
-                >
-                  {stats.distribution.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
-          ) : (
-            <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={stats.distribution}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis 
-                  dataKey="name" 
-                  angle={-45}
-                  textAnchor="end"
-                  height={80}
-                  interval={0}
-                  tick={{ fontSize: 10 }}
-                />
-                <YAxis tick={{ fontSize: 10 }} />
-                <Tooltip />
-                <Bar dataKey="value" fill="#3b82f6" />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-      )}
-
-      {displayOptions.showChart && stats.distribution.length === 0 && (
-        <div className="text-center py-4 text-gray-400 text-sm">
-          暂无数据分布信息
-        </div>
-      )}
     </div>
   );
 }
