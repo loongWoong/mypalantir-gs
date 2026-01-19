@@ -22,7 +22,8 @@ import {
   ArrowUpTrayIcon,
   MapIcon,
   ListBulletIcon,
-  CalculatorIcon
+  CalculatorIcon,
+  ClipboardDocumentCheckIcon
 } from '@heroicons/react/24/outline';
 import type { ObjectType, LinkType, ModelInfo, CurrentModel } from '../api/client';
 import { schemaApi, modelApi } from '../api/client';
@@ -280,6 +281,18 @@ export default function Layout({ children }: LayoutProps) {
             >
               <SparklesIcon className="w-5 h-5 mr-3" />
               Natural Language Query
+            </Link>
+
+            <Link
+              to="/data-comparison"
+              className={`flex items-center px-3 py-2 rounded-lg mb-2 ${
+                isActive('/data-comparison')
+                  ? 'bg-blue-50 text-blue-700'
+                  : 'text-gray-700 hover:bg-gray-100'
+              }`}
+            >
+              <ClipboardDocumentCheckIcon className="w-5 h-5 mr-3" />
+              Data Reconciliation
             </Link>
 
 

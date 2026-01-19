@@ -442,5 +442,45 @@ export const naturalLanguageQueryApi = {
   },
 };
 
+// Comparison API
+export interface ComparisonRequest {
+  sourceTableId: string;
+  targetTableId: string;
+  sourceKey: string;
+  targetKey: string;
+  columnMapping: Record<string, string>;
+}
+
+export interface ComparisonResult {
+  taskId: string;
+  timestamp: number;
+  sourceTotal: number;
+  targetTotal: number;
+  matchedCount: number;
+  mismatchedCount: number;
+  sourceOnlyCount: number;
+  targetOnlyCount: number;
+  diffs: DiffRecord[];
+}
+
+export interface DiffRecord {
+  keyValue: string;
+  type: string;
+  details: ValueDiff[];
+}
+
+export interface ValueDiff {
+  fieldName: string;
+  sourceValue: any;
+  targetValue: any;
+}
+
+export const comparisonApi = {
+  run: async (request: ComparisonRequest): Promise<ComparisonResult> => {
+    const response = await apiClient.post<ApiResponse<ComparisonResult>>('/comparison/run', request);
+    return response.data.data;
+  },
+};
+
 export default apiClient;
 
