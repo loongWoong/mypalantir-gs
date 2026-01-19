@@ -5,7 +5,7 @@ import { jsPDF } from 'jspdf';
 import type { Instance, ObjectType, QueryRequest, FilterExpression, OrderBy } from '../api/client';
 import { instanceApi, schemaApi, queryApi, databaseApi, mappingApi } from '../api/client';
 import { useWorkspace } from '../WorkspaceContext';
-import { PlusIcon, PencilIcon, TrashIcon, CloudArrowDownIcon, XMarkIcon, LinkIcon, ArrowDownTrayIcon, FunnelIcon, MagnifyingGlassIcon, CircleStackIcon, ServerIcon, ArrowRightIcon, ChartBarIcon, TableCellsIcon, Cog6ToothIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, PencilIcon, TrashIcon, CloudArrowDownIcon, XMarkIcon, LinkIcon, ArrowDownTrayIcon, FunnelIcon, MagnifyingGlassIcon, CircleStackIcon, ServerIcon, ChartBarIcon, TableCellsIcon, Cog6ToothIcon } from '@heroicons/react/24/outline';
 import InstanceForm from '../components/InstanceForm';
 import ButtonGroup from '../components/ButtonGroup';
 import DataMappingDialog from '../components/DataMappingDialog';

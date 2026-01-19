@@ -5,6 +5,7 @@ import CompositeMetricBuilder from '../components/metric/CompositeMetricBuilder'
 import AtomicMetricBuilder from '../components/metric/AtomicMetricBuilder';
 import { metricApi } from '../api/metric';
 import type { AtomicMetric, MetricDefinition } from '../api/metric';
+import { ChartBarIcon } from '@heroicons/react/24/outline';
 
 type MetricType = 'derived' | 'atomic' | 'composite' | null;
 
@@ -70,80 +71,104 @@ const MetricBuilder: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="container mx-auto p-6">
-        <div className="text-center py-8">加载中...</div>
+      <div className="max-w-7xl mx-auto p-6">
+        <div className="text-center py-12">
+            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary mx-auto"></div>
+            <p className="mt-4 text-gray-500">加载中...</p>
+        </div>
       </div>
     );
   }
 
   if (selectedType === null) {
     return (
-      <div className="container mx-auto p-6">
+      <div className="max-w-7xl mx-auto space-y-8">
         <div className="max-w-4xl mx-auto">
-          <h1 className="text-3xl font-bold mb-6">{editMode ? '编辑指标' : '指标构建器'}</h1>
+          <div className="text-center mb-10">
+            <h1 className="text-3xl font-bold text-text mb-4 flex items-center justify-center gap-3">
+                <ChartBarIcon className="w-10 h-10 text-primary" />
+                {editMode ? '编辑指标' : '创建新指标'}
+            </h1>
+            <p className="text-gray-500 max-w-2xl mx-auto">
+                请选择您要创建的指标类型。指标是业务数据的量化度量，您可以从原子指标开始，或者基于现有指标构建更复杂的派生和复合指标。
+            </p>
+          </div>
           
-          <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div
               onClick={() => setSelectedType('derived')}
-              className="p-6 border-2 border-blue-500 rounded-lg cursor-pointer hover:bg-blue-50 transition-colors"
+              className="group p-6 bg-white border border-gray-200 rounded-xl cursor-pointer hover:border-primary hover:shadow-md transition-all duration-200 relative overflow-hidden"
             >
-              <div className="flex items-center">
-                <div className="w-4 h-4 rounded-full bg-blue-500 mr-4"></div>
-                <div>
-                  <h2 className="text-xl font-semibold mb-2">派生指标（推荐）</h2>
-                  <p className="text-gray-600">
-                    由原子指标+时间周期+维度组成，业务中最常用
-                  </p>
-                  <p className="text-sm text-gray-500 mt-1">
-                    示例：日交易金额、月度播放VV
-                  </p>
+              <div className="absolute top-0 right-0 bg-primary text-white text-xs font-bold px-3 py-1 rounded-bl-lg">推荐</div>
+              <div className="flex flex-col h-full">
+                <div className="w-12 h-12 rounded-lg bg-blue-50 flex items-center justify-center mb-4 group-hover:bg-blue-100 transition-colors">
+                    <div className="w-6 h-6 rounded-full bg-blue-500"></div>
+                </div>
+                <h2 className="text-lg font-bold text-text mb-2">派生指标</h2>
+                <p className="text-gray-600 text-sm mb-4 flex-grow">
+                  由原子指标 + 时间周期 + 维度组成，是业务分析中最常用的指标类型。
+                </p>
+                <div className="bg-gray-50 p-3 rounded-lg border border-gray-100">
+                    <p className="text-xs text-gray-500 font-medium mb-1">示例：</p>
+                    <div className="flex flex-wrap gap-2">
+                        <span className="text-xs bg-white border border-gray-200 px-2 py-1 rounded text-gray-600">日交易金额</span>
+                        <span className="text-xs bg-white border border-gray-200 px-2 py-1 rounded text-gray-600">月度活跃用户</span>
+                    </div>
                 </div>
               </div>
             </div>
 
             <div
               onClick={() => setSelectedType('atomic')}
-              className="p-6 border-2 border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors"
+              className="group p-6 bg-white border border-gray-200 rounded-xl cursor-pointer hover:border-purple-500 hover:shadow-md transition-all duration-200"
             >
-              <div className="flex items-center">
-                <div className="w-4 h-4 rounded-full border-2 border-gray-400 mr-4"></div>
-                <div>
-                  <h2 className="text-xl font-semibold mb-2">原子指标</h2>
-                  <p className="text-gray-600">
-                    定义最小的可度量单元，作为派生指标的基础
-                  </p>
-                  <p className="text-sm text-gray-500 mt-1">
-                    示例：交易金额、播放次数
-                  </p>
+              <div className="flex flex-col h-full">
+                <div className="w-12 h-12 rounded-lg bg-purple-50 flex items-center justify-center mb-4 group-hover:bg-purple-100 transition-colors">
+                    <div className="w-6 h-6 rounded-full border-4 border-purple-400"></div>
+                </div>
+                <h2 className="text-lg font-bold text-text mb-2">原子指标</h2>
+                <p className="text-gray-600 text-sm mb-4 flex-grow">
+                  定义最小的可度量单元，不包含任何维度限定，作为派生指标的基础。
+                </p>
+                <div className="bg-gray-50 p-3 rounded-lg border border-gray-100">
+                    <p className="text-xs text-gray-500 font-medium mb-1">示例：</p>
+                    <div className="flex flex-wrap gap-2">
+                        <span className="text-xs bg-white border border-gray-200 px-2 py-1 rounded text-gray-600">交易金额</span>
+                        <span className="text-xs bg-white border border-gray-200 px-2 py-1 rounded text-gray-600">支付次数</span>
+                    </div>
                 </div>
               </div>
             </div>
 
             <div
               onClick={() => setSelectedType('composite')}
-              className="p-6 border-2 border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors"
+              className="group p-6 bg-white border border-gray-200 rounded-xl cursor-pointer hover:border-orange-500 hover:shadow-md transition-all duration-200"
             >
-              <div className="flex items-center">
-                <div className="w-4 h-4 rounded-full border-2 border-gray-400 mr-4"></div>
-                <div>
-                  <h2 className="text-xl font-semibold mb-2">复合指标</h2>
-                  <p className="text-gray-600">
-                    基于现有指标通过公式计算得出
-                  </p>
-                  <p className="text-sm text-gray-500 mt-1">
-                    示例：平均交易金额、转化率
-                  </p>
+              <div className="flex flex-col h-full">
+                <div className="w-12 h-12 rounded-lg bg-orange-50 flex items-center justify-center mb-4 group-hover:bg-orange-100 transition-colors">
+                    <div className="w-6 h-6 rounded-sm bg-orange-500 transform rotate-45"></div>
+                </div>
+                <h2 className="text-lg font-bold text-text mb-2">复合指标</h2>
+                <p className="text-gray-600 text-sm mb-4 flex-grow">
+                  基于现有指标通过数学公式计算得出，用于表达比率、比例等复杂业务含义。
+                </p>
+                <div className="bg-gray-50 p-3 rounded-lg border border-gray-100">
+                    <p className="text-xs text-gray-500 font-medium mb-1">示例：</p>
+                    <div className="flex flex-wrap gap-2">
+                        <span className="text-xs bg-white border border-gray-200 px-2 py-1 rounded text-gray-600">客单价</span>
+                        <span className="text-xs bg-white border border-gray-200 px-2 py-1 rounded text-gray-600">转化率</span>
+                    </div>
                 </div>
               </div>
             </div>
           </div>
 
-          <div className="mt-6">
+          <div className="mt-12 flex justify-center">
             <button
               onClick={() => navigate('/metrics')}
-              className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+              className="px-6 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors shadow-sm font-medium"
             >
-              取消
+              返回列表
             </button>
           </div>
         </div>
@@ -152,7 +177,7 @@ const MetricBuilder: React.FC = () => {
   }
 
   return (
-    <div className="container mx-auto p-6">
+    <div className="max-w-7xl mx-auto">
       {selectedType === 'derived' && (
         <DerivedMetricBuilder
           onCancel={() => navigate('/metrics')}

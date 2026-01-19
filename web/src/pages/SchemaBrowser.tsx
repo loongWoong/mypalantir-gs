@@ -175,7 +175,7 @@ export default function SchemaBrowser() {
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       {/* Object Types List */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-text mb-4 flex items-center justify-between">
           <div className="flex items-center">
             <CubeIcon className="w-5 h-5 mr-2" />
             Object Types ({filteredObjectTypes.length}{selectedLinkType ? ` / ${workspaceFilteredObjectTypes.length}` : ''})
@@ -183,7 +183,7 @@ export default function SchemaBrowser() {
           {selectedLinkType && (
             <button
               onClick={() => setSelectedLinkType(null)}
-              className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200"
+              className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200 transition-colors"
             >
               清除过滤
             </button>
@@ -204,10 +204,10 @@ export default function SchemaBrowser() {
                   setSelectedObjectType(ot);
                   setSelectedLinkType(null);
                 }}
-                className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
+                className={`w-full text-left px-3 py-2 rounded-lg transition-colors duration-200 ${
                   selectedObjectType?.name === ot.name
-                    ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                    : 'hover:bg-gray-50 text-gray-700 border border-transparent'
+                    ? 'bg-blue-50 text-primary border border-blue-200'
+                    : 'hover:bg-gray-50 text-text border border-transparent'
                 }`}
               >
                 <div className="flex items-center justify-between">
@@ -230,13 +230,13 @@ export default function SchemaBrowser() {
 
       {/* Object Type / Link Type / Link Type Details */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">
+        <h2 className="text-lg font-semibold text-text mb-4">
           {selectedLinkType ? 'Link Type Details' : selectedObjectType ? 'Object Type Details' : 'Details'}
         </h2>
         {selectedLinkType ? (
           <div>
             <div className="mb-4">
-              <h3 className="text-xl font-bold text-gray-900">{selectedLinkType.display_name || selectedLinkType.name}</h3>
+              <h3 className="text-xl font-bold text-text">{selectedLinkType.display_name || selectedLinkType.name}</h3>
               {selectedLinkType.description && (
                 <p className="text-gray-600 mt-1">{selectedLinkType.description}</p>
               )}
@@ -247,20 +247,20 @@ export default function SchemaBrowser() {
               <nav className="flex space-x-4">
                 <button
                   onClick={() => setLinkTypeActiveTab('properties')}
-                  className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                  className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors duration-200 ${
                     linkTypeActiveTab === 'properties'
-                      ? 'border-blue-500 text-blue-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700'
+                      ? 'border-primary text-primary'
+                      : 'border-transparent text-gray-500 hover:text-text'
                   }`}
                 >
                   Properties
                 </button>
                 <button
                   onClick={() => setLinkTypeActiveTab('datasource')}
-                  className={`py-2 px-1 border-b-2 font-medium text-sm flex items-center ${
+                  className={`py-2 px-1 border-b-2 font-medium text-sm flex items-center transition-colors duration-200 ${
                     linkTypeActiveTab === 'datasource'
-                      ? 'border-blue-500 text-blue-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700'
+                      ? 'border-primary text-primary'
+                      : 'border-transparent text-gray-500 hover:text-text'
                   }`}
                 >
                   <ServerIcon className="w-4 h-4 mr-1" />

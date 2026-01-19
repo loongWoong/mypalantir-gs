@@ -313,17 +313,17 @@ const AtomicMetricBuilder: React.FC<Props> = ({ onCancel, onSuccess, editMode = 
 
   return (
     <div className="max-w-7xl mx-auto">
-      <div className="bg-white rounded-lg shadow-lg p-6">
-        <div className="flex justify-between items-center mb-4">
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <div className="flex justify-between items-center mb-6 border-b border-gray-100 pb-4">
           <div>
-            <h2 className="text-2xl font-bold">{editMode ? '编辑原子指标' : '原子指标构建器'}</h2>
-            <p className="text-gray-600 text-sm mt-1">定义在特定业务过程上的最小可度量单元</p>
+            <h2 className="text-xl font-bold text-text">{editMode ? '编辑原子指标' : '原子指标构建器'}</h2>
+            <p className="text-gray-500 text-sm mt-1">定义在特定业务过程上的最小可度量单元</p>
           </div>
           <div className="flex space-x-3">
             <button
               onClick={handleValidate}
               disabled={validating || loading}
-              className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:bg-gray-400 transition-colors flex items-center gap-2"
+              className="px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-sm font-medium flex items-center gap-2"
             >
               {validating ? (
                 <>
@@ -339,7 +339,7 @@ const AtomicMetricBuilder: React.FC<Props> = ({ onCancel, onSuccess, editMode = 
             </button>
             <button
               onClick={onCancel}
-              className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors"
+              className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors shadow-sm font-medium"
               disabled={loading || validating}
             >
               取消
@@ -347,79 +347,82 @@ const AtomicMetricBuilder: React.FC<Props> = ({ onCancel, onSuccess, editMode = 
             <button
               onClick={handleSave}
               disabled={loading || validating}
-              className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:bg-gray-400 transition-colors"
+              className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-sm font-medium"
             >
               {loading ? (editMode ? '保存中...' : '创建中...') : (editMode ? '保存修改' : '创建原子指标')}
             </button>
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* 第一列：基本信息 */}
-          <div className="space-y-3">
-            <div className="text-sm font-semibold text-gray-700 border-b pb-1">基本信息</div>
+          <div className="space-y-5">
+            <div className="text-sm font-semibold text-gray-900 border-b border-gray-200 pb-2 flex items-center gap-2">
+                <span className="w-1 h-4 bg-primary rounded-full"></span>
+                基本信息
+            </div>
             
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-text mb-1.5">
                 指标名称 <span className="text-red-500">*</span>
               </label>
               <input
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className={`w-full p-2 border rounded text-sm ${errors.name ? 'border-red-500' : ''}`}
+                className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-shadow ${errors.name ? 'border-red-500' : 'border-gray-300'}`}
                 placeholder="例如: 交易金额"
               />
-              {errors.name && <p className="text-red-500 text-xs mt-0.5">{errors.name}</p>}
+              {errors.name && <p className="text-red-500 text-xs mt-1">{errors.name}</p>}
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-text mb-1.5">
                 显示名称
               </label>
               <input
                 type="text"
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
-                className="w-full p-2 border rounded text-sm"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-shadow"
                 placeholder="界面显示名称"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-text mb-1.5">
                 描述
               </label>
               <textarea
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                className="w-full p-2 border rounded text-sm"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-shadow"
                 rows={3}
                 placeholder="描述用途和含义"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-text mb-1.5">
                 单位
               </label>
               <input
                 type="text"
                 value={unit}
                 onChange={(e) => setUnit(e.target.value)}
-                className="w-full p-2 border rounded text-sm"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-shadow"
                 placeholder="元、次、个、%"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-text mb-1.5">
                 状态
               </label>
               <select
                 value={status}
                 onChange={(e) => setStatus(e.target.value)}
-                className="w-full p-2 border rounded text-sm"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-shadow bg-white"
               >
                 <option value="active">启用</option>
                 <option value="inactive">禁用</option>
@@ -428,17 +431,20 @@ const AtomicMetricBuilder: React.FC<Props> = ({ onCancel, onSuccess, editMode = 
           </div>
 
           {/* 第二列：业务过程与聚合配置 */}
-          <div className="space-y-3">
-            <div className="text-sm font-semibold text-gray-700 border-b pb-1">业务过程</div>
+          <div className="space-y-5">
+            <div className="text-sm font-semibold text-gray-900 border-b border-gray-200 pb-2 flex items-center gap-2">
+                <span className="w-1 h-4 bg-purple-500 rounded-full"></span>
+                业务过程
+            </div>
             
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-text mb-1.5">
                 对象类型 <span className="text-red-500">*</span>
               </label>
               <select
                 value={businessProcess}
                 onChange={(e) => setBusinessProcess(e.target.value)}
-                className={`w-full p-2 border rounded text-sm ${errors.businessProcess ? 'border-red-500' : ''}`}
+                className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-shadow bg-white ${errors.businessProcess ? 'border-red-500' : 'border-gray-300'}`}
               >
                 <option value="">请选择对象类型</option>
                 {filteredObjectTypes.map(ot => (
@@ -448,23 +454,26 @@ const AtomicMetricBuilder: React.FC<Props> = ({ onCancel, onSuccess, editMode = 
                 ))}
               </select>
               {selectedWorkspace && filteredObjectTypes.length === 0 && (
-                <p className="text-yellow-600 text-xs mt-0.5">工作空间未添加对象类型</p>
+                <p className="text-yellow-600 text-xs mt-1">工作空间未添加对象类型</p>
               )}
               {errors.businessProcess && (
-                <p className="text-red-500 text-xs mt-0.5">{errors.businessProcess}</p>
+                <p className="text-red-500 text-xs mt-1">{errors.businessProcess}</p>
               )}
             </div>
 
-            <div className="text-sm font-semibold text-gray-700 border-b pb-1 mt-4">聚合配置</div>
+            <div className="text-sm font-semibold text-gray-900 border-b border-gray-200 pb-2 flex items-center gap-2 mt-8">
+                <span className="w-1 h-4 bg-orange-500 rounded-full"></span>
+                聚合配置
+            </div>
 
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-text mb-1.5">
                 聚合函数 <span className="text-red-500">*</span>
               </label>
               <select
                 value={aggregationFunction}
                 onChange={(e) => setAggregationFunction(e.target.value)}
-                className={`w-full p-2 border rounded text-sm ${errors.aggregationFunction ? 'border-red-500' : ''}`}
+                className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-shadow bg-white ${errors.aggregationFunction ? 'border-red-500' : 'border-gray-300'}`}
               >
                 <option value="">请选择聚合函数</option>
                 <option value="SUM">SUM（求和）</option>
@@ -475,13 +484,13 @@ const AtomicMetricBuilder: React.FC<Props> = ({ onCancel, onSuccess, editMode = 
                 <option value="DISTINCT_COUNT">DISTINCT_COUNT（去重计数）</option>
               </select>
               {errors.aggregationFunction && (
-                <p className="text-red-500 text-xs mt-0.5">{errors.aggregationFunction}</p>
+                <p className="text-red-500 text-xs mt-1">{errors.aggregationFunction}</p>
               )}
             </div>
 
             {requiresField && (
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-text mb-1.5">
                   聚合字段 <span className="text-red-500">*</span>
                 </label>
                 {businessProcess ? (
@@ -490,7 +499,7 @@ const AtomicMetricBuilder: React.FC<Props> = ({ onCancel, onSuccess, editMode = 
                       <select
                         value={aggregationField}
                         onChange={(e) => setAggregationField(e.target.value)}
-                        className={`w-full p-2 border rounded text-sm ${errors.aggregationField ? 'border-red-500' : ''}`}
+                        className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-shadow bg-white ${errors.aggregationField ? 'border-red-500' : 'border-gray-300'}`}
                       >
                         <option value="">请选择字段</option>
                         {aggregatableFields.map(prop => (
@@ -500,7 +509,7 @@ const AtomicMetricBuilder: React.FC<Props> = ({ onCancel, onSuccess, editMode = 
                         ))}
                       </select>
                     ) : (
-                      <div className="p-2 bg-yellow-50 border border-yellow-200 rounded">
+                      <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
                         <p className="text-yellow-800 text-xs">
                           {aggregationFunction === 'COUNT' || aggregationFunction === 'DISTINCT_COUNT'
                             ? '无可用字段'
@@ -509,12 +518,12 @@ const AtomicMetricBuilder: React.FC<Props> = ({ onCancel, onSuccess, editMode = 
                       </div>
                     )}
                     {errors.aggregationField && (
-                      <p className="text-red-500 text-xs mt-0.5">{errors.aggregationField}</p>
+                      <p className="text-red-500 text-xs mt-1">{errors.aggregationField}</p>
                     )}
                   </>
                 ) : (
-                  <div className="p-2 bg-gray-50 border border-gray-200 rounded">
-                    <p className="text-gray-600 text-xs">请先选择对象类型</p>
+                  <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                    <p className="text-gray-500 text-xs text-center">请先选择对象类型</p>
                   </div>
                 )}
               </div>
@@ -522,65 +531,73 @@ const AtomicMetricBuilder: React.FC<Props> = ({ onCancel, onSuccess, editMode = 
           </div>
 
           {/* 第三列：预览 */}
-          <div className="space-y-3">
-            <div className="text-sm font-semibold text-gray-700 border-b pb-1">预览</div>
+          <div className="space-y-5">
+            <div className="text-sm font-semibold text-gray-900 border-b border-gray-200 pb-2 flex items-center gap-2">
+                <span className="w-1 h-4 bg-green-500 rounded-full"></span>
+                预览
+            </div>
             
             {(name || businessProcess || aggregationFunction) ? (
-              <div className="bg-gray-50 p-3 rounded border space-y-1.5 text-xs">
-                <div>
-                  <span className="font-medium text-gray-700">指标名称：</span>
-                  <span className="text-gray-900">{name || '-'}</span>
+              <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 space-y-2 text-sm shadow-sm">
+                <div className="flex justify-between border-b border-gray-200 pb-2">
+                  <span className="text-gray-500">指标名称</span>
+                  <span className="font-medium text-text">{name || '-'}</span>
                 </div>
-                <div>
-                  <span className="font-medium text-gray-700">显示名称：</span>
-                  <span className="text-gray-900">{displayName || name || '-'}</span>
+                <div className="flex justify-between border-b border-gray-200 pb-2">
+                  <span className="text-gray-500">显示名称</span>
+                  <span className="font-medium text-text">{displayName || name || '-'}</span>
                 </div>
-                <div>
-                  <span className="font-medium text-gray-700">业务过程：</span>
-                  <span className="text-gray-900">
+                <div className="flex justify-between border-b border-gray-200 pb-2">
+                  <span className="text-gray-500">业务过程</span>
+                  <span className="font-medium text-text text-right">
                     {objectTypes.find(ot => ot.name === businessProcess)?.display_name || businessProcess || '-'}
                   </span>
                 </div>
-                <div>
-                  <span className="font-medium text-gray-700">聚合函数：</span>
-                  <span className="text-gray-900">{aggregationFunction || '-'}</span>
+                <div className="flex justify-between border-b border-gray-200 pb-2">
+                  <span className="text-gray-500">聚合函数</span>
+                  <span className="font-mono text-primary bg-blue-50 px-1.5 py-0.5 rounded">{aggregationFunction || '-'}</span>
                 </div>
                 {aggregationField && (
-                  <div>
-                    <span className="font-medium text-gray-700">聚合字段：</span>
-                    <span className="text-gray-900">{aggregationField}</span>
+                  <div className="flex justify-between border-b border-gray-200 pb-2">
+                    <span className="text-gray-500">聚合字段</span>
+                    <span className="font-mono text-text bg-gray-100 px-1.5 py-0.5 rounded">{aggregationField}</span>
                   </div>
                 )}
                 {unit && (
-                  <div>
-                    <span className="font-medium text-gray-700">单位：</span>
-                    <span className="text-gray-900">{unit}</span>
+                  <div className="flex justify-between border-b border-gray-200 pb-2">
+                    <span className="text-gray-500">单位</span>
+                    <span className="font-medium text-text">{unit}</span>
                   </div>
                 )}
                 {description && (
-                  <div>
-                    <span className="font-medium text-gray-700">描述：</span>
-                    <span className="text-gray-900">{description}</span>
+                  <div className="pt-1">
+                    <span className="text-gray-500 block mb-1">描述</span>
+                    <span className="text-text text-xs">{description}</span>
                   </div>
                 )}
-                <div>
-                  <span className="font-medium text-gray-700">状态：</span>
-                  <span className="text-gray-900">{status === 'active' ? '启用' : '禁用'}</span>
+                <div className="pt-2 flex justify-between items-center">
+                  <span className="text-gray-500">状态</span>
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
+                    {status === 'active' ? '启用' : '禁用'}
+                  </span>
                 </div>
               </div>
             ) : (
-              <div className="bg-gray-50 p-3 rounded border">
-                <p className="text-xs text-gray-500 text-center">填写信息后将显示预览</p>
+              <div className="bg-gray-50 p-6 rounded-lg border border-gray-200 border-dashed">
+                <p className="text-sm text-gray-400 text-center">填写信息后将显示预览</p>
               </div>
             )}
             
-            <div className="bg-blue-50 p-3 rounded border border-blue-200">
-              <p className="text-xs text-blue-800 font-medium mb-1">提示</p>
-              <ul className="text-xs text-blue-700 space-y-1 list-disc list-inside">
-                <li>指标名称建议使用英文</li>
-                <li>显示名称可以使用中文</li>
-                <li>COUNT可用于所有字段</li>
-                <li>SUM/AVG仅限数值字段</li>
+            <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
+              <p className="text-sm text-blue-800 font-semibold mb-2 flex items-center gap-1">
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd"></path></svg>
+                提示
+              </p>
+              <ul className="text-xs text-blue-700 space-y-1.5 list-disc list-inside">
+                <li>指标名称建议使用英文标识</li>
+                <li>显示名称可以使用中文，用于界面展示</li>
+                <li>COUNT 可用于所有字段类型</li>
+                <li>SUM/AVG/MAX/MIN 仅限数值类型字段</li>
               </ul>
             </div>
           </div>

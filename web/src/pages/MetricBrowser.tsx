@@ -2,7 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { metricApi } from '../api/metric';
 import type { MetricDefinition, AtomicMetric } from '../api/metric';
-import { PlusIcon } from '@heroicons/react/24/outline';
+import { 
+  PlusIcon, 
+  ChartBarIcon, 
+  TrashIcon, 
+  PencilIcon, 
+  EyeIcon,
+  FunnelIcon
+} from '@heroicons/react/24/outline';
 
 const MetricBrowser: React.FC = () => {
   const [metrics, setMetrics] = useState<MetricDefinition[]>([]);
@@ -64,49 +71,49 @@ const MetricBrowser: React.FC = () => {
   };
 
   return (
-    <div className="container mx-auto p-6">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">指标浏览器</h1>
+    <div className="max-w-7xl mx-auto space-y-6">
+      <div className="flex justify-between items-center">
+        <h1 className="text-2xl font-bold text-text flex items-center gap-2">
+            <ChartBarIcon className="w-8 h-8 text-primary" />
+            指标浏览器
+        </h1>
         <button
           onClick={() => navigate('/metrics/builder')}
-          className="flex items-center px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+          className="flex items-center px-4 py-2 bg-primary text-white rounded-lg hover:bg-blue-600 shadow-sm transition-all duration-200 font-medium"
         >
           <PlusIcon className="w-5 h-5 mr-2" />
           创建指标
         </button>
       </div>
 
-      <div className="mb-4 flex space-x-2">
-        <button
-          onClick={() => setFilter('all')}
-          className={`px-4 py-2 rounded ${filter === 'all' ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}
-        >
-          全部
-        </button>
-        <button
-          onClick={() => setFilter('atomic')}
-          className={`px-4 py-2 rounded ${filter === 'atomic' ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}
-        >
-          原子指标
-        </button>
-        <button
-          onClick={() => setFilter('derived')}
-          className={`px-4 py-2 rounded ${filter === 'derived' ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}
-        >
-          派生指标
-        </button>
-        <button
-          onClick={() => setFilter('composite')}
-          className={`px-4 py-2 rounded ${filter === 'composite' ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}
-        >
-          复合指标
-        </button>
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-1 inline-flex">
+        {[
+          { id: 'all', label: '全部' },
+          { id: 'atomic', label: '原子指标' },
+          { id: 'derived', label: '派生指标' },
+          { id: 'composite', label: '复合指标' }
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setFilter(tab.id as any)}
+            className={`px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
+              filter === tab.id 
+                ? 'bg-primary text-white shadow-sm' 
+                : 'text-gray-500 hover:text-text hover:bg-gray-50'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
 
       {loading ? (
-        <div className="text-center py-8">加载中...</div>
+        <div className="text-center py-12">
+            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary mx-auto"></div>
+            <p className="mt-4 text-gray-500">加载指标数据中...</p>
+        </div>
       ) : (
-        <div className="bg-white rounded-lg shadow overflow-hidden">
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
@@ -122,7 +129,7 @@ const MetricBrowser: React.FC = () => {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   状态
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                   操作
                 </th>
               </tr>
@@ -130,55 +137,67 @@ const MetricBrowser: React.FC = () => {
             <tbody className="bg-white divide-y divide-gray-200">
               {/* 显示原子指标 */}
               {(filter === 'all' || filter === 'atomic') && atomicMetrics.map(atomic => (
-                <tr key={atomic.id}>
+                <tr key={atomic.id} className="hover:bg-gray-50 transition-colors">
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-gray-900">
+                    <div className="text-sm font-medium text-text">
                       {atomic.display_name || atomic.name}
                     </div>
+                    {atomic.display_name && (
+                        <div className="text-xs text-gray-400 mt-0.5 font-mono">{atomic.name}</div>
+                    )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-purple-100 text-purple-800">
+                    <span className="px-2.5 py-0.5 inline-flex text-xs font-medium rounded-full bg-purple-50 text-purple-700 border border-purple-200">
                       原子指标
                     </span>
                   </td>
                   <td className="px-6 py-4">
-                    <div className="text-sm text-gray-500">{atomic.description || '-'}</div>
+                    <div className="text-sm text-gray-500 max-w-xs truncate" title={atomic.description || ''}>
+                        {atomic.description || '-'}
+                    </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                      atomic.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                    <span className={`px-2.5 py-0.5 inline-flex text-xs font-medium rounded-full border ${
+                      atomic.status === 'active' 
+                        ? 'bg-green-50 text-green-700 border-green-200' 
+                        : 'bg-gray-100 text-gray-600 border-gray-200'
                     }`}>
                       {atomic.status}
                     </span>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <button
-                      onClick={() => navigate(`/metrics/${atomic.id}`)}
-                      className="text-indigo-600 hover:text-indigo-900 mr-4"
-                    >
-                      查看
-                    </button>
-                    <button
-                      onClick={() => navigate(`/metrics/builder?id=${atomic.id}&type=atomic`)}
-                      className="text-blue-600 hover:text-blue-900 mr-4"
-                    >
-                      编辑
-                    </button>
-                    <button
-                      onClick={async () => {
-                        if (!confirm('确定要删除这个原子指标吗？')) return;
-                        try {
-                          await metricApi.deleteAtomicMetric(atomic.id);
-                          loadMetrics();
-                        } catch (error) {
-                          console.error('Failed to delete atomic metric:', error);
-                          alert('删除原子指标失败: ' + (error as Error).message);
-                        }
-                      }}
-                      className="text-red-600 hover:text-red-900"
-                    >
-                      删除
-                    </button>
+                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    <div className="flex justify-end items-center space-x-3">
+                        <button
+                          onClick={() => navigate(`/metrics/${atomic.id}`)}
+                          className="text-gray-400 hover:text-primary transition-colors"
+                          title="查看详情"
+                        >
+                          <EyeIcon className="w-5 h-5" />
+                        </button>
+                        <button
+                          onClick={() => navigate(`/metrics/builder?id=${atomic.id}&type=atomic`)}
+                          className="text-gray-400 hover:text-blue-600 transition-colors"
+                          title="编辑"
+                        >
+                          <PencilIcon className="w-5 h-5" />
+                        </button>
+                        <button
+                          onClick={async () => {
+                            if (!confirm('确定要删除这个原子指标吗？')) return;
+                            try {
+                              await metricApi.deleteAtomicMetric(atomic.id);
+                              loadMetrics();
+                            } catch (error) {
+                              console.error('Failed to delete atomic metric:', error);
+                              alert('删除原子指标失败: ' + (error as Error).message);
+                            }
+                          }}
+                          className="text-gray-400 hover:text-red-600 transition-colors"
+                          title="删除"
+                        >
+                          <TrashIcon className="w-5 h-5" />
+                        </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -191,46 +210,62 @@ const MetricBrowser: React.FC = () => {
                   return false;
                 })
                 .map(metric => (
-                <tr key={metric.id}>
+                <tr key={metric.id} className="hover:bg-gray-50 transition-colors">
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-gray-900">
+                    <div className="text-sm font-medium text-text">
                       {metric.display_name || metric.name}
                     </div>
+                    {metric.display_name && (
+                        <div className="text-xs text-gray-400 mt-0.5 font-mono">{metric.name}</div>
+                    )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
+                    <span className={`px-2.5 py-0.5 inline-flex text-xs font-medium rounded-full border ${
+                        metric.metric_type === 'derived' 
+                            ? 'bg-blue-50 text-blue-700 border-blue-200' 
+                            : 'bg-orange-50 text-orange-700 border-orange-200'
+                    }`}>
                       {metric.metric_type === 'derived' ? '派生指标' : '复合指标'}
                     </span>
                   </td>
                   <td className="px-6 py-4">
-                    <div className="text-sm text-gray-500">{metric.description || '-'}</div>
+                    <div className="text-sm text-gray-500 max-w-xs truncate" title={metric.description || ''}>
+                        {metric.description || '-'}
+                    </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                      metric.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                    <span className={`px-2.5 py-0.5 inline-flex text-xs font-medium rounded-full border ${
+                      metric.status === 'active' 
+                        ? 'bg-green-50 text-green-700 border-green-200' 
+                        : 'bg-gray-100 text-gray-600 border-gray-200'
                     }`}>
                       {metric.status}
                     </span>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <button
-                      onClick={() => navigate(`/metrics/${metric.id}`)}
-                      className="text-indigo-600 hover:text-indigo-900 mr-4"
-                    >
-                      查看
-                    </button>
-                    <button
-                      onClick={() => navigate(`/metrics/builder?id=${metric.id}&type=${metric.metric_type}`)}
-                      className="text-blue-600 hover:text-blue-900 mr-4"
-                    >
-                      编辑
-                    </button>
-                    <button
-                      onClick={() => handleDelete(metric.id)}
-                      className="text-red-600 hover:text-red-900"
-                    >
-                      删除
-                    </button>
+                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    <div className="flex justify-end items-center space-x-3">
+                        <button
+                          onClick={() => navigate(`/metrics/${metric.id}`)}
+                          className="text-gray-400 hover:text-primary transition-colors"
+                          title="查看详情"
+                        >
+                          <EyeIcon className="w-5 h-5" />
+                        </button>
+                        <button
+                          onClick={() => navigate(`/metrics/builder?id=${metric.id}&type=${metric.metric_type}`)}
+                          className="text-gray-400 hover:text-blue-600 transition-colors"
+                          title="编辑"
+                        >
+                          <PencilIcon className="w-5 h-5" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(metric.id)}
+                          className="text-gray-400 hover:text-red-600 transition-colors"
+                          title="删除"
+                        >
+                          <TrashIcon className="w-5 h-5" />
+                        </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -245,8 +280,15 @@ const MetricBrowser: React.FC = () => {
         (filter === 'composite' && metrics.filter(m => m.metric_type === 'composite').length === 0) ||
         (filter === 'all' && atomicMetrics.length === 0 && metrics.length === 0)
       ) && (
-        <div className="text-center py-8 text-gray-500">
-          暂无指标，点击"创建指标"开始创建
+        <div className="text-center py-16 bg-white rounded-lg border border-dashed border-gray-300">
+          <FunnelIcon className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+          <p className="text-gray-500 font-medium">暂无指标数据</p>
+          <button
+             onClick={() => navigate('/metrics/builder')}
+             className="mt-4 px-4 py-2 bg-primary text-white rounded-lg hover:bg-blue-600 shadow-sm transition-all duration-200 text-sm font-medium"
+          >
+             创建第一个指标
+          </button>
         </div>
       )}
     </div>

@@ -286,17 +286,17 @@ const CompositeMetricBuilder: React.FC<Props> = ({ onCancel, onSuccess, editMode
 
   return (
     <div className="max-w-7xl mx-auto">
-      <div className="bg-white rounded-lg shadow-lg p-6">
-        <div className="flex justify-between items-center mb-4">
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <div className="flex justify-between items-center mb-6 border-b border-gray-100 pb-4">
           <div>
-            <h2 className="text-2xl font-bold">{editMode ? '编辑复合指标' : '复合指标构建器'}</h2>
-            <p className="text-gray-600 text-sm mt-1">通过组合多个基础指标进行数学运算创建复合指标</p>
+            <h2 className="text-xl font-bold text-text">{editMode ? '编辑复合指标' : '复合指标构建器'}</h2>
+            <p className="text-gray-500 text-sm mt-1">通过组合多个基础指标进行数学运算创建复合指标</p>
           </div>
           <div className="flex space-x-3">
             <button
               onClick={handleValidate}
               disabled={validating || !formula || usedMetricIds.length === 0}
-              className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:bg-gray-400 transition-colors flex items-center gap-2"
+              className="px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-sm font-medium flex items-center gap-2"
             >
               {validating ? (
                 <>
@@ -312,7 +312,7 @@ const CompositeMetricBuilder: React.FC<Props> = ({ onCancel, onSuccess, editMode
             </button>
             <button
               onClick={onCancel}
-              className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+              className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors shadow-sm font-medium"
               disabled={validating}
             >
               取消
@@ -320,81 +320,109 @@ const CompositeMetricBuilder: React.FC<Props> = ({ onCancel, onSuccess, editMode
             <button
               onClick={handleSave}
               disabled={validating || !name || usedMetricIds.length === 0 || !formula}
-              className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:bg-gray-300"
+              className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-sm font-medium"
             >
               {editMode ? '保存修改' : '保存指标'}
             </button>
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* 第一列：基本信息 */}
-          <div className="space-y-3">
-            <div className="text-sm font-semibold text-gray-700 border-b pb-1">基本信息</div>
+          <div className="space-y-5">
+            <div className="text-sm font-semibold text-gray-900 border-b border-gray-200 pb-2 flex items-center gap-2">
+                <span className="w-1 h-4 bg-primary rounded-full"></span>
+                基本信息
+            </div>
             
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">指标名称 <span className="text-red-500">*</span></label>
+              <label className="block text-sm font-medium text-text mb-1.5">指标名称 <span className="text-red-500">*</span></label>
               <input
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full p-2 border rounded text-sm"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-shadow"
                 placeholder="例如: 日均交易金额"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">显示名称</label>
+              <label className="block text-sm font-medium text-text mb-1.5">显示名称</label>
               <input
                 type="text"
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
-                className="w-full p-2 border rounded text-sm"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-shadow"
                 placeholder="界面显示名称"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">描述</label>
+              <label className="block text-sm font-medium text-text mb-1.5">描述</label>
               <textarea
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                className="w-full p-2 border rounded text-sm"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-shadow"
                 rows={3}
                 placeholder="描述指标用途"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">单位</label>
+              <label className="block text-sm font-medium text-text mb-1.5">单位</label>
               <input
                 type="text"
                 value={unit}
                 onChange={(e) => setUnit(e.target.value)}
-                className="w-full p-2 border rounded text-sm"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-shadow"
                 placeholder="例如: 元/笔"
               />
             </div>
           </div>
 
           {/* 第二列：公式构建器 */}
-          <div className="space-y-3 col-span-2">
-            <div className="text-sm font-semibold text-gray-700 border-b pb-1">计算公式构建</div>
+          <div className="space-y-5 col-span-2">
+            <div className="text-sm font-semibold text-gray-900 border-b border-gray-200 pb-2 flex items-center gap-2">
+                <span className="w-1 h-4 bg-orange-500 rounded-full"></span>
+                计算公式构建
+            </div>
             
             {/* 公式显示 */}
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">公式 <span className="text-red-500">*</span></label>
-              <input
-                type="text"
-                value={formula}
-                onChange={(e) => setFormula(e.target.value)}
-                className="w-full p-2 border-2 border-blue-300 rounded font-mono text-sm bg-white"
-                placeholder="公式将显示在这里... 也可以手动输入"
-              />
+              <label className="block text-sm font-medium text-text mb-1.5">公式 <span className="text-red-500">*</span></label>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={formula}
+                  onChange={(e) => setFormula(e.target.value)}
+                  className="w-full px-4 py-3 border-2 border-blue-200 rounded-lg font-mono text-sm bg-blue-50/30 focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-shadow"
+                  placeholder="公式将显示在这里... 也可以手动输入"
+                />
+                <div className="absolute right-2 top-2 flex space-x-1">
+                    <button
+                      onClick={deleteLastChar}
+                      disabled={!formula}
+                      className="p-1.5 text-gray-400 hover:text-yellow-600 disabled:opacity-30 transition-colors"
+                      title="回退"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12.066 11.2a1 1 0 000 1.6l5.334 4A1 1 0 0019 16V8a1 1 0 00-1.6-.8l-5.333 4zM4.066 11.2a1 1 0 000 1.6l5.334 4A1 1 0 0011 16V8a1 1 0 00-1.6-.8l-5.334 4z"></path></svg>
+                    </button>
+                    <button
+                      onClick={clearFormula}
+                      disabled={!formula}
+                      className="p-1.5 text-gray-400 hover:text-red-600 disabled:opacity-30 transition-colors"
+                      title="清空"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                    </button>
+                </div>
+              </div>
+              
               {formula && usedMetricNames.length > 0 && (
-                <div className="mt-1 flex flex-wrap gap-1">
+                <div className="mt-2 flex flex-wrap gap-2 p-2 bg-gray-50 rounded-lg border border-gray-100">
+                  <span className="text-xs text-gray-500 py-0.5">引用指标:</span>
                   {usedMetricNames.map((name, idx) => (
-                    <span key={`${name}-${idx}`} className="inline-block bg-blue-100 text-blue-800 px-2 py-0.5 rounded text-xs">
+                    <span key={`${name}-${idx}`} className="inline-flex items-center bg-white border border-blue-200 text-blue-700 px-2 py-0.5 rounded-md text-xs font-medium shadow-sm">
                       {name}
                     </span>
                   ))}
@@ -404,55 +432,46 @@ const CompositeMetricBuilder: React.FC<Props> = ({ onCancel, onSuccess, editMode
 
             {/* 运算符按钮 */}
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">运算符</label>
-              <div className="flex gap-1">
+              <label className="block text-sm font-medium text-text mb-1.5">运算符</label>
+              <div className="flex gap-2">
                 {['+', '-', '*', '/', '%', '(', ')'].map(op => (
                   <button
                     key={op}
                     onClick={() => addOperatorToFormula(op)}
-                    className="px-3 py-1.5 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors font-mono text-sm"
+                    className="w-10 h-10 flex items-center justify-center bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 hover:border-primary hover:text-primary transition-all shadow-sm font-mono text-lg font-medium"
                   >
                     {op}
                   </button>
                 ))}
-                <button
-                  onClick={deleteLastChar}
-                  disabled={!formula}
-                  className="px-3 py-1.5 bg-yellow-500 text-white rounded hover:bg-yellow-600 disabled:bg-gray-300 text-xs"
-                >
-                  删除
-                </button>
-                <button
-                  onClick={clearFormula}
-                  disabled={!formula}
-                  className="px-3 py-1.5 bg-red-500 text-white rounded hover:bg-red-600 disabled:bg-gray-300 text-xs"
-                >
-                  清空
-                </button>
               </div>
             </div>
 
             {/* 基础指标选择 */}
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">选择基础指标</label>
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="搜索指标..."
-                className="w-full p-2 border rounded text-sm mb-2"
-              />
-              <div className="max-h-56 overflow-y-auto border rounded bg-white">
+            <div className="flex-1 flex flex-col min-h-0">
+              <label className="block text-sm font-medium text-text mb-1.5">选择基础指标</label>
+              <div className="flex gap-2 mb-2">
+                  <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="搜索指标..."
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+                  />
+              </div>
+              <div className="flex-1 overflow-y-auto border border-gray-200 rounded-lg bg-gray-50 p-4 min-h-[240px]">
                 {/* 原子指标 */}
                 {filteredMetrics.filter(m => m.type === 'atomic').length > 0 && (
-                  <div className="p-2">
-                    <div className="text-xs font-semibold text-gray-500 mb-1">原子指标</div>
-                    <div className="flex flex-wrap gap-1">
+                  <div className="mb-4">
+                    <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-purple-400"></span>
+                        原子指标
+                    </div>
+                    <div className="flex flex-wrap gap-2">
                       {filteredMetrics.filter(m => m.type === 'atomic').map(metric => (
                         <button
                           key={metric.id}
                           onClick={() => addMetricToFormula(metric.id)}
-                          className="px-2 py-1 bg-green-100 text-green-800 rounded hover:bg-green-200 text-xs"
+                          className="px-3 py-1.5 bg-white border border-purple-100 text-purple-800 rounded-md hover:bg-purple-50 hover:border-purple-300 transition-all text-sm shadow-sm"
                         >
                           {metric.name}
                         </button>
@@ -462,14 +481,17 @@ const CompositeMetricBuilder: React.FC<Props> = ({ onCancel, onSuccess, editMode
                 )}
                 {/* 派生指标 */}
                 {filteredMetrics.filter(m => m.type === 'derived').length > 0 && (
-                  <div className="p-2 border-t">
-                    <div className="text-xs font-semibold text-gray-500 mb-1">派生指标</div>
-                    <div className="flex flex-wrap gap-1">
+                  <div className="mb-4 pt-2 border-t border-gray-200">
+                    <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 mt-2 flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-blue-400"></span>
+                        派生指标
+                    </div>
+                    <div className="flex flex-wrap gap-2">
                       {filteredMetrics.filter(m => m.type === 'derived').map(metric => (
                         <button
                           key={metric.id}
                           onClick={() => addMetricToFormula(metric.id)}
-                          className="px-2 py-1 bg-blue-100 text-blue-800 rounded hover:bg-blue-200 text-xs"
+                          className="px-3 py-1.5 bg-white border border-blue-100 text-blue-800 rounded-md hover:bg-blue-50 hover:border-blue-300 transition-all text-sm shadow-sm"
                         >
                           {metric.name}
                         </button>
@@ -479,14 +501,17 @@ const CompositeMetricBuilder: React.FC<Props> = ({ onCancel, onSuccess, editMode
                 )}
                 {/* 复合指标 */}
                 {filteredMetrics.filter(m => m.type === 'composite').length > 0 && (
-                  <div className="p-2 border-t">
-                    <div className="text-xs font-semibold text-gray-500 mb-1">复合指标</div>
-                    <div className="flex flex-wrap gap-1">
+                  <div className="mb-2 pt-2 border-t border-gray-200">
+                    <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 mt-2 flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-orange-400"></span>
+                        复合指标
+                    </div>
+                    <div className="flex flex-wrap gap-2">
                       {filteredMetrics.filter(m => m.type === 'composite').map(metric => (
                         <button
                           key={metric.id}
                           onClick={() => addMetricToFormula(metric.id)}
-                          className="px-2 py-1 bg-purple-100 text-purple-800 rounded hover:bg-purple-200 text-xs"
+                          className="px-3 py-1.5 bg-white border border-orange-100 text-orange-800 rounded-md hover:bg-orange-50 hover:border-orange-300 transition-all text-sm shadow-sm"
                         >
                           {metric.name}
                         </button>
@@ -495,14 +520,20 @@ const CompositeMetricBuilder: React.FC<Props> = ({ onCancel, onSuccess, editMode
                   </div>
                 )}
                 {filteredMetrics.length === 0 && (
-                  <div className="p-3 text-center text-gray-400 text-xs">未找到匹配的指标</div>
+                  <div className="flex flex-col items-center justify-center h-32 text-gray-400">
+                    <svg className="w-8 h-8 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    <p className="text-sm">未找到匹配的指标</p>
+                  </div>
                 )}
               </div>
             </div>
 
-            <div className="bg-blue-50 p-2 rounded border border-blue-200">
-              <p className="text-xs text-blue-800">
-                提示: 点击指标按钮或运算符按钮构建公式。公式中显示指标名称，保存时自动转换为ID。
+            <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
+              <p className="text-sm text-blue-800 font-semibold mb-1">
+                提示
+              </p>
+              <p className="text-xs text-blue-700">
+                点击指标按钮或运算符按钮构建公式。公式中显示指标名称，保存时自动转换为ID。
               </p>
             </div>
           </div>

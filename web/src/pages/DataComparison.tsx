@@ -1,7 +1,14 @@
 import { useState, useEffect } from 'react';
-import { databaseApi, comparisonApi, schemaApi, modelApi, mappingApi } from '../api/client';
+import { databaseApi, comparisonApi, modelApi, mappingApi } from '../api/client';
 import type { ComparisonResult, ObjectType, ModelInfo, DataSourceMapping } from '../api/client';
 import { ToastContainer, useToast } from '../components/Toast';
+import { 
+  ArrowPathIcon, 
+  CheckCircleIcon, 
+  TableCellsIcon, 
+  CubeIcon,
+  ArrowRightIcon
+} from '@heroicons/react/24/outline';
 
 export default function DataComparison() {
   // Config Mode
@@ -361,15 +368,17 @@ export default function DataComparison() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto">
-      <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">数据交叉对比 (Data Reconciliation)</h1>
+    <div className="max-w-7xl mx-auto space-y-6">
+      <div className="flex justify-between items-center">
+          <h1 className="text-2xl font-bold text-text">数据交叉对比 (Data Reconciliation)</h1>
           
           {/* Mode Toggle */}
-          <div className="bg-gray-100 p-1 rounded-lg flex">
+          <div className="bg-white p-1 rounded-lg border border-gray-200 flex shadow-sm">
               <button
-                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                      mode === 'table' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 flex items-center gap-2 ${
+                      mode === 'table' 
+                        ? 'bg-primary text-white shadow-sm' 
+                        : 'text-gray-500 hover:text-text hover:bg-gray-50'
                   }`}
                   onClick={() => {
                       setMode('table');
@@ -383,11 +392,14 @@ export default function DataComparison() {
                       setTargetTableId('');
                   }}
               >
+                  <TableCellsIcon className="w-4 h-4" />
                   基于数据表 (By Table)
               </button>
               <button
-                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                      mode === 'model' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 flex items-center gap-2 ${
+                      mode === 'model' 
+                        ? 'bg-primary text-white shadow-sm' 
+                        : 'text-gray-500 hover:text-text hover:bg-gray-50'
                   }`}
                   onClick={() => {
                       setMode('model');
@@ -397,24 +409,31 @@ export default function DataComparison() {
                       setTargetTableId('');
                   }}
               >
+                  <CubeIcon className="w-4 h-4" />
                   基于对象模型 (By Model)
               </button>
           </div>
       </div>
       
       {/* Config Panel */}
-      <div className="bg-white rounded-lg shadow p-6 mb-6">
-         <div className="grid grid-cols-2 gap-8">
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+         <div className="grid grid-cols-2 gap-8 relative">
+             {/* Divider */}
+             <div className="absolute top-0 bottom-0 left-1/2 w-px bg-gray-200 transform -translate-x-1/2 hidden md:block"></div>
+
              {/* Source */}
              <div>
-                 <h3 className="font-semibold mb-4 text-blue-700">基准 (Source)</h3>
+                 <h3 className="font-semibold mb-6 text-primary flex items-center gap-2 text-lg">
+                    <span className="w-2 h-6 bg-primary rounded-full"></span>
+                    基准 (Source)
+                 </h3>
                  
                  {mode === 'table' ? (
-                     <>
-                         <div className="mb-4">
-                             <label className="block text-sm font-medium text-gray-700 mb-1">选择数据源 (Data Source)</label>
+                     <div className="space-y-5">
+                         <div>
+                             <label className="block text-sm font-medium text-text mb-2">选择数据源 (Data Source)</label>
                              <select 
-                                className="w-full border rounded px-3 py-2"
+                                className="w-full border border-gray-300 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-shadow bg-white"
                                 value={sourceDatabaseId}
                                 onChange={(e) => {
                                     setSourceDatabaseId(e.target.value);
@@ -425,10 +444,10 @@ export default function DataComparison() {
                                  {databases.map(db => <option key={db.id} value={db.id}>{db.name || db.database_name || 'Default'}</option>)}
                              </select>
                          </div>
-                         <div className="mb-4">
-                             <label className="block text-sm font-medium text-gray-700 mb-1">选择数据表 (Table)</label>
+                         <div>
+                             <label className="block text-sm font-medium text-text mb-2">选择数据表 (Table)</label>
                              <select 
-                                className="w-full border rounded px-3 py-2"
+                                className="w-full border border-gray-300 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-shadow bg-white disabled:bg-gray-50 disabled:text-gray-400"
                                 value={sourceTableId}
                                 onChange={(e) => handleSourceTableChange(e.target.value)}
                                 disabled={!sourceDatabaseId}
@@ -440,13 +459,13 @@ export default function DataComparison() {
                                  }
                              </select>
                          </div>
-                     </>
+                     </div>
                  ) : (
-                     <>
-                        <div className="mb-4">
-                             <label className="block text-sm font-medium text-gray-700 mb-1">选择工作空间 (Workspace)</label>
+                     <div className="space-y-5">
+                        <div>
+                             <label className="block text-sm font-medium text-text mb-2">选择工作空间 (Workspace)</label>
                              <select 
-                                className="w-full border rounded px-3 py-2 bg-blue-50"
+                                className="w-full border border-gray-300 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-shadow bg-blue-50/50"
                                 value={sourceWorkspace}
                                 onChange={(e) => handleSourceWorkspaceChange(e.target.value)}
                              >
@@ -454,10 +473,10 @@ export default function DataComparison() {
                                  {models.map(m => <option key={m.id} value={m.id}>{m.displayName || m.id}</option>)}
                              </select>
                         </div>
-                        <div className="mb-4">
-                             <label className="block text-sm font-medium text-gray-700 mb-1">选择对象模型 (Object Type)</label>
+                        <div>
+                             <label className="block text-sm font-medium text-text mb-2">选择对象模型 (Object Type)</label>
                              <select 
-                                className="w-full border rounded px-3 py-2 bg-blue-50"
+                                className="w-full border border-gray-300 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-shadow bg-blue-50/50 disabled:bg-gray-50 disabled:text-gray-400"
                                 value={sourceModelName}
                                 onChange={(e) => handleSourceModelChange(e.target.value)}
                                 disabled={!sourceWorkspace}
@@ -466,20 +485,21 @@ export default function DataComparison() {
                                  {sourceObjectTypes.map(t => <option key={t.name} value={t.name}>{t.display_name || t.name}</option>)}
                              </select>
                              {sourceTableId && (
-                                 <div className="mt-1 text-xs text-gray-500">
-                                     已映射到表: {tables.find(t => t.id === sourceTableId)?.displayName}
+                                 <div className="mt-2 text-xs text-gray-500 flex items-center gap-1">
+                                     <CheckCircleIcon className="w-3 h-3 text-green-500" />
+                                     已映射到表: <span className="font-mono">{tables.find(t => t.id === sourceTableId)?.displayName}</span>
                                  </div>
                              )}
                         </div>
-                     </>
+                     </div>
                  )}
                  
-                 <div className="mb-4">
-                     <label className="block text-sm font-medium text-gray-700 mb-1">
+                 <div className="mt-5">
+                     <label className="block text-sm font-medium text-text mb-2">
                          {mode === 'model' ? '主键列 (Mapped Key)' : '主键 (Key)'}
                      </label>
                      <select 
-                        className="w-full border rounded px-3 py-2"
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-shadow bg-white disabled:bg-gray-50 disabled:text-gray-400"
                         value={sourceKey}
                         onChange={(e) => setSourceKey(e.target.value)}
                         disabled={mode === 'model' && !sourceKey} 
@@ -492,14 +512,17 @@ export default function DataComparison() {
              
              {/* Target */}
              <div>
-                 <h3 className="font-semibold mb-4 text-green-700">对比目标 (Target)</h3>
+                 <h3 className="font-semibold mb-6 text-cta flex items-center gap-2 text-lg">
+                    <span className="w-2 h-6 bg-cta rounded-full"></span>
+                    对比目标 (Target)
+                 </h3>
                  
                  {mode === 'table' ? (
-                     <>
-                         <div className="mb-4">
-                             <label className="block text-sm font-medium text-gray-700 mb-1">选择数据源 (Data Source)</label>
+                     <div className="space-y-5">
+                         <div>
+                             <label className="block text-sm font-medium text-text mb-2">选择数据源 (Data Source)</label>
                              <select 
-                                className="w-full border rounded px-3 py-2"
+                                className="w-full border border-gray-300 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-cta focus:border-transparent outline-none transition-shadow bg-white"
                                 value={targetDatabaseId}
                                 onChange={(e) => {
                                     setTargetDatabaseId(e.target.value);
@@ -510,10 +533,10 @@ export default function DataComparison() {
                                  {databases.map(db => <option key={db.id} value={db.id}>{db.name || db.database_name || 'Default'}</option>)}
                              </select>
                          </div>
-                         <div className="mb-4">
-                             <label className="block text-sm font-medium text-gray-700 mb-1">选择数据表 (Table)</label>
+                         <div>
+                             <label className="block text-sm font-medium text-text mb-2">选择数据表 (Table)</label>
                              <select 
-                                className="w-full border rounded px-3 py-2"
+                                className="w-full border border-gray-300 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-cta focus:border-transparent outline-none transition-shadow bg-white disabled:bg-gray-50 disabled:text-gray-400"
                                 value={targetTableId}
                                 onChange={(e) => handleTargetTableChange(e.target.value)}
                                 disabled={!targetDatabaseId}
@@ -525,13 +548,13 @@ export default function DataComparison() {
                                  }
                              </select>
                          </div>
-                     </>
+                     </div>
                  ) : (
-                     <>
-                        <div className="mb-4">
-                             <label className="block text-sm font-medium text-gray-700 mb-1">选择工作空间 (Workspace)</label>
+                     <div className="space-y-5">
+                        <div>
+                             <label className="block text-sm font-medium text-text mb-2">选择工作空间 (Workspace)</label>
                              <select 
-                                className="w-full border rounded px-3 py-2 bg-green-50"
+                                className="w-full border border-gray-300 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-cta focus:border-transparent outline-none transition-shadow bg-orange-50/50"
                                 value={targetWorkspace}
                                 onChange={(e) => handleTargetWorkspaceChange(e.target.value)}
                              >
@@ -539,10 +562,10 @@ export default function DataComparison() {
                                  {models.map(m => <option key={m.id} value={m.id}>{m.displayName || m.id}</option>)}
                              </select>
                         </div>
-                        <div className="mb-4">
-                             <label className="block text-sm font-medium text-gray-700 mb-1">选择对象模型 (Object Type)</label>
+                        <div>
+                             <label className="block text-sm font-medium text-text mb-2">选择对象模型 (Object Type)</label>
                              <select 
-                                className="w-full border rounded px-3 py-2 bg-green-50"
+                                className="w-full border border-gray-300 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-cta focus:border-transparent outline-none transition-shadow bg-orange-50/50 disabled:bg-gray-50 disabled:text-gray-400"
                                 value={targetModelName}
                                 onChange={(e) => handleTargetModelChange(e.target.value)}
                                 disabled={!targetWorkspace}
@@ -551,20 +574,21 @@ export default function DataComparison() {
                                  {targetObjectTypes.map(t => <option key={t.name} value={t.name}>{t.display_name || t.name}</option>)}
                              </select>
                              {targetTableId && (
-                                 <div className="mt-1 text-xs text-gray-500">
-                                     已映射到表: {tables.find(t => t.id === targetTableId)?.displayName}
+                                 <div className="mt-2 text-xs text-gray-500 flex items-center gap-1">
+                                     <CheckCircleIcon className="w-3 h-3 text-green-500" />
+                                     已映射到表: <span className="font-mono">{tables.find(t => t.id === targetTableId)?.displayName}</span>
                                  </div>
                              )}
                         </div>
-                     </>
+                     </div>
                  )}
 
-                 <div className="mb-4">
-                     <label className="block text-sm font-medium text-gray-700 mb-1">
+                 <div className="mt-5">
+                     <label className="block text-sm font-medium text-text mb-2">
                          {mode === 'model' ? '主键列 (Mapped Key)' : '主键 (Key)'}
                      </label>
                      <select 
-                        className="w-full border rounded px-3 py-2"
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-cta focus:border-transparent outline-none transition-shadow bg-white disabled:bg-gray-50 disabled:text-gray-400"
                         value={targetKey}
                         onChange={(e) => setTargetKey(e.target.value)}
                      >
@@ -577,20 +601,25 @@ export default function DataComparison() {
          
          {/* Mapping */}
          {sourceTableId && targetTableId && (
-             <div className="mt-6 border-t pt-6">
-                 <h3 className="font-semibold mb-4">字段映射配置 {mode === 'model' && '(基于属性名自动匹配)'}</h3>
-                 <div className="grid grid-cols-3 gap-4 mb-2 font-medium text-sm text-gray-500">
+             <div className="mt-8 border-t border-gray-200 pt-8">
+                 <h3 className="font-semibold mb-6 text-text flex items-center gap-2">
+                    <ArrowPathIcon className="w-5 h-5 text-gray-400" />
+                    字段映射配置 {mode === 'model' && <span className="text-xs font-normal text-gray-500 ml-2 bg-gray-100 px-2 py-0.5 rounded-full">基于属性名自动匹配</span>}
+                 </h3>
+                 <div className="bg-gray-50 rounded-t-lg border border-gray-200 border-b-0 px-4 py-3 grid grid-cols-3 gap-4 font-medium text-sm text-gray-500">
                      <div>源字段 (Source)</div>
                      <div className="text-center">映射关系</div>
                      <div>目标字段 (Target)</div>
                  </div>
-                 <div className="space-y-2 max-h-60 overflow-y-auto">
+                 <div className="border border-gray-200 rounded-b-lg divide-y divide-gray-100 bg-white max-h-[400px] overflow-y-auto">
                      {sourceColumns.map(sc => (
-                         <div key={sc.name} className="grid grid-cols-3 gap-4 items-center">
-                             <div className="text-sm">{sc.name}</div>
-                             <div className="flex justify-center">→</div>
+                         <div key={sc.name} className="grid grid-cols-3 gap-4 items-center px-4 py-3 hover:bg-gray-50 transition-colors">
+                             <div className="text-sm font-mono text-text">{sc.name}</div>
+                             <div className="flex justify-center text-gray-400">
+                                <ArrowRightIcon className="w-4 h-4" />
+                             </div>
                              <select 
-                                className="border rounded px-2 py-1 text-sm"
+                                className="border border-gray-300 rounded px-2 py-1.5 text-sm font-mono focus:ring-1 focus:ring-primary focus:border-primary outline-none"
                                 value={columnMapping[sc.name] || ''}
                                 onChange={(e) => {
                                     const val = e.target.value;
@@ -613,44 +642,67 @@ export default function DataComparison() {
              </div>
          )}
          
-         <div className="mt-6 flex justify-end">
+         <div className="mt-8 flex justify-end">
              <button 
-                className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 disabled:opacity-50"
+                className="bg-primary text-white px-8 py-2.5 rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-all duration-200 font-medium flex items-center gap-2"
                 onClick={handleRun}
                 disabled={loading}
              >
-                 {loading ? '正在对比...' : '开始对比'}
+                 {loading ? (
+                    <>
+                        <ArrowPathIcon className="w-5 h-5 animate-spin" />
+                        正在对比...
+                    </>
+                 ) : (
+                    <>
+                        <CheckCircleIcon className="w-5 h-5" />
+                        开始对比
+                    </>
+                 )}
              </button>
          </div>
       </div>
       
       {/* Result Panel */}
       {result && (
-          <div className="space-y-6">
+          <div className="space-y-6 animate-slide-in-right">
               {/* Summary Cards */}
-              <div className="grid grid-cols-4 gap-4">
-                  <div className="bg-green-50 p-4 rounded border border-green-200">
-                      <div className="text-green-800 text-sm font-medium">完全匹配</div>
-                      <div className="text-2xl font-bold text-green-900">{result.matchedCount}</div>
+              <div className="grid grid-cols-4 gap-6">
+                  <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                        <div className="text-gray-500 text-sm font-medium">完全匹配</div>
+                      </div>
+                      <div className="text-3xl font-bold text-gray-900">{result.matchedCount}</div>
                   </div>
-                  <div className="bg-red-50 p-4 rounded border border-red-200">
-                      <div className="text-red-800 text-sm font-medium">值不一致</div>
-                      <div className="text-2xl font-bold text-red-900">{result.mismatchedCount}</div>
+                  <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="w-2 h-2 rounded-full bg-red-500"></div>
+                        <div className="text-gray-500 text-sm font-medium">值不一致</div>
+                      </div>
+                      <div className="text-3xl font-bold text-gray-900">{result.mismatchedCount}</div>
                   </div>
-                  <div className="bg-yellow-50 p-4 rounded border border-yellow-200">
-                      <div className="text-yellow-800 text-sm font-medium">仅源表存在</div>
-                      <div className="text-2xl font-bold text-yellow-900">{result.sourceOnlyCount}</div>
+                  <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="w-2 h-2 rounded-full bg-yellow-500"></div>
+                        <div className="text-gray-500 text-sm font-medium">仅源表存在</div>
+                      </div>
+                      <div className="text-3xl font-bold text-gray-900">{result.sourceOnlyCount}</div>
                   </div>
-                  <div className="bg-blue-50 p-4 rounded border border-blue-200">
-                      <div className="text-blue-800 text-sm font-medium">仅目标表存在</div>
-                      <div className="text-2xl font-bold text-blue-900">{result.targetOnlyCount}</div>
+                  <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="w-2 h-2 rounded-full bg-blue-500"></div>
+                        <div className="text-gray-500 text-sm font-medium">仅目标表存在</div>
+                      </div>
+                      <div className="text-3xl font-bold text-gray-900">{result.targetOnlyCount}</div>
                   </div>
               </div>
               
               {/* Diff Table */}
-              <div className="bg-white rounded-lg shadow overflow-hidden">
-                  <div className="px-6 py-4 border-b border-gray-200">
-                      <h3 className="font-semibold">差异详情 ({result.diffs.length})</h3>
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+                  <div className="px-6 py-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
+                      <h3 className="font-semibold text-text">差异详情</h3>
+                      <span className="bg-gray-200 text-gray-600 text-xs px-2 py-1 rounded-full">{result.diffs.length} 条记录</span>
                   </div>
                   <div className="overflow-x-auto">
                       <table className="min-w-full divide-y divide-gray-200">
@@ -663,25 +715,26 @@ export default function DataComparison() {
                           </thead>
                           <tbody className="bg-white divide-y divide-gray-200">
                               {result.diffs.slice(0, 100).map((diff, idx) => (
-                                  <tr key={idx}>
-                                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{diff.keyValue}</td>
+                                  <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                                      <td className="px-6 py-4 whitespace-nowrap text-sm font-mono font-medium text-primary">{diff.keyValue}</td>
                                       <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                          <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
-                                            ${diff.type === 'VALUE_MISMATCH' ? 'bg-red-100 text-red-800' : 
-                                              diff.type === 'MISSING_IN_TARGET' ? 'bg-yellow-100 text-yellow-800' : 
-                                              'bg-blue-100 text-blue-800'}`}>
+                                          <span className={`px-2.5 py-0.5 inline-flex text-xs font-medium rounded-full border 
+                                            ${diff.type === 'VALUE_MISMATCH' ? 'bg-red-50 text-red-700 border-red-200' : 
+                                              diff.type === 'MISSING_IN_TARGET' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' : 
+                                              'bg-blue-50 text-blue-700 border-blue-200'}`}>
                                               {diff.type}
                                           </span>
                                       </td>
                                       <td className="px-6 py-4 text-sm text-gray-500">
                                           {diff.details ? (
-                                              <ul className="list-disc pl-4 space-y-1">
+                                              <ul className="space-y-1.5">
                                                   {diff.details.map((d, i) => (
-                                                      <li key={i}>
-                                                          <span className="font-medium">{d.fieldName}:</span> 
-                                                          <span className="text-red-600 line-through mx-2">{String(d.sourceValue)}</span>
-                                                          <span>→</span>
-                                                          <span className="text-green-600 mx-2">{String(d.targetValue)}</span>
+                                                      <li key={i} className="flex items-center gap-2">
+                                                          <span className="font-medium text-gray-700 font-mono text-xs bg-gray-100 px-1.5 py-0.5 rounded">{d.fieldName}</span>
+                                                          <span className="text-gray-400 text-xs">:</span>
+                                                          <span className="text-red-600 line-through bg-red-50 px-1 rounded">{String(d.sourceValue)}</span>
+                                                          <ArrowRightIcon className="w-3 h-3 text-gray-400" />
+                                                          <span className="text-green-600 bg-green-50 px-1 rounded">{String(d.targetValue)}</span>
                                                       </li>
                                                   ))}
                                               </ul>
@@ -693,8 +746,8 @@ export default function DataComparison() {
                               ))}
                               {result.diffs.length > 100 && (
                                   <tr>
-                                      <td colSpan={3} className="px-6 py-4 text-center text-gray-500">
-                                          ... 仅显示前 100 条差异 ...
+                                      <td colSpan={3} className="px-6 py-4 text-center text-sm text-gray-500 bg-gray-50">
+                                          ... 仅显示前 100 条差异，完整报告请下载 ...
                                       </td>
                                   </tr>
                               )}
