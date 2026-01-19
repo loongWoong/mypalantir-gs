@@ -703,8 +703,8 @@ export default function InstanceList() {
                 }
               }}
               options={[
-                { value: 'mapping', label: '映射数据', icon: CircleStackIcon, title: '映射数据查询：使用 mappingId 从数据库实时查询' },
-                { value: 'storage', label: '实例存储', icon: ServerIcon, title: '实例存储查询：使用 instance 从本地存储查询' },
+                { value: 'storage', label: '映射数据', icon: CircleStackIcon, title: '映射数据查询：使用 mappingId 从数据库实时查询' },
+                { value: 'mapping', label: '实例存储', icon: ServerIcon, title: '实例存储查询：使用 instance 从本地存储查询' },
               ]}
               activeClassName="bg-indigo-600 text-white"
             />
