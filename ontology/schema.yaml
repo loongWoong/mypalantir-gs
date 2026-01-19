@@ -1650,6 +1650,18 @@ link_types:
       vlp: plate_num
       vlpc: plate_color
 
+  - name: entry_to_path_new
+    display_name: 入口交易汇聚为路径
+    description: "入口交易汇聚为路径信息（passId,vlp,vlpc -> passId,plateNum,plateColor）(函数计算)"
+    source_type: EntryTransactionNew
+    target_type: Path
+    cardinality: one-to-one
+    direction: directed
+    property_mappings:
+      pass_id: pass_id
+      vlp: plate_num
+      vlpc: plate_color
+
   - name: exit_to_path
     display_name: 出口交易汇聚为路径
     description: "出口交易汇聚为路径信息（passId,exVlp,exVlpc -> passId,plateNum,plateColor）(函数计算)"

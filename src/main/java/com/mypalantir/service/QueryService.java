@@ -1,6 +1,8 @@
 package com.mypalantir.service;
 
 import com.mypalantir.meta.Loader;
+import com.mypalantir.query.ExecutionRouter;
+import com.mypalantir.query.FederatedCalciteRunner;
 import com.mypalantir.query.OntologyQuery;
 import com.mypalantir.query.QueryExecutor;
 import com.mypalantir.query.QueryParser;
@@ -20,15 +22,19 @@ public class QueryService {
     private final IInstanceStorage instanceStorage;
     private final MappingService mappingService;
     private final DatabaseMetadataService databaseMetadataService;
+    private final ExecutionRouter executionRouter;
     private QueryExecutor executor;
+    private FederatedCalciteRunner federatedRunner;
 
     @Autowired
     public QueryService(Loader loader, IInstanceStorage instanceStorage,
-                       MappingService mappingService, DatabaseMetadataService databaseMetadataService) {
+                       MappingService mappingService, DatabaseMetadataService databaseMetadataService,
+                       ExecutionRouter executionRouter) {
         this.loader = loader;
         this.instanceStorage = instanceStorage;
         this.mappingService = mappingService;
         this.databaseMetadataService = databaseMetadataService;
+        this.executionRouter = executionRouter;
         this.parser = new QueryParser();
     }
 
@@ -78,13 +84,24 @@ public class QueryService {
         // 验证查询
         validateQuery(query);
         
-        // 执行查询
-        if (executor == null) {
-            executor = new QueryExecutor(loader, instanceStorage, mappingService, databaseMetadataService);
-            executor.initialize();
+        // 路由决策
+        ExecutionRouter.ExecutionMode mode = executionRouter.route(query);
+        System.out.println("Execution Mode: " + mode);
+
+        if (mode == ExecutionRouter.ExecutionMode.FEDERATED) {
+            if (federatedRunner == null) {
+                federatedRunner = new FederatedCalciteRunner(loader, instanceStorage, mappingService, databaseMetadataService);
+            }
+            return federatedRunner.execute(query);
+        } else {
+            // 单源执行
+            if (executor == null) {
+                executor = new QueryExecutor(loader, instanceStorage, mappingService, databaseMetadataService);
+                executor.initialize();
+            }
+            
+            return executor.execute(query);
         }
-        
-        return executor.execute(query);
     }
 
     /**

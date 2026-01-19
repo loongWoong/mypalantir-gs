@@ -101,8 +101,9 @@ public class MyPalantirApplication {
     @Bean
     public QueryService queryService(@Lazy Loader loader, IInstanceStorage instanceStorage,
                                     com.mypalantir.service.MappingService mappingService,
-                                    com.mypalantir.service.DatabaseMetadataService databaseMetadataService) {
-        return new QueryService(loader, instanceStorage, mappingService, databaseMetadataService);
+                                    com.mypalantir.service.DatabaseMetadataService databaseMetadataService,
+                                    com.mypalantir.query.ExecutionRouter executionRouter) {
+        return new QueryService(loader, instanceStorage, mappingService, databaseMetadataService, executionRouter);
     }
 
     @Bean

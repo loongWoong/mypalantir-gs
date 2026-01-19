@@ -47,52 +47,48 @@ public class OntologyRelToSqlConverter extends RelToSqlConverter {
      * 重写 visit 方法，在访问 TableScan 时缓存映射信息
      * 优先从 JdbcOntologyTable 获取 mapping 信息（因为 JdbcOntologyTable 已经根据 mapping 创建）
      */
-    @Override
-    public Result visit(RelNode e) {
-        // 如果是 TableScan，尝试获取映射信息
-        if (e instanceof TableScan) {
-            TableScan scan = (TableScan) e;
-            org.apache.calcite.plan.RelOptTable relOptTable = scan.getTable();
-            if (relOptTable != null) {
-                org.apache.calcite.schema.Table calciteTable = relOptTable.unwrap(org.apache.calcite.schema.Table.class);
+    public Result visit(TableScan e) {
+        // 尝试获取映射信息
+        org.apache.calcite.plan.RelOptTable relOptTable = e.getTable();
+        if (relOptTable != null) {
+            org.apache.calcite.schema.Table calciteTable = relOptTable.unwrap(org.apache.calcite.schema.Table.class);
+            
+            // 如果是 OntologyTable，获取映射信息并缓存
+            if (calciteTable instanceof OntologyTable) {
+                OntologyTable ontologyTable = (OntologyTable) calciteTable;
+                ObjectType objectType = ontologyTable.getObjectType();
+                String objectTypeName = objectType.getName();
                 
-                // 如果是 OntologyTable，获取映射信息并缓存
-                if (calciteTable instanceof OntologyTable) {
-                    OntologyTable ontologyTable = (OntologyTable) calciteTable;
-                    ObjectType objectType = ontologyTable.getObjectType();
-                    String objectTypeName = objectType.getName();
-                    
-                    // 优先从 JdbcOntologyTable 获取 mapping（因为 JdbcOntologyTable 已经根据 mapping 创建）
-                    // 这样可以直接使用已经映射好的数据源、表名、列名信息
-                    DataSourceMapping mapping = null;
-                    if (ontologyTable instanceof JdbcOntologyTable) {
-                        mapping = ((JdbcOntologyTable) ontologyTable).getMapping();
-                        System.out.println("[OntologyRelToSqlConverter] Got mapping from JdbcOntologyTable for: " + objectTypeName);
-                    }
-                    
-                    // 如果 JdbcOntologyTable 没有 mapping，尝试从映射关系获取
-                    if (mapping == null || !mapping.isConfigured()) {
-                        mapping = getDataSourceMappingFromMapping(objectType);
-                        System.out.println("[OntologyRelToSqlConverter] Got mapping from mappingService for: " + objectTypeName);
-                    }
-                    
-                    // 如果还是没有，使用 schema 中定义的 data_source（向后兼容）
-                    if (mapping == null || !mapping.isConfigured()) {
-                        mapping = objectType.getDataSource();
-                        System.out.println("[OntologyRelToSqlConverter] Using schema data_source for: " + objectTypeName);
-                    }
-                    
-                    if (mapping != null && mapping.isConfigured()) {
-                        // 缓存映射信息，供后续使用
-                        objectTypeMappingCache.put(objectTypeName, mapping);
-                        System.out.println("[OntologyRelToSqlConverter] Cached mapping for: " + objectTypeName + 
-                                         " -> table: " + mapping.getTable() + 
-                                         ", idColumn: " + mapping.getIdColumn() + 
-                                         ", fieldMapping size: " + 
-                                         (mapping.getFieldMapping() != null ? mapping.getFieldMapping().size() : 0));
-                    } else {
-                        System.err.println("[OntologyRelToSqlConverter] No valid mapping found for: " + objectTypeName);
-                    }
+                // 优先从 JdbcOntologyTable 获取 mapping（因为 JdbcOntologyTable 已经根据 mapping 创建）
+                // 这样可以直接使用已经映射好的数据源、表名、列名信息
+                DataSourceMapping mapping = null;
+                if (ontologyTable instanceof JdbcOntologyTable) {
+                    mapping = ((JdbcOntologyTable) ontologyTable).getMapping();
+                    System.out.println("[OntologyRelToSqlConverter] Got mapping from JdbcOntologyTable for: " + objectTypeName);
+                }
+                
+                // 如果 JdbcOntologyTable 没有 mapping，尝试从映射关系获取
+                if (mapping == null || !mapping.isConfigured()) {
+                    mapping = getDataSourceMappingFromMapping(objectType);
+                    System.out.println("[OntologyRelToSqlConverter] Got mapping from mappingService for: " + objectTypeName);
+                }
+                
+                // 如果还是没有，使用 schema 中定义的 data_source（向后兼容）
+                if (mapping == null || !mapping.isConfigured()) {
+                    mapping = objectType.getDataSource();
+                    System.out.println("[OntologyRelToSqlConverter] Using schema data_source for: " + objectTypeName);
+                }
+                
+                if (mapping != null && mapping.isConfigured()) {
+                    // 缓存映射信息，供后续使用
+                    objectTypeMappingCache.put(objectTypeName, mapping);
+                    System.out.println("[OntologyRelToSqlConverter] Cached mapping for: " + objectTypeName + 
+                                     " -> table: " + mapping.getTable() + 
+                                     ", idColumn: " + mapping.getIdColumn() + 
+                                     ", fieldMapping size: " + 
+                                     (mapping.getFieldMapping() != null ? mapping.getFieldMapping().size() : 0));
+                } else {
+                    System.err.println("[OntologyRelToSqlConverter] No valid mapping found for: " + objectTypeName);
                 }
             }
         }

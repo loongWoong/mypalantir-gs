@@ -537,7 +537,17 @@ public class RelNodeBuilder {
                 "' does not have data source configured. Please configure a mapping for this object type.");
         }
         
-        // 6. 获取 LinkType 的数据源映射（支持显式配置或从 ObjectType mapping 推导）
+        // 6. 优先检查是否配置了 property_mappings 或 transformation_mappings
+        // 如果有，优先使用这些映射构建 JOIN，而不是走默认的外键/关系表逻辑
+        // 这解决了 "entry_to_path" 等使用 property_mappings 定义的链接被错误识别为外键模式的问题
+        if (linkType != null && (linkType.hasTransformationMappings() || 
+            (linkType.getPropertyMappings() != null && !linkType.getPropertyMappings().isEmpty()))) {
+             System.out.println("[buildJoin] Using property/transformation mappings for link: " + linkQuery.getName());
+             return buildJoinWithTransformationMappings(leftInput, actualSourceType, actualTargetType,
+                                                      linkType, actualTargetMapping, isFromSource);
+        }
+        
+        // 7. 获取 LinkType 的数据源映射（支持显式配置或从 ObjectType mapping 推导）
         DataSourceMapping linkMapping = getLinkDataSourceMapping(linkType, actualSourceType, actualTargetType, actualTargetMapping);
         
         // 7. 判断 LinkType 映射模式（基于实际的 target）
