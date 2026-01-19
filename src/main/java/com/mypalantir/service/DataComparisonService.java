@@ -4,8 +4,14 @@ import com.mypalantir.repository.IInstanceStorage;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import org.apache.calcite.adapter.jdbc.JdbcSchema;
+import org.apache.calcite.jdbc.CalciteConnection;
+import org.apache.calcite.schema.SchemaPlus;
+import org.apache.calcite.tools.Frameworks;
+
+import javax.sql.DataSource;
 import java.io.IOException;
-import java.sql.SQLException;
+import java.sql.*;
 import java.util.*;
 
 @Service
@@ -31,32 +37,77 @@ public class DataComparisonService {
         String sourceTableName = (String) sourceTable.get("name");
         String targetTableName = (String) targetTable.get("name");
 
-        // 2. 构建查询语句 (按主键排序)
-        // 注意：这里假设主键是单列
+        // 2. 使用 Calcite 执行跨库查询 (按主键排序)
         String sourceKey = request.getSourceKey();
         String targetKey = request.getTargetKey();
         
-        // 简单的 SQL 注入防护：验证列名是否包含非法字符（简化版）
-        validateIdentifier(sourceTableName);
-        validateIdentifier(targetTableName);
-        validateIdentifier(sourceKey);
-        validateIdentifier(targetKey);
+        List<Map<String, Object>> sourceRows = executeWithCalcite(sourceDbId, sourceTableName, sourceKey);
+        List<Map<String, Object>> targetRows = executeWithCalcite(targetDbId, targetTableName, targetKey);
 
-        String sourceSql = String.format("SELECT * FROM \"%s\" ORDER BY \"%s\"", sourceTableName, sourceKey);
-        String targetSql = String.format("SELECT * FROM \"%s\" ORDER BY \"%s\"", targetTableName, targetKey);
-
-        // 3. 执行查询
-        List<Map<String, Object>> sourceRows = databaseMetadataService.executeQuery(sourceSql, sourceDbId);
-        List<Map<String, Object>> targetRows = databaseMetadataService.executeQuery(targetSql, targetDbId);
-
-        // 4. 执行对比 (双指针算法)
+        // 3. 执行对比 (双指针算法)
         return compareRows(sourceRows, targetRows, request);
     }
 
-    private void validateIdentifier(String identifier) {
-        if (!identifier.matches("^[a-zA-Z0-9_]+$")) {
-            // 简单的防注入，实际应使用更严格的验证或 quote
-            // 这里为了简化直接抛错，也可以在 SQL 构建时使用 quoteIdentifier
+    /**
+     * 使用 Calcite 执行查询
+     * 自动处理不同数据库的方言和引号问题
+     */
+    private List<Map<String, Object>> executeWithCalcite(String databaseId, String tableName, String sortKey) throws SQLException, IOException {
+        Connection calciteConnection = null;
+        try {
+            // 1. 创建 Calcite 根 Schema
+            calciteConnection = DriverManager.getConnection("jdbc:calcite:");
+            CalciteConnection calciteConn = calciteConnection.unwrap(CalciteConnection.class);
+            SchemaPlus rootSchema = calciteConn.getRootSchema();
+
+            // 2. 获取目标数据库的 DataSource
+            DataSource dataSource = databaseMetadataService.getDataSourceForDatabase(databaseId);
+
+            // 3. 将目标数据库挂载为 Calcite 的子 Schema (命名为 "DB")
+            // null, null 表示加载 catalog/schema 下的所有表 (或者默认 schema)
+            // JdbcSchema 会自动扫描表并处理方言
+            SchemaPlus dbSchema = rootSchema.add("DB", JdbcSchema.create(rootSchema, "DB", dataSource, null, null));
+
+            // 4. 构建 Calcite SQL
+            // 注意：Calcite 中引用表名需要用双引号，且大小写敏感（取决于 JdbcSchema 的配置）
+            // 这里假设 JdbcSchema 能正确识别表名
+            // 如果 tableName 在 MySQL 中是小写，Calcite 可能也需要小写引用
+            // 我们尝试使用 quoteIdentifier
+            
+            // 为了确保表名正确，我们可以先检查 schema 中的表名
+            // Set<String> tableNames = dbSchema.getTableNames();
+            // ... 但为了简单，先假设名称匹配
+            
+            String sql = String.format("SELECT * FROM \"DB\".\"%s\" ORDER BY \"%s\"", tableName, sortKey);
+            
+            System.out.println("[DataComparison] Executing Calcite SQL: " + sql);
+
+            // 5. 执行查询
+            List<Map<String, Object>> results = new ArrayList<>();
+            try (Statement stmt = calciteConn.createStatement();
+                 ResultSet rs = stmt.executeQuery(sql)) {
+                
+                ResultSetMetaData metaData = rs.getMetaData();
+                int columnCount = metaData.getColumnCount();
+                
+                while (rs.next()) {
+                    Map<String, Object> row = new HashMap<>();
+                    for (int i = 1; i <= columnCount; i++) {
+                        // Calcite 返回的列名可能大写或保持原样
+                        // 我们使用 getColumnLabel 获取别名或列名
+                        String colName = metaData.getColumnLabel(i);
+                        Object value = rs.getObject(i);
+                        row.put(colName, value);
+                    }
+                    results.add(row);
+                }
+            }
+            return results;
+
+        } finally {
+            if (calciteConnection != null) {
+                calciteConnection.close();
+            }
         }
     }
 

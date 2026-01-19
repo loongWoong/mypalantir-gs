@@ -39,6 +39,17 @@ public class DatabaseController {
         }
     }
 
+    @GetMapping("/list")
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> listDatabases() {
+        try {
+            List<Map<String, Object>> databases = databaseService.getAllDatabases();
+            return ResponseEntity.ok(ApiResponse.success(databases));
+        } catch (IOException e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(ApiResponse.error(500, "Failed to list databases: " + e.getMessage()));
+        }
+    }
+
     @GetMapping("/tables")
     public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getTables(
             @RequestParam(required = false) String databaseId) {

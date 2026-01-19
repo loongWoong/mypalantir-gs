@@ -291,6 +291,11 @@ export const databaseApi = {
     return response.data.data;
   },
 
+  listDatabases: async (): Promise<any[]> => {
+    const response = await apiClient.get<ApiResponse<any[]>>('/database/list');
+    return response.data.data;
+  },
+
   getTables: async (databaseId?: string): Promise<any[]> => {
     const url = databaseId 
       ? `/database/tables?databaseId=${databaseId}`

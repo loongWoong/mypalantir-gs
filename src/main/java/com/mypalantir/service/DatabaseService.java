@@ -73,4 +73,8 @@ public class DatabaseService {
         // 创建表实例
         return createTable(databaseId, tableName, schemaName);
     }
+
+    public List<Map<String, Object>> getAllDatabases() throws IOException {
+        return instanceStorage.searchInstances("database", new HashMap<>());
+    }
 }

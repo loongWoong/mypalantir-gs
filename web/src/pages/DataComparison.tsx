@@ -27,9 +27,40 @@ export default function DataComparison() {
 
   const loadTables = async () => {
     try {
-      const dbInfo = await databaseApi.getDefaultDatabaseId();
-      const tablesData = await databaseApi.getTables(dbInfo.id);
-      setTables(tablesData);
+      const databases = await databaseApi.listDatabases();
+      
+      // 如果没有数据库，尝试获取默认数据库
+      if (databases.length === 0) {
+        try {
+            const dbInfo = await databaseApi.getDefaultDatabaseId();
+            databases.push({ id: dbInfo.id, name: 'default' });
+        } catch (e) {
+            console.error('Failed to get default database', e);
+        }
+      }
+
+      let allTables: any[] = [];
+      
+      // 并行加载所有数据库的表
+      await Promise.all(databases.map(async (db) => {
+          try {
+              const tables = await databaseApi.getTables(db.id);
+              // 给表名加上数据库前缀，方便区分
+              const tablesWithDb = tables.map((t: any) => ({
+                  ...t,
+                  displayName: `[${db.name || db.database_name || 'DB'}] ${t.name}`,
+                  originalName: t.name,
+                  dbName: db.name || db.database_name
+              }));
+              allTables = [...allTables, ...tablesWithDb];
+          } catch (e) {
+              console.error(`Failed to load tables for db ${db.id}`, e);
+          }
+      }));
+      
+      // 按名称排序
+      allTables.sort((a, b) => a.displayName.localeCompare(b.displayName));
+      setTables(allTables);
     } catch (error) {
       console.error('Failed to load tables:', error);
       showToast('加载表列表失败', 'error');
@@ -127,7 +158,7 @@ export default function DataComparison() {
                         onChange={(e) => handleSourceTableChange(e.target.value)}
                      >
                          <option value="">-- 请选择 --</option>
-                         {tables.map(t => <option key={t.id} value={t.id}>{t.name} ({t.type})</option>)}
+                         {tables.map(t => <option key={t.id} value={t.id}>{t.displayName || t.name} ({t.type})</option>)}
                      </select>
                  </div>
                  <div className="mb-4">
@@ -154,7 +185,7 @@ export default function DataComparison() {
                         onChange={(e) => handleTargetTableChange(e.target.value)}
                      >
                          <option value="">-- 请选择 --</option>
-                         {tables.map(t => <option key={t.id} value={t.id}>{t.name} ({t.type})</option>)}
+                         {tables.map(t => <option key={t.id} value={t.id}>{t.displayName || t.name} ({t.type})</option>)}
                      </select>
                  </div>
                  <div className="mb-4">

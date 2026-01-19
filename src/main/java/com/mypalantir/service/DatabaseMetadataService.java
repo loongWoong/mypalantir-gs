@@ -144,9 +144,20 @@ public class DatabaseMetadataService {
      * 获取数据库连接（公开方法，供其他服务使用）
      */
     public Connection getConnectionForDatabase(String databaseId) throws SQLException, IOException {
-        // 如果是默认数据库，使用默认连接
+        return getDataSourceForDatabase(databaseId).getConnection();
+    }
+
+    /**
+     * 获取数据源（DataSource）
+     */
+    public javax.sql.DataSource getDataSourceForDatabase(String databaseId) throws IOException {
+        // 如果是默认数据库
         if (databaseId == null || databaseId.isEmpty()) {
-            return connectionManager.getConnection();
+            return new org.springframework.jdbc.datasource.DriverManagerDataSource(
+                connectionManager.getJdbcUrl(),
+                connectionManager.getConfig().getDbUser(),
+                connectionManager.getConfig().getDbPassword()
+            );
         }
 
         // 获取数据库实例信息
@@ -168,7 +179,8 @@ public class DatabaseMetadataService {
 
         String url = String.format("jdbc:mysql://%s:%d/%s?useSSL=false&serverTimezone=UTC&characterEncoding=utf8",
                 host, port, dbName);
-        return DriverManager.getConnection(url, username, password);
+        
+        return new org.springframework.jdbc.datasource.DriverManagerDataSource(url, username, password);
     }
 
     private String getDatabaseName(String databaseId) throws IOException {
