@@ -1,11 +1,28 @@
 import { useState, useEffect } from 'react';
-import { databaseApi, comparisonApi } from '../api/client';
-import type { ComparisonResult } from '../api/client';
+import { databaseApi, comparisonApi, schemaApi, modelApi, mappingApi } from '../api/client';
+import type { ComparisonResult, ObjectType, ModelInfo, DataSourceMapping } from '../api/client';
 import { ToastContainer, useToast } from '../components/Toast';
 
 export default function DataComparison() {
+  // Config Mode
+  const [mode, setMode] = useState<'table' | 'model'>('table');
+
   // State for config
+  const [databases, setDatabases] = useState<any[]>([]);
   const [tables, setTables] = useState<any[]>([]);
+  const [models, setModels] = useState<ModelInfo[]>([]);
+  
+  // Model Selection
+  const [sourceWorkspace, setSourceWorkspace] = useState('');
+  const [targetWorkspace, setTargetWorkspace] = useState('');
+  const [sourceObjectTypes, setSourceObjectTypes] = useState<ObjectType[]>([]);
+  const [targetObjectTypes, setTargetObjectTypes] = useState<ObjectType[]>([]);
+  const [sourceModelName, setSourceModelName] = useState('');
+  const [targetModelName, setTargetModelName] = useState('');
+
+  // Underlying Table Config (Used for execution)
+  const [sourceDatabaseId, setSourceDatabaseId] = useState('');
+  const [targetDatabaseId, setTargetDatabaseId] = useState('');
   const [sourceTableId, setSourceTableId] = useState('');
   const [targetTableId, setTargetTableId] = useState('');
   const [sourceColumns, setSourceColumns] = useState<any[]>([]);
@@ -23,13 +40,12 @@ export default function DataComparison() {
 
   useEffect(() => {
     loadTables();
+    loadModels();
   }, []);
 
   const loadTables = async () => {
     try {
       const databases = await databaseApi.listDatabases();
-      
-      // 如果没有数据库，尝试获取默认数据库
       if (databases.length === 0) {
         try {
             const dbInfo = await databaseApi.getDefaultDatabaseId();
@@ -38,27 +54,24 @@ export default function DataComparison() {
             console.error('Failed to get default database', e);
         }
       }
+      setDatabases(databases);
 
       let allTables: any[] = [];
-      
-      // 并行加载所有数据库的表
       await Promise.all(databases.map(async (db) => {
           try {
               const tables = await databaseApi.getTables(db.id);
-              // 给表名加上数据库前缀，方便区分
               const tablesWithDb = tables.map((t: any) => ({
                   ...t,
                   displayName: `[${db.name || db.database_name || 'DB'}] ${t.name}`,
                   originalName: t.name,
-                  dbName: db.name || db.database_name
+                  dbName: db.name || db.database_name,
+                  database_id: db.id
               }));
               allTables = [...allTables, ...tablesWithDb];
           } catch (e) {
               console.error(`Failed to load tables for db ${db.id}`, e);
           }
       }));
-      
-      // 按名称排序
       allTables.sort((a, b) => a.displayName.localeCompare(b.displayName));
       setTables(allTables);
     } catch (error) {
@@ -67,43 +80,250 @@ export default function DataComparison() {
     }
   };
 
+  const loadModels = async () => {
+      try {
+          const list = await modelApi.listModels();
+          setModels(list);
+          // Optional: Load default workspace's object types if needed
+      } catch (error) {
+          console.error('Failed to load models', error);
+      }
+  };
+
+  const handleSourceWorkspaceChange = async (wsId: string) => {
+      setSourceWorkspace(wsId);
+      setSourceModelName('');
+      setSourceTableId('');
+      if (wsId) {
+          try {
+              const types = await modelApi.getObjectTypes(wsId);
+              setSourceObjectTypes(types);
+          } catch (e) {
+              console.error(e);
+              showToast('加载模型对象类型失败', 'error');
+              setSourceObjectTypes([]);
+          }
+      } else {
+          setSourceObjectTypes([]);
+      }
+  };
+
+  const handleTargetWorkspaceChange = async (wsId: string) => {
+      setTargetWorkspace(wsId);
+      setTargetModelName('');
+      setTargetTableId('');
+      if (wsId) {
+          try {
+              const types = await modelApi.getObjectTypes(wsId);
+              setTargetObjectTypes(types);
+          } catch (e) {
+              console.error(e);
+              showToast('加载模型对象类型失败', 'error');
+              setTargetObjectTypes([]);
+          }
+      } else {
+          setTargetObjectTypes([]);
+      }
+  };
+
+  // --- Table Logic ---
+
   const handleSourceTableChange = async (tableId: string) => {
     setSourceTableId(tableId);
-    setSourceKey('');
-    setColumnMapping({});
+    if (mode === 'table') {
+        setSourceKey('');
+        setColumnMapping({});
+    }
+    
     if (tableId) {
        const table = tables.find(t => t.id === tableId);
        if (table) {
            const cols = await databaseApi.getColumns(table.database_id, table.name);
            setSourceColumns(cols);
-           // auto select pk
-           const pk = cols.find((c: any) => c.is_primary_key);
-           if (pk) setSourceKey(pk.name);
+           if (mode === 'table') {
+               const pk = cols.find((c: any) => c.is_primary_key);
+               if (pk) setSourceKey(pk.name);
+           }
+           return cols;
        }
     } else {
         setSourceColumns([]);
     }
+    return [];
   };
 
   const handleTargetTableChange = async (tableId: string) => {
     setTargetTableId(tableId);
-    setTargetKey('');
+    if (mode === 'table') {
+        setTargetKey('');
+    }
+
     if (tableId) {
        const table = tables.find(t => t.id === tableId);
        if (table) {
            const cols = await databaseApi.getColumns(table.database_id, table.name);
            setTargetColumns(cols);
-           const pk = cols.find((c: any) => c.is_primary_key);
-           if (pk) setTargetKey(pk.name);
+           if (mode === 'table') {
+               const pk = cols.find((c: any) => c.is_primary_key);
+               if (pk) setTargetKey(pk.name);
+           }
+           return cols;
        }
     } else {
         setTargetColumns([]);
     }
+    return [];
   };
-  
-  // Auto mapping
+
+  // --- Model Logic ---
+
+  // Helper to resolve data source from mapping API if not present in model
+  const resolveModelDataSource = async (model: ObjectType): Promise<ObjectType> => {
+      if (model.data_source && model.data_source.connection_id) {
+          return model;
+      }
+
+      try {
+          const mappings = await mappingApi.getByObjectType(model.name);
+          if (mappings && mappings.length > 0) {
+              const mapping = mappings[0];
+              const table = tables.find(t => t.id === mapping.table_id);
+              
+              if (table) {
+                  // Invert mapping: Column -> Property  ==>  Property -> Column
+                  const field_mapping: Record<string, string> = {};
+                  if (mapping.column_property_mappings) {
+                      Object.entries(mapping.column_property_mappings).forEach(([col, prop]) => {
+                           if (typeof prop === 'string') {
+                               field_mapping[prop] = col;
+                           }
+                      });
+                  }
+                  
+                  const newDataSource: DataSourceMapping = {
+                      connection_id: table.database_id,
+                      table: table.originalName,
+                      id_column: mapping.primary_key_column,
+                      field_mapping: field_mapping
+                  };
+                  
+                  return { ...model, data_source: newDataSource };
+              }
+          }
+      } catch (e) {
+          console.error("Failed to resolve mapping", e);
+      }
+      return model;
+  };
+
+  const handleSourceModelChange = async (modelName: string) => {
+      setSourceModelName(modelName);
+      if (!modelName) {
+          handleSourceTableChange('');
+          return;
+      }
+      
+      let model = sourceObjectTypes.find(m => m.name === modelName);
+      if (!model) return;
+
+      // Try to resolve data source if missing
+      if (!model.data_source || !model.data_source.connection_id) {
+          const resolvedModel = await resolveModelDataSource(model);
+          if (resolvedModel.data_source) {
+              model = resolvedModel;
+              // Update state to reflect resolved data source (important for auto-mapping)
+              setSourceObjectTypes(prev => prev.map(m => m.name === modelName ? resolvedModel : m));
+          }
+      }
+
+      if (!model.data_source || !model.data_source.connection_id) {
+          showToast('该模型未配置数据源映射', 'error');
+          return;
+      }
+      
+      const table = tables.find(t => 
+          t.database_id === model!.data_source!.connection_id && 
+          t.originalName === model!.data_source!.table
+      );
+      
+      if (table) {
+          await handleSourceTableChange(table.id);
+          if (model.data_source.id_column) {
+              setSourceKey(model.data_source.id_column);
+          }
+      } else {
+          showToast(`未找到映射的数据表: ${model.data_source.table}`, 'error');
+      }
+  };
+
+  const handleTargetModelChange = async (modelName: string) => {
+      setTargetModelName(modelName);
+      if (!modelName) {
+          handleTargetTableChange('');
+          return;
+      }
+
+      let model = targetObjectTypes.find(m => m.name === modelName);
+      if (!model) return;
+
+      // Try to resolve data source if missing
+      if (!model.data_source || !model.data_source.connection_id) {
+          const resolvedModel = await resolveModelDataSource(model);
+          if (resolvedModel.data_source) {
+              model = resolvedModel;
+              // Update state
+              setTargetObjectTypes(prev => prev.map(m => m.name === modelName ? resolvedModel : m));
+          }
+      }
+
+      if (!model.data_source || !model.data_source.connection_id) {
+          showToast('该模型未配置数据源映射', 'error');
+          return;
+      }
+      
+      const table = tables.find(t => 
+          t.database_id === model!.data_source!.connection_id && 
+          t.originalName === model!.data_source!.table
+      );
+      
+      if (table) {
+          await handleTargetTableChange(table.id);
+          if (model.data_source.id_column) {
+              setTargetKey(model.data_source.id_column);
+          }
+      } else {
+          showToast(`未找到映射的数据表: ${model.data_source.table}`, 'error');
+      }
+  };
+
+  // Auto Mapping for Model Mode
   useEffect(() => {
-      if (sourceColumns.length > 0 && targetColumns.length > 0) {
+      if (mode === 'model' && sourceModelName && targetModelName && sourceColumns.length > 0 && targetColumns.length > 0) {
+          const sourceModel = sourceObjectTypes.find(m => m.name === sourceModelName);
+          const targetModel = targetObjectTypes.find(m => m.name === targetModelName);
+          
+          if (sourceModel?.data_source?.field_mapping && targetModel?.data_source?.field_mapping) {
+              const mapping: Record<string, string> = {};
+              sourceModel.properties.forEach(sp => {
+                  const tp = targetModel.properties.find(p => p.name === sp.name);
+                  if (tp) {
+                      const sourceCol = sourceModel.data_source!.field_mapping[sp.name];
+                      const targetCol = targetModel.data_source!.field_mapping[tp.name];
+                      if (sourceCol && targetCol) {
+                          mapping[sourceCol] = targetCol;
+                      }
+                  }
+              });
+              if (Object.keys(mapping).length > 0) {
+                  setColumnMapping(mapping);
+              }
+          }
+      }
+  }, [mode, sourceModelName, targetModelName, sourceColumns, targetColumns, sourceObjectTypes, targetObjectTypes]);
+  
+  // Auto mapping for Table Mode
+  useEffect(() => {
+      if (mode === 'table' && sourceColumns.length > 0 && targetColumns.length > 0) {
           const mapping: Record<string, string> = {};
           sourceColumns.forEach(sc => {
               const tc = targetColumns.find(t => t.name.toLowerCase() === sc.name.toLowerCase());
@@ -113,7 +333,7 @@ export default function DataComparison() {
           });
           setColumnMapping(mapping);
       }
-  }, [sourceColumns, targetColumns]);
+  }, [mode, sourceColumns, targetColumns]);
 
   const handleRun = async () => {
       if (!sourceTableId || !targetTableId || !sourceKey || !targetKey) {
@@ -142,31 +362,127 @@ export default function DataComparison() {
 
   return (
     <div className="max-w-7xl mx-auto">
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">数据交叉对比 (Data Reconciliation)</h1>
+      <div className="flex justify-between items-center mb-6">
+          <h1 className="text-2xl font-bold text-gray-900">数据交叉对比 (Data Reconciliation)</h1>
+          
+          {/* Mode Toggle */}
+          <div className="bg-gray-100 p-1 rounded-lg flex">
+              <button
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                      mode === 'table' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                  onClick={() => {
+                      setMode('table');
+                      setSourceWorkspace('');
+                      setTargetWorkspace('');
+                      setSourceModelName('');
+                      setTargetModelName('');
+                      setSourceDatabaseId('');
+                      setTargetDatabaseId('');
+                      setSourceTableId('');
+                      setTargetTableId('');
+                  }}
+              >
+                  基于数据表 (By Table)
+              </button>
+              <button
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                      mode === 'model' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                  onClick={() => {
+                      setMode('model');
+                      setSourceDatabaseId('');
+                      setTargetDatabaseId('');
+                      setSourceTableId('');
+                      setTargetTableId('');
+                  }}
+              >
+                  基于对象模型 (By Model)
+              </button>
+          </div>
+      </div>
       
       {/* Config Panel */}
       <div className="bg-white rounded-lg shadow p-6 mb-6">
          <div className="grid grid-cols-2 gap-8">
              {/* Source */}
              <div>
-                 <h3 className="font-semibold mb-4 text-blue-700">基准表 (Source)</h3>
+                 <h3 className="font-semibold mb-4 text-blue-700">基准 (Source)</h3>
+                 
+                 {mode === 'table' ? (
+                     <>
+                         <div className="mb-4">
+                             <label className="block text-sm font-medium text-gray-700 mb-1">选择数据源 (Data Source)</label>
+                             <select 
+                                className="w-full border rounded px-3 py-2"
+                                value={sourceDatabaseId}
+                                onChange={(e) => {
+                                    setSourceDatabaseId(e.target.value);
+                                    handleSourceTableChange('');
+                                }}
+                             >
+                                 <option value="">-- 请选择 --</option>
+                                 {databases.map(db => <option key={db.id} value={db.id}>{db.name || db.database_name || 'Default'}</option>)}
+                             </select>
+                         </div>
+                         <div className="mb-4">
+                             <label className="block text-sm font-medium text-gray-700 mb-1">选择数据表 (Table)</label>
+                             <select 
+                                className="w-full border rounded px-3 py-2"
+                                value={sourceTableId}
+                                onChange={(e) => handleSourceTableChange(e.target.value)}
+                                disabled={!sourceDatabaseId}
+                             >
+                                 <option value="">-- 请选择 --</option>
+                                 {tables
+                                    .filter(t => t.database_id === sourceDatabaseId)
+                                    .map(t => <option key={t.id} value={t.id}>{t.originalName || t.name}</option>)
+                                 }
+                             </select>
+                         </div>
+                     </>
+                 ) : (
+                     <>
+                        <div className="mb-4">
+                             <label className="block text-sm font-medium text-gray-700 mb-1">选择工作空间 (Workspace)</label>
+                             <select 
+                                className="w-full border rounded px-3 py-2 bg-blue-50"
+                                value={sourceWorkspace}
+                                onChange={(e) => handleSourceWorkspaceChange(e.target.value)}
+                             >
+                                 <option value="">-- 请选择 --</option>
+                                 {models.map(m => <option key={m.id} value={m.id}>{m.displayName || m.id}</option>)}
+                             </select>
+                        </div>
+                        <div className="mb-4">
+                             <label className="block text-sm font-medium text-gray-700 mb-1">选择对象模型 (Object Type)</label>
+                             <select 
+                                className="w-full border rounded px-3 py-2 bg-blue-50"
+                                value={sourceModelName}
+                                onChange={(e) => handleSourceModelChange(e.target.value)}
+                                disabled={!sourceWorkspace}
+                             >
+                                 <option value="">-- 请选择 --</option>
+                                 {sourceObjectTypes.map(t => <option key={t.name} value={t.name}>{t.display_name || t.name}</option>)}
+                             </select>
+                             {sourceTableId && (
+                                 <div className="mt-1 text-xs text-gray-500">
+                                     已映射到表: {tables.find(t => t.id === sourceTableId)?.displayName}
+                                 </div>
+                             )}
+                        </div>
+                     </>
+                 )}
+                 
                  <div className="mb-4">
-                     <label className="block text-sm font-medium text-gray-700 mb-1">选择数据表</label>
-                     <select 
-                        className="w-full border rounded px-3 py-2"
-                        value={sourceTableId}
-                        onChange={(e) => handleSourceTableChange(e.target.value)}
-                     >
-                         <option value="">-- 请选择 --</option>
-                         {tables.map(t => <option key={t.id} value={t.id}>{t.displayName || t.name} ({t.type})</option>)}
-                     </select>
-                 </div>
-                 <div className="mb-4">
-                     <label className="block text-sm font-medium text-gray-700 mb-1">主键 (Key)</label>
+                     <label className="block text-sm font-medium text-gray-700 mb-1">
+                         {mode === 'model' ? '主键列 (Mapped Key)' : '主键 (Key)'}
+                     </label>
                      <select 
                         className="w-full border rounded px-3 py-2"
                         value={sourceKey}
                         onChange={(e) => setSourceKey(e.target.value)}
+                        disabled={mode === 'model' && !sourceKey} 
                      >
                          <option value="">-- 请选择 --</option>
                          {sourceColumns.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
@@ -176,20 +492,77 @@ export default function DataComparison() {
              
              {/* Target */}
              <div>
-                 <h3 className="font-semibold mb-4 text-green-700">对比表 (Target)</h3>
+                 <h3 className="font-semibold mb-4 text-green-700">对比目标 (Target)</h3>
+                 
+                 {mode === 'table' ? (
+                     <>
+                         <div className="mb-4">
+                             <label className="block text-sm font-medium text-gray-700 mb-1">选择数据源 (Data Source)</label>
+                             <select 
+                                className="w-full border rounded px-3 py-2"
+                                value={targetDatabaseId}
+                                onChange={(e) => {
+                                    setTargetDatabaseId(e.target.value);
+                                    handleTargetTableChange('');
+                                }}
+                             >
+                                 <option value="">-- 请选择 --</option>
+                                 {databases.map(db => <option key={db.id} value={db.id}>{db.name || db.database_name || 'Default'}</option>)}
+                             </select>
+                         </div>
+                         <div className="mb-4">
+                             <label className="block text-sm font-medium text-gray-700 mb-1">选择数据表 (Table)</label>
+                             <select 
+                                className="w-full border rounded px-3 py-2"
+                                value={targetTableId}
+                                onChange={(e) => handleTargetTableChange(e.target.value)}
+                                disabled={!targetDatabaseId}
+                             >
+                                 <option value="">-- 请选择 --</option>
+                                 {tables
+                                    .filter(t => t.database_id === targetDatabaseId)
+                                    .map(t => <option key={t.id} value={t.id}>{t.originalName || t.name}</option>)
+                                 }
+                             </select>
+                         </div>
+                     </>
+                 ) : (
+                     <>
+                        <div className="mb-4">
+                             <label className="block text-sm font-medium text-gray-700 mb-1">选择工作空间 (Workspace)</label>
+                             <select 
+                                className="w-full border rounded px-3 py-2 bg-green-50"
+                                value={targetWorkspace}
+                                onChange={(e) => handleTargetWorkspaceChange(e.target.value)}
+                             >
+                                 <option value="">-- 请选择 --</option>
+                                 {models.map(m => <option key={m.id} value={m.id}>{m.displayName || m.id}</option>)}
+                             </select>
+                        </div>
+                        <div className="mb-4">
+                             <label className="block text-sm font-medium text-gray-700 mb-1">选择对象模型 (Object Type)</label>
+                             <select 
+                                className="w-full border rounded px-3 py-2 bg-green-50"
+                                value={targetModelName}
+                                onChange={(e) => handleTargetModelChange(e.target.value)}
+                                disabled={!targetWorkspace}
+                             >
+                                 <option value="">-- 请选择 --</option>
+                                 {targetObjectTypes.map(t => <option key={t.name} value={t.name}>{t.display_name || t.name}</option>)}
+                             </select>
+                             {targetTableId && (
+                                 <div className="mt-1 text-xs text-gray-500">
+                                     已映射到表: {tables.find(t => t.id === targetTableId)?.displayName}
+                                 </div>
+                             )}
+                        </div>
+                     </>
+                 )}
+
                  <div className="mb-4">
-                     <label className="block text-sm font-medium text-gray-700 mb-1">选择数据表</label>
-                     <select 
-                        className="w-full border rounded px-3 py-2"
-                        value={targetTableId}
-                        onChange={(e) => handleTargetTableChange(e.target.value)}
-                     >
-                         <option value="">-- 请选择 --</option>
-                         {tables.map(t => <option key={t.id} value={t.id}>{t.displayName || t.name} ({t.type})</option>)}
-                     </select>
-                 </div>
-                 <div className="mb-4">
-                     <label className="block text-sm font-medium text-gray-700 mb-1">主键 (Key)</label>
+                     <label className="block text-sm font-medium text-gray-700 mb-1">
+                         {mode === 'model' ? '主键列 (Mapped Key)' : '主键 (Key)'}
+                     </label>
                      <select 
                         className="w-full border rounded px-3 py-2"
                         value={targetKey}
@@ -205,7 +578,7 @@ export default function DataComparison() {
          {/* Mapping */}
          {sourceTableId && targetTableId && (
              <div className="mt-6 border-t pt-6">
-                 <h3 className="font-semibold mb-4">字段映射配置</h3>
+                 <h3 className="font-semibold mb-4">字段映射配置 {mode === 'model' && '(基于属性名自动匹配)'}</h3>
                  <div className="grid grid-cols-3 gap-4 mb-2 font-medium text-sm text-gray-500">
                      <div>源字段 (Source)</div>
                      <div className="text-center">映射关系</div>

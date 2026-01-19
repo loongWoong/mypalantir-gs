@@ -2,8 +2,14 @@ package com.mypalantir.service;
 
 import org.springframework.stereotype.Service;
 
+import com.mypalantir.meta.ObjectType;
+import com.mypalantir.meta.OntologySchema;
+import com.mypalantir.meta.Parser;
+
 import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -30,6 +36,21 @@ public class OntologyModelService {
             }
         }
         return models;
+    }
+    
+    /**
+     * 获取指定模型的对象类型列表
+     */
+    public List<ObjectType> getObjectTypes(String modelId) throws IOException {
+        String fileName = modelId.endsWith(".yaml") ? modelId : modelId + ".yaml";
+        File file = new File(ontologyDir, fileName);
+        if (!file.exists()) {
+            throw new IOException("Model file not found: " + fileName);
+        }
+        
+        Parser parser = new Parser(file.getPath());
+        OntologySchema schema = parser.parse();
+        return schema.getObjectTypes() != null ? schema.getObjectTypes() : Collections.emptyList();
     }
     
     /**
