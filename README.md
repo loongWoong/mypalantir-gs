@@ -1,6 +1,6 @@
 # MyPalantir - 基于 Ontology 的数据模型管理平台
 
-一个仿照 Palantir Foundry Ontology 设计理念的数据模型管理平台，通过 Ontology（本体）抽象层实现业务概念与物理数据源的解耦，提供统一的查询接口和语义化的数据访问能力。
+一个仿照 Palantir Foundry Ontology 设计理念的数据模型管理平台，通过 Ontology（本体）抽象层实现业务概念与物理数据源的解耦，提供统一的查询接口、语义化的数据访问能力以及智能化的数据分析工具。
 
 ## 核心理念
 
@@ -9,9 +9,9 @@
 MyPalantir 的核心思想是**将业务概念与物理存储解耦**，通过 Ontology（本体）层建立业务语义与底层数据源的映射关系。
 
 ```
-业务概念层（Ontology）
+业务概念层 (Ontology)
     ↓ 映射
-物理数据层（Database/File System）
+物理数据层 (Database/File System)
 ```
 
 **核心优势：**
@@ -19,8 +19,9 @@ MyPalantir 的核心思想是**将业务概念与物理存储解耦**，通过 O
 - **数据源无关**：同一业务概念可以映射到不同的物理数据源（PostgreSQL、MySQL、H2、Neo4j、文件系统等）
 - **关系抽象**：通过 LinkType 抽象对象间的关系，支持多种物理实现模式
 - **统一接口**：提供统一的查询 DSL，屏蔽底层数据源的差异
-- **工作空间管理**：支持对对象类型和关系类型进行分组管理，分离系统模型和业务模型
-- **灵活的关系查询**：支持有向和无向关系，无向关系支持双向查询
+- **智能化增强**：集成 LLM 实现自然语言查询 (Text-to-DSL)
+- **指标体系**：内置原子指标与派生指标引擎，支持多维分析
+- **数据治理**：提供跨数据源的数据一致性对比工具
 
 ### 设计原则
 
@@ -38,8 +39,16 @@ MyPalantir 的核心思想是**将业务概念与物理存储解耦**，通过 O
 │                     应用层 (Application Layer)                │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐        │
 │  │  Web UI      │  │  REST API    │  │  Query DSL   │        │
-│  │  (React)     │  │  (Spring)     │  │  (JSON)      │        │
+│  │  (React)     │  │  (Spring)    │  │  (JSON)      │        │
 │  └──────────────┘  └──────────────┘  └──────────────┘        │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│                   智能服务层 (Intelligence Layer)             │
+│  ┌──────────────────────┐    ┌──────────────────────────┐    │
+│  │  Metric Engine       │    │  LLM Service             │    │
+│  │  (指标计算引擎)        │    │  (自然语言转换)           │    │
+│  └──────────────────────┘    └──────────────────────────┘    │
 └─────────────────────────────────────────────────────────────┘
                             ↓
 ┌─────────────────────────────────────────────────────────────┐
@@ -63,8 +72,8 @@ MyPalantir 的核心思想是**将业务概念与物理存储解耦**，通过 O
 ┌─────────────────────────────────────────────────────────────┐
 │                   数据源层 (Data Source Layer)                │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐        │
-│  │  JDBC        │  │  File System  │  │  (Future)    │        │
-│  │  (Database)  │  │  (JSON)      │  │  API/Stream  │        │
+│  │  JDBC        │  │  File System  │  │  Neo4j       │        │
+│  │  (Database)  │  │  (JSON)      │  │  (Graph DB)  │        │
 │  └──────────────┘  └──────────────┘  └──────────────┘        │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -272,42 +281,35 @@ src/main/java/com/mypalantir/
 │   ├── OntologySchema.java    # Schema 定义
 │   ├── ObjectType.java        # 对象类型
 │   ├── LinkType.java          # 关系类型
-│   ├── DataSourceMapping.java # 数据源映射
-│   ├── Parser.java            # YAML 解析器
-│   ├── Validator.java         # Schema 验证器
-│   └── Loader.java            # Schema 加载器
+│   └── ...
+│
+├── metric/            # 指标体系
+│   ├── AtomicMetric.java      # 原子指标定义
+│   ├── MetricDefinition.java  # 指标定义
+│   └── ...
 │
 ├── query/             # 查询引擎层
 │   ├── OntologyQuery.java              # 查询 DSL 定义
-│   ├── QueryParser.java                # 查询解析器
 │   ├── RelNodeBuilder.java             # RelNode 构建器
-│   ├── QueryExecutor.java              # 查询执行器
 │   ├── OntologyRelToSqlConverter.java  # SQL 转换器
-│   ├── FieldPathResolver.java          # 字段路径解析器
-│   └── schema/
-│       ├── OntologySchemaFactory.java  # Calcite Schema 工厂
-│       ├── JdbcOntologyTable.java      # JDBC Table 实现
-│       └── OntologyTable.java          # Table 基类
+│   └── ...
 │
 ├── service/           # 业务逻辑层
 │   ├── QueryService.java      # 查询服务
-│   ├── SchemaService.java     # Schema 服务
-│   ├── InstanceService.java   # 实例服务
-│   ├── LinkService.java       # 关系服务
-│   ├── LinkSyncService.java   # 关系自动同步服务
-│   ├── DatabaseService.java   # 数据库服务
-│   ├── MappingService.java    # 数据映射服务
-│   └── DataValidator.java     # 数据验证服务
+│   ├── MetricService.java     # 指标服务
+│   ├── LLMService.java        # LLM 服务
+│   ├── DataComparisonService.java # 数据对比服务
+│   └── ...
 │
 ├── controller/        # REST API 层
-│   ├── QueryController.java   # 查询 API
-│   ├── SchemaController.java  # Schema API
-│   ├── InstanceController.java # 实例 API
-│   ├── LinkController.java    # 关系 API
-│   └── DatabaseController.java # 数据库 API
+│   ├── QueryController.java           # 查询 API
+│   ├── MetricController.java          # 指标 API
+│   ├── NaturalLanguageQueryController.java # NLQ API
+│   └── ...
 │
-└── config/            # 配置层
-    └── WebConfig.java          # Web 配置
+└── repository/        # 数据存储层
+    ├── InstanceStorage.java   # 实例存储接口
+    └── Neo4jInstanceStorage.java # Neo4j 实现
 ```
 
 ### 数据流
@@ -368,11 +370,58 @@ schema.file.path=./ontology/schema.yaml
 schema.system.file.path=./ontology/schema-system.yaml
 data.root.path=./data
 web.static.path=./web/dist
+
+# LLM 配置 (用于自然语言查询)
+llm.api.key=your-api-key
+llm.api.url=https://api.deepseek.com/v1/chat/completions
+llm.model=deepseek-chat
 ```
 
 ## 核心功能特性
 
-### 工作空间管理
+### 1. 智能指标管理 (Metric Management)
+
+提供完整的指标定义与计算引擎，支持从原子指标到复杂复合指标的构建。
+
+**主要特性**：
+- **原子指标 (Atomic Metrics)**：基于 SQL 直接查询的基础指标
+- **派生指标 (Derived Metrics)**：基于公式计算的衍生指标
+- **复合指标 (Composite Metrics)**：组合多个指标的多维分析
+- **可视化构建器**：提供图形化的指标构建界面
+- **批量计算**：支持基于时间范围和维度的批量指标计算
+
+### 2. 自然语言查询 (Natural Language Query)
+
+集成 LLM 能力，降低数据查询门槛，实现"对话即查询"。
+
+**主要特性**：
+- **Text-to-DSL**：将自然语言自动转换为 OntologyQuery DSL
+- **智能上下文**：基于当前 Ontology Schema 自动生成 Prompt
+- **交互式界面**：提供聊天式查询界面，实时预览转换结果和数据结果
+- **调试模式**：支持查看转换过程的中间结果
+
+### 3. 数据一致性对比 (Data Reconciliation)
+
+用于验证不同数据源或不同模型之间的数据一致性，保障数据质量。
+
+**主要特性**：
+- **双模式对比**：
+  - **基于数据表 (By Table)**：直接对比两个物理表的差异
+  - **基于对象模型 (By Model)**：对比不同工作空间/模型下的对象数据
+- **差异报告**：详细展示完全匹配、值不一致、仅源表存在、仅目标表存在的数据
+- **字段映射**：支持自定义源字段与目标字段的映射关系
+
+### 4. 模型与数据源管理
+
+**模型管理 (Model Management)**：
+- 支持动态切换 Ontology 模型文件
+- 支持多版本模型共存
+
+**数据源管理 (Data Source Management)**：
+- 可视化配置 JDBC 数据源
+- 内置连接测试与元数据探测功能
+
+### 5. 工作空间管理
 
 工作空间功能允许对对象类型和关系类型进行分组管理，实现系统模型与业务模型的分离。
 
@@ -433,6 +482,13 @@ link_types:
 - 关系探索：发现数据之间的复杂关联
 
 ### 前端功能特性
+
+**核心业务模块**：
+- **Metric Browser**：指标列表管理与筛选
+- **Metric Builder**：可视化指标定义构建器
+- **NLQ Interface**：自然语言查询对话界面
+- **Data Reconciliation**：数据对比任务配置与结果展示
+- **Data Source Manager**：数据源连接配置与测试
 
 **Schema 浏览器**：
 - 图形化查看对象类型、关系类型及其属性
@@ -567,7 +623,7 @@ mypalantir/
 
 **POST** `/api/v1/query` - 执行 OntologyQuery 查询
 
-请求体示例：
+请求体示例（OntologyQuery）：
 ```json
 {
   "object": "车辆",
@@ -579,6 +635,27 @@ mypalantir/
   "offset": 0
 }
 ```
+
+**POST** `/api/v1/query/natural-language` - 执行自然语言查询
+
+请求体示例（自然语言查询）：
+```json
+{
+  "query": "显示2024年江苏省所有收费站的总收费金额"
+}
+```
+
+### 指标 API
+
+- **GET** `/api/v1/metrics/definitions` - 获取指标定义列表
+- **POST** `/api/v1/metrics/definitions` - 创建/更新指标定义
+- **POST** `/api/v1/metrics/calculate` - 计算指标
+- **POST** `/api/v1/metrics/atomic-metrics` - 管理原子指标
+
+### 数据对比 API
+
+- **POST** `/api/v1/comparison/run` - 执行数据对比任务
+- **GET** `/api/v1/comparison/history` - 获取对比历史
 
 ### Schema API
 

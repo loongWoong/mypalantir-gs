@@ -28,7 +28,15 @@ logs/
 *.log.*
 
 # IDE
-
+/.shared/
+/.cursor/
+/.trae/
+/.kiro/
+/.opencode/
+/.qoder/
+/.roo/
+/.windsurf/
+/DBT/
 .idea/
 .vscode/
 *.swp
