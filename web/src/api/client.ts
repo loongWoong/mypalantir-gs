@@ -18,6 +18,7 @@ export interface ObjectType {
   base_type: string | null;
   properties: Property[];
   data_source?: DataSourceMapping;  // 数据源映射配置（可选）
+  url?: string;  // 外部链接（可选）
 }
 
 export interface Property {
@@ -40,6 +41,7 @@ export interface LinkType {
   properties: Property[];
   property_mappings?: Record<string, string>;
   data_source?: DataSourceMapping;  // 数据源映射配置（可选）
+  url?: string;  // 外部链接（可选）
 }
 
 export interface DataSourceConfig {
@@ -285,6 +287,11 @@ export const linkApi = {
 
   sync: async (linkType: string): Promise<{ links_created: number }> => {
     const response = await apiClient.post<ApiResponse<{ links_created: number }>>(`/links/${linkType}/sync`);
+    return response.data.data;
+  },
+
+  getStats: async (linkType: string): Promise<{ source_count: number; target_count: number; link_count: number; source_coverage: number; target_coverage: number }> => {
+    const response = await apiClient.get<ApiResponse<{ source_count: number; target_count: number; link_count: number; source_coverage: number; target_coverage: number }>>(`/links/${linkType}/stats`);
     return response.data.data;
   },
 };

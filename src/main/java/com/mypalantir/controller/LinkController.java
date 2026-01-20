@@ -121,6 +121,21 @@ public class LinkController {
         }
     }
 
+    @GetMapping("/{linkType}/stats")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getLinkStats(
+            @PathVariable String linkType) {
+        try {
+            Map<String, Object> stats = linkService.getLinkStats(linkType);
+            return ResponseEntity.ok(ApiResponse.success(stats));
+        } catch (Loader.NotFoundException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(ApiResponse.error(400, e.getMessage()));
+        } catch (IOException e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.error(500, "Failed to get link stats: " + e.getMessage()));
+        }
+    }
+
     @PostMapping("/{linkType}/sync")
     public ResponseEntity<ApiResponse<Map<String, Object>>> syncLinks(
             @PathVariable String linkType) {

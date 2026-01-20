@@ -5,7 +5,7 @@ import { jsPDF } from 'jspdf';
 import type { Instance, ObjectType, QueryRequest, FilterExpression, OrderBy } from '../api/client';
 import { instanceApi, schemaApi, queryApi, databaseApi, mappingApi } from '../api/client';
 import { useWorkspace } from '../WorkspaceContext';
-import { PlusIcon, PencilIcon, TrashIcon, CloudArrowDownIcon, XMarkIcon, LinkIcon, ArrowDownTrayIcon, FunnelIcon, MagnifyingGlassIcon, CircleStackIcon, ServerIcon, ChartBarIcon, TableCellsIcon, Cog6ToothIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, PencilIcon, TrashIcon, CloudArrowDownIcon, XMarkIcon, LinkIcon, ArrowDownTrayIcon, FunnelIcon, MagnifyingGlassIcon, CircleStackIcon, ServerIcon, ChartBarIcon, TableCellsIcon, Cog6ToothIcon, ArrowTopRightOnSquareIcon } from '@heroicons/react/24/outline';
 import InstanceForm from '../components/InstanceForm';
 import ButtonGroup from '../components/ButtonGroup';
 import DataMappingDialog from '../components/DataMappingDialog';
@@ -642,6 +642,17 @@ export default function InstanceList() {
           <div>
             <div className="flex items-center gap-3">
               <h1 className="text-2xl font-bold text-gray-900">{objectTypeDef.name}</h1>
+              {objectTypeDef.url && (
+                <a
+                  href={objectTypeDef.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-gray-500 hover:text-blue-600 transition-colors"
+                  title="查看外部画像"
+                >
+                  <ArrowTopRightOnSquareIcon className="w-6 h-6" />
+                </a>
+              )}
             {queryMode === 'mapping' && fromMapping && (
               <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-lg text-sm font-medium">
                 实例存储查询

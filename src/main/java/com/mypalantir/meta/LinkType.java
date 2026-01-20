@@ -40,6 +40,9 @@ public class LinkType {
     @JsonProperty("data_source")
     private DataSourceMapping dataSource;
 
+    @JsonProperty("url")
+    private String url;
+
     @JsonIgnore
     public String getName() {
         return name;
@@ -135,6 +138,15 @@ public class LinkType {
         return dataSource != null && dataSource.isConfigured();
     }
     
+    @JsonGetter("url")
+    public String getUrl() {
+        return url;
+    }
+
+    public void setUrl(String url) {
+        this.url = url;
+    }
+
     @JsonGetter("transformation_mappings")
     public List<TransformationMapping> getTransformationMappings() {
         return transformationMappings;

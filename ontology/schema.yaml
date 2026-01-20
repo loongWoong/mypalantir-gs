@@ -5,6 +5,7 @@ object_types:
   - name: EntryTransaction
     display_name: 入口车道流水
     description: "入口车道流水"
+    url: "http://localhost:8000/demo/EntryTransaction_profile.html"
     properties:
       - name: id
         display_name: 交易流水号
@@ -182,6 +183,7 @@ object_types:
   - name: EntryTransactionNew
     display_name: 入口车道流水New
     description: "入口车道流水"
+    url: "http://localhost:8000/demo/EntryTransactionNew_profile.html"
     properties:
       - name: id
         display_name: 交易流水号
@@ -360,6 +362,7 @@ object_types:
   - name: ExitTransaction
     display_name: 出口车道流水
     description: "出口车道流水"
+    url: "http://localhost:8000/demo/ExitTransaction_profile.html"
     properties:
       - name: id
         display_name: 交易流水号
@@ -736,6 +739,7 @@ object_types:
   - name: GantryTransaction
     display_name: ETC门架计费流水
     description: "ETC门架计费流水"
+    url: "http://localhost:8000/demo/GantryTransaction_profile.html"
     properties:
       - name: trade_id
         display_name: 计费交易编号
@@ -974,6 +978,7 @@ object_types:
   - name: Path
     display_name: 车辆通行路径
     description: "车辆通行路径"
+    url: "http://localhost:8000/demo/Path_profile.html"
     properties:
       - name: pass_id
         display_name: 通行标识
@@ -1056,6 +1061,7 @@ object_types:
   - name: PathDetail
     display_name: 车辆通行路径明细
     description: "车辆通行路径明细"
+    url: "http://localhost:8000/demo/PathDetail_profile.html"
     properties:
       - name: id
         display_name: 交易标识
@@ -1126,6 +1132,7 @@ object_types:
   - name: SplitDetail
     display_name: 拆分明细
     description: "拆分明细"
+    url: "http://localhost:8000/demo/SplitDetail_profile.html"
     properties:
       - name: pass_id
         display_name: 通行标识
@@ -1190,6 +1197,7 @@ object_types:
   - name: Section
     display_name: 高速公路路段信息
     description: "高速公路路段信息"
+    url: "http://localhost:8000/demo/Section_profile.html"
     properties:
       - name: id
         display_name: 路段ID
@@ -1326,6 +1334,7 @@ object_types:
   - name: ClearResult
     display_name: 清分结果
     description: "清分结果"
+    url: "http://localhost:8000/demo/ClearResult_profile.html"
     properties:
       - name: pass_id
         display_name: 通行标识
@@ -1402,6 +1411,7 @@ object_types:
   - name: ClearReport
     display_name: 清分报表
     description: "清分报表"
+    url: "http://localhost:8000/demo/ClearReport_profile.html"
     properties:
       - name: crop_id
         display_name: 收费路段业主
@@ -1641,6 +1651,7 @@ link_types:
   - name: entry_to_path
     display_name: 入口交易汇聚为路径
     description: "入口交易汇聚为路径信息（passId,vlp,vlpc -> passId,plateNum,plateColor）(函数计算)"
+    url: "http://localhost:8000/demo/entry_to_path_process.html"
     source_type: EntryTransaction
     target_type: Path
     cardinality: one-to-one
@@ -1653,6 +1664,7 @@ link_types:
   - name: entry_to_path_new
     display_name: 入口交易汇聚为路径
     description: "入口交易汇聚为路径信息（passId,vlp,vlpc -> passId,plateNum,plateColor）(函数计算)"
+    url: "http://localhost:8000/demo/entry_to_path_new_process.html"
     source_type: EntryTransactionNew
     target_type: Path
     cardinality: one-to-one
@@ -1665,6 +1677,7 @@ link_types:
   - name: exit_to_path
     display_name: 出口交易汇聚为路径
     description: "出口交易汇聚为路径信息（passId,exVlp,exVlpc -> passId,plateNum,plateColor）(函数计算)"
+    url: "http://localhost:8000/demo/exit_to_path_process.html"
     source_type: ExitTransaction
     target_type: Path
     cardinality: one-to-one
@@ -1677,6 +1690,7 @@ link_types:
   - name: gantry_to_path
     display_name: 门架交易汇聚为路径
     description: "门架交易汇聚为路径信息（passId,vlp,vlpc -> passId,plateNum,plateColor）(函数计算)"
+    url: "http://localhost:8000/demo/gantry_to_path_process.html"
     source_type: GantryTransaction
     target_type: Path
     cardinality: many-to-one
@@ -1689,6 +1703,7 @@ link_types:
   - name: path_has_path_details
     display_name: 路径持有路径明细
     description: "路径持有多个路径明细（passId -> passId）"
+    url: "http://localhost:8000/demo/path_has_path_details_process.html"
     source_type: Path
     target_type: PathDetail
     cardinality: one-to-many
@@ -1699,6 +1714,7 @@ link_types:
   - name: path_has_split_details
     display_name: 路径拆分为拆分明细
     description: "路径拆分为多个拆分明细（passId -> passId）"
+    url: "http://localhost:8000/demo/path_has_split_details_process.html"
     source_type: Path
     target_type: SplitDetail
     cardinality: one-to-many
@@ -1709,6 +1725,7 @@ link_types:
   - name: split_detail_to_section
     display_name: 拆分明细关联路段
     description: "拆分明细关联路段信息（passId -> passId）"
+    url: "http://localhost:8000/demo/split_detail_to_section_process.html"
     source_type: SplitDetail
     target_type: Section
     cardinality: many-to-one
@@ -1719,6 +1736,7 @@ link_types:
   - name: path_to_clear_result
     display_name: 路径映射为清分结果
     description: "路径映射为清分结果（passId -> passId）"
+    url: "http://localhost:8000/demo/path_to_clear_result_process.html"
     source_type: Path
     target_type: ClearResult
     cardinality: many-to-one
@@ -1729,6 +1747,7 @@ link_types:
   - name: split_detail_to_clear_result
     display_name: 拆分明细映射为清分结果
     description: "拆分明细映射为清分结果（passId,transactionId,intervalId -> passId,transactionId,intervalId）"
+    url: "http://localhost:8000/demo/split_detail_to_clear_result_process.html"
     source_type: SplitDetail
     target_type: ClearResult
     cardinality: many-to-one
@@ -1741,6 +1760,7 @@ link_types:
   - name: section_to_clear_result
     display_name: 路段映射为清分结果
     description: "路段映射为清分结果（sectionOwnerId,roadId -> cropId,roadId）"
+    url: "http://localhost:8000/demo/section_to_clear_result_process.html"
     source_type: Section
     target_type: ClearResult
     cardinality: one-to-many
@@ -1752,6 +1772,7 @@ link_types:
   - name: clear_result_to_clear_report
     display_name: 清分结果统计汇总为清分报表
     description: "清分结果统计汇总为清分报表（cropId,roadId,payCardType,clearDate,lDate -> cropId,roadId,payCardType,clearDate,lDate）"
+    url: "http://localhost:8000/demo/clear_result_to_clear_report_process.html"
     source_type: ClearResult
     target_type: ClearReport
     cardinality: many-to-one

@@ -4,10 +4,12 @@ import com.mypalantir.meta.LinkType;
 import com.mypalantir.meta.Loader;
 import com.mypalantir.repository.IInstanceStorage;
 import com.mypalantir.repository.ILinkStorage;
+import com.mypalantir.repository.InstanceStorage;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -118,6 +120,36 @@ public class LinkService {
     public com.mypalantir.repository.InstanceStorage.ListResult listLinks(String linkType, int offset, int limit) throws Loader.NotFoundException, IOException {
         loader.getLinkType(linkType);
         return storage.listLinks(linkType, offset, limit);
+    }
+
+    public Map<String, Object> getLinkStats(String linkType) throws Loader.NotFoundException, IOException {
+        LinkType linkTypeDef = loader.getLinkType(linkType);
+        
+        // 获取源对象总数
+        InstanceStorage.ListResult sourceResult = instanceStorage.listInstances(linkTypeDef.getSourceType(), 0, 1);
+        long sourceCount = sourceResult.getTotal();
+        
+        // 获取目标对象总数
+        InstanceStorage.ListResult targetResult = instanceStorage.listInstances(linkTypeDef.getTargetType(), 0, 1);
+        long targetCount = targetResult.getTotal();
+        
+        // 获取关系总数
+        InstanceStorage.ListResult linkResult = storage.listLinks(linkType, 0, 1);
+        long linkCount = linkResult.getTotal();
+        
+        Map<String, Object> stats = new HashMap<>();
+        stats.put("source_count", sourceCount);
+        stats.put("target_count", targetCount);
+        stats.put("link_count", linkCount);
+        
+        // 计算覆盖率
+        double sourceCoverage = sourceCount > 0 ? (double) linkCount / sourceCount : 0;
+        double targetCoverage = targetCount > 0 ? (double) linkCount / targetCount : 0;
+        
+        stats.put("source_coverage", sourceCoverage);
+        stats.put("target_coverage", targetCoverage);
+        
+        return stats;
     }
 }
 

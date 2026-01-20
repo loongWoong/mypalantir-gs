@@ -24,6 +24,9 @@ public class ObjectType {
     @JsonProperty("data_source")
     private DataSourceMapping dataSource;
 
+    @JsonProperty("url")
+    private String url;
+
     @JsonIgnore
     public String getName() {
         return name;
@@ -76,6 +79,15 @@ public class ObjectType {
 
     public void setDataSource(DataSourceMapping dataSource) {
         this.dataSource = dataSource;
+    }
+
+    @JsonGetter("url")
+    public String getUrl() {
+        return url;
+    }
+
+    public void setUrl(String url) {
+        this.url = url;
     }
 
     /**

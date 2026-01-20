@@ -1,0 +1,582 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>ETC门架计费流水 - Profile</title>
+    
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+    body { font-family: 'Inter', sans-serif; }
+</style>
+<script>
+    tailwind.config = {
+        theme: {
+            extend: {
+                colors: {
+                    primary: '#3b82f6',
+                    secondary: '#64748b',
+                }
+            }
+        }
+    }
+</script>
+
+</head>
+<body class="bg-slate-50 min-h-screen">
+    
+<nav class="bg-white border-b border-gray-200 sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex justify-between h-16">
+            <div class="flex">
+                <div class="flex-shrink-0 flex items-center">
+                    <span class="text-xl font-bold text-slate-800">Ontology Demo</span>
+                </div>
+                <div class="hidden sm:ml-6 sm:flex sm:space-x-8">
+                    <a href="index.html" class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+                        Home
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</nav>
+
+    
+    <div class="py-10">
+        <header>
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <h1 class="text-3xl font-bold leading-tight text-slate-900">ETC门架计费流水 <span class="text-slate-400 text-lg font-normal">(GantryTransaction)</span></h1>
+                <p class="mt-2 text-sm text-slate-600 max-w-2xl">ETC门架计费流水</p>
+            </div>
+        </header>
+        
+        <main>
+            <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
+                
+                <!-- Stats Section -->
+                <div class="mt-8 grid grid-cols-1 gap-5 sm:grid-cols-3">
+                    <div class="bg-white overflow-hidden shadow rounded-lg">
+                        <div class="px-4 py-5 sm:p-6">
+                            <dt class="text-sm font-medium text-gray-500 truncate">Total Records</dt>
+                            <dd class="mt-1 text-3xl font-semibold text-gray-900">128,492</dd>
+                        </div>
+                    </div>
+                    <div class="bg-white overflow-hidden shadow rounded-lg">
+                        <div class="px-4 py-5 sm:p-6">
+                            <dt class="text-sm font-medium text-gray-500 truncate">Last Updated</dt>
+                            <dd class="mt-1 text-3xl font-semibold text-gray-900">Just now</dd>
+                        </div>
+                    </div>
+                    <div class="bg-white overflow-hidden shadow rounded-lg">
+                        <div class="px-4 py-5 sm:p-6">
+                            <dt class="text-sm font-medium text-gray-500 truncate">Data Quality Score</dt>
+                            <dd class="mt-1 text-3xl font-semibold text-green-600">98.5%</dd>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Properties Table -->
+                <div class="mt-8 flex flex-col">
+                    <div class="-my-2 -mx-4 overflow-x-auto sm:-mx-6 lg:-mx-8">
+                        <div class="inline-block min-w-full py-2 align-middle md:px-6 lg:px-8">
+                            <div class="overflow-hidden shadow ring-1 ring-black ring-opacity-5 md:rounded-lg bg-white">
+                                <div class="px-4 py-5 sm:px-6 border-b border-gray-200 bg-gray-50">
+                                    <h3 class="text-lg leading-6 font-medium text-gray-900">Schema Properties</h3>
+                                    <p class="mt-1 max-w-2xl text-sm text-gray-500">Details about the data fields defined for this object.</p>
+                                </div>
+                                <table class="min-w-full divide-y divide-gray-300">
+                                    <thead class="bg-gray-50">
+                                        <tr>
+                                            <th scope="col" class="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900 sm:pl-6">Name</th>
+                                            <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Display Name</th>
+                                            <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Type</th>
+                                            <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Required</th>
+                                            <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Description</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-gray-200 bg-white">
+                                        
+        <tr class="hover:bg-slate-50 transition-colors">
+            <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-slate-900 sm:pl-6">trade_id</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">计费交易编号</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    string
+                </span>
+            </td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500"><span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">Required</span></td>
+            <td class="px-3 py-4 text-sm text-slate-500">计费交易编号</td>
+        </tr>
+        
+        <tr class="hover:bg-slate-50 transition-colors">
+            <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-slate-900 sm:pl-6">pass_id</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">通行标识 ID</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    string
+                </span>
+            </td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500"></td>
+            <td class="px-3 py-4 text-sm text-slate-500">通行标识 ID</td>
+        </tr>
+        
+        <tr class="hover:bg-slate-50 transition-colors">
+            <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-slate-900 sm:pl-6">trans_time</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">计费交易时间</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    date
+                </span>
+            </td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500"></td>
+            <td class="px-3 py-4 text-sm text-slate-500">计费交易时间</td>
+        </tr>
+        
+        <tr class="hover:bg-slate-50 transition-colors">
+            <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-slate-900 sm:pl-6">record_gen_time</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">记录生成时间</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    date
+                </span>
+            </td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500"></td>
+            <td class="px-3 py-4 text-sm text-slate-500">记录生成时间</td>
+        </tr>
+        
+        <tr class="hover:bg-slate-50 transition-colors">
+            <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-slate-900 sm:pl-6">receive_time</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">接收时间</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    date
+                </span>
+            </td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500"></td>
+            <td class="px-3 py-4 text-sm text-slate-500">接收时间</td>
+        </tr>
+        
+        <tr class="hover:bg-slate-50 transition-colors">
+            <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-slate-900 sm:pl-6">gantry_id</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">门架编号</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    string
+                </span>
+            </td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500"></td>
+            <td class="px-3 py-4 text-sm text-slate-500">门架编号</td>
+        </tr>
+        
+        <tr class="hover:bg-slate-50 transition-colors">
+            <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-slate-900 sm:pl-6">gantry_type</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">门架类型</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    string
+                </span>
+            </td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500"></td>
+            <td class="px-3 py-4 text-sm text-slate-500">门架类型</td>
+        </tr>
+        
+        <tr class="hover:bg-slate-50 transition-colors">
+            <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-slate-900 sm:pl-6">original_flag</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">数据来源</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    integer
+                </span>
+            </td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500"></td>
+            <td class="px-3 py-4 text-sm text-slate-500">数据来源</td>
+        </tr>
+        
+        <tr class="hover:bg-slate-50 transition-colors">
+            <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-slate-900 sm:pl-6">gantry_hex</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">门架HEX值</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    string
+                </span>
+            </td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500"></td>
+            <td class="px-3 py-4 text-sm text-slate-500">门架HEX值</td>
+        </tr>
+        
+        <tr class="hover:bg-slate-50 transition-colors">
+            <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-slate-900 sm:pl-6">last_gantry_hex</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">上个门架hex编码</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    string
+                </span>
+            </td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500"></td>
+            <td class="px-3 py-4 text-sm text-slate-500">上个门架hex编码</td>
+        </tr>
+        
+        <tr class="hover:bg-slate-50 transition-colors">
+            <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-slate-900 sm:pl-6">last_gantry_time</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">通过上个门架的时间</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    date
+                </span>
+            </td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500"></td>
+            <td class="px-3 py-4 text-sm text-slate-500">通过上个门架的时间</td>
+        </tr>
+        
+        <tr class="hover:bg-slate-50 transition-colors">
+            <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-slate-900 sm:pl-6">media_type</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">通行介质类型</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    integer
+                </span>
+            </td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500"></td>
+            <td class="px-3 py-4 text-sm text-slate-500">通行介质类型</td>
+        </tr>
+        
+        <tr class="hover:bg-slate-50 transition-colors">
+            <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-slate-900 sm:pl-6">cpu_card_id</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">CPU卡编号</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    string
+                </span>
+            </td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500"></td>
+            <td class="px-3 py-4 text-sm text-slate-500">CPU卡编号</td>
+        </tr>
+        
+        <tr class="hover:bg-slate-50 transition-colors">
+            <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-slate-900 sm:pl-6">vlp</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">计费车牌号</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    string
+                </span>
+            </td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500"></td>
+            <td class="px-3 py-4 text-sm text-slate-500">计费车牌号</td>
+        </tr>
+        
+        <tr class="hover:bg-slate-50 transition-colors">
+            <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-slate-900 sm:pl-6">vlpc</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">计费车牌颜色</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    integer
+                </span>
+            </td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500"></td>
+            <td class="px-3 py-4 text-sm text-slate-500">计费车牌颜色</td>
+        </tr>
+        
+        <tr class="hover:bg-slate-50 transition-colors">
+            <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-slate-900 sm:pl-6">vehicle_type</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">计费车型</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    integer
+                </span>
+            </td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500"></td>
+            <td class="px-3 py-4 text-sm text-slate-500">计费车型</td>
+        </tr>
+        
+        <tr class="hover:bg-slate-50 transition-colors">
+            <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-slate-900 sm:pl-6">identify_vehicle_type</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">识别的车型</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    integer
+                </span>
+            </td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500"></td>
+            <td class="px-3 py-4 text-sm text-slate-500">识别的车型</td>
+        </tr>
+        
+        <tr class="hover:bg-slate-50 transition-colors">
+            <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-slate-900 sm:pl-6">trade_type</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">交易类型</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    integer
+                </span>
+            </td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500"></td>
+            <td class="px-3 py-4 text-sm text-slate-500">交易类型</td>
+        </tr>
+        
+        <tr class="hover:bg-slate-50 transition-colors">
+            <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-slate-900 sm:pl-6">axle_count</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">车轴数</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    integer
+                </span>
+            </td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500"></td>
+            <td class="px-3 py-4 text-sm text-slate-500">车轴数</td>
+        </tr>
+        
+        <tr class="hover:bg-slate-50 transition-colors">
+            <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-slate-900 sm:pl-6">total_weight</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">车货总重</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    integer
+                </span>
+            </td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500"></td>
+            <td class="px-3 py-4 text-sm text-slate-500">车货总重</td>
+        </tr>
+        
+        <tr class="hover:bg-slate-50 transition-colors">
+            <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-slate-900 sm:pl-6">vehicle_length</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">车辆长</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    integer
+                </span>
+            </td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500"></td>
+            <td class="px-3 py-4 text-sm text-slate-500">车辆长</td>
+        </tr>
+        
+        <tr class="hover:bg-slate-50 transition-colors">
+            <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-slate-900 sm:pl-6">vehicle_width</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">车辆宽</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    integer
+                </span>
+            </td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500"></td>
+            <td class="px-3 py-4 text-sm text-slate-500">车辆宽</td>
+        </tr>
+        
+        <tr class="hover:bg-slate-50 transition-colors">
+            <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-slate-900 sm:pl-6">vehicle_hight</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">车辆高</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    integer
+                </span>
+            </td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500"></td>
+            <td class="px-3 py-4 text-sm text-slate-500">车辆高</td>
+        </tr>
+        
+        <tr class="hover:bg-slate-50 transition-colors">
+            <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-slate-900 sm:pl-6">fee_mileage</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">计费里程数</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    integer
+                </span>
+            </td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500"></td>
+            <td class="px-3 py-4 text-sm text-slate-500">计费里程数</td>
+        </tr>
+        
+        <tr class="hover:bg-slate-50 transition-colors">
+            <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-slate-900 sm:pl-6">trans_fee</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">卡面扣费金额</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    long
+                </span>
+            </td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500"></td>
+            <td class="px-3 py-4 text-sm text-slate-500">卡面扣费金额</td>
+        </tr>
+        
+        <tr class="hover:bg-slate-50 transition-colors">
+            <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-slate-900 sm:pl-6">balance_before</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">交易前余额（分）</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    long
+                </span>
+            </td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500"></td>
+            <td class="px-3 py-4 text-sm text-slate-500">交易前余额（分）</td>
+        </tr>
+        
+        <tr class="hover:bg-slate-50 transition-colors">
+            <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-slate-900 sm:pl-6">balance_after</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">交易后余额（分）</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    long
+                </span>
+            </td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500"></td>
+            <td class="px-3 py-4 text-sm text-slate-500">交易后余额（分）</td>
+        </tr>
+        
+        <tr class="hover:bg-slate-50 transition-colors">
+            <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-slate-900 sm:pl-6">pay_fee</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">应收金额</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    long
+                </span>
+            </td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500"></td>
+            <td class="px-3 py-4 text-sm text-slate-500">应收金额</td>
+        </tr>
+        
+        <tr class="hover:bg-slate-50 transition-colors">
+            <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-slate-900 sm:pl-6">fee</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">交易金额</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    long
+                </span>
+            </td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500"></td>
+            <td class="px-3 py-4 text-sm text-slate-500">交易金额</td>
+        </tr>
+        
+        <tr class="hover:bg-slate-50 transition-colors">
+            <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-slate-900 sm:pl-6">discount_fee</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">优惠金额</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    long
+                </span>
+            </td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500"></td>
+            <td class="px-3 py-4 text-sm text-slate-500">优惠金额</td>
+        </tr>
+        
+        <tr class="hover:bg-slate-50 transition-colors">
+            <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-slate-900 sm:pl-6">toll_interval_id</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">收费单元编号组合</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    string
+                </span>
+            </td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500"></td>
+            <td class="px-3 py-4 text-sm text-slate-500">收费单元编号组合</td>
+        </tr>
+        
+        <tr class="hover:bg-slate-50 transition-colors">
+            <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-slate-900 sm:pl-6">toll_interval_sign</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">收费单元处理标识</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    string
+                </span>
+            </td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500"></td>
+            <td class="px-3 py-4 text-sm text-slate-500">收费单元处理标识</td>
+        </tr>
+        
+        <tr class="hover:bg-slate-50 transition-colors">
+            <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-slate-900 sm:pl-6">pay_fee_group</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">应收金额组合</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    string
+                </span>
+            </td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500"></td>
+            <td class="px-3 py-4 text-sm text-slate-500">应收金额组合</td>
+        </tr>
+        
+        <tr class="hover:bg-slate-50 transition-colors">
+            <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-slate-900 sm:pl-6">fee_group</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">交易金额组合</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    string
+                </span>
+            </td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500"></td>
+            <td class="px-3 py-4 text-sm text-slate-500">交易金额组合</td>
+        </tr>
+        
+        <tr class="hover:bg-slate-50 transition-colors">
+            <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-slate-900 sm:pl-6">discount_fee_group</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">优惠金额组合</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    string
+                </span>
+            </td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500"></td>
+            <td class="px-3 py-4 text-sm text-slate-500">优惠金额组合</td>
+        </tr>
+        
+        <tr class="hover:bg-slate-50 transition-colors">
+            <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-slate-900 sm:pl-6">description</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">对交易的文字解释</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    string
+                </span>
+            </td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500"></td>
+            <td class="px-3 py-4 text-sm text-slate-500">对交易的文字解释</td>
+        </tr>
+        
+        <tr class="hover:bg-slate-50 transition-colors">
+            <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-slate-900 sm:pl-6">fee_calc_special</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">计费接口特情值</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    integer
+                </span>
+            </td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500"></td>
+            <td class="px-3 py-4 text-sm text-slate-500">计费接口特情值</td>
+        </tr>
+        
+        <tr class="hover:bg-slate-50 transition-colors">
+            <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-slate-900 sm:pl-6">charges_special_type</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">收费特情类型</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    string
+                </span>
+            </td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500"></td>
+            <td class="px-3 py-4 text-sm text-slate-500">收费特情类型</td>
+        </tr>
+        
+        <tr class="hover:bg-slate-50 transition-colors">
+            <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-slate-900 sm:pl-6">is_fix_data</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">是否修正过</td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    integer
+                </span>
+            </td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500"></td>
+            <td class="px-3 py-4 text-sm text-slate-500">是否修正过</td>
+        </tr>
+        
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+            </div>
+        </main>
+    </div>
+</body>
+</html>
+    
