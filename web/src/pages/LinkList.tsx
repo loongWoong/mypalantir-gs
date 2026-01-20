@@ -281,15 +281,57 @@ export default function LinkList() {
                             </div>
 
                             {/* Connection Line */}
-                            <div className="flex items-center gap-2 flex-1 max-w-[200px] relative">
-                                <div className="h-px bg-slate-300 w-full relative">
-                                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 px-2 bg-slate-50 text-[10px] text-slate-500 font-medium whitespace-nowrap">
-                                        {linkTypeDef.cardinality} • {linkTypeDef.direction === 'undirected' ? '无向' : '有向'}
-                                    </div>
-                                </div>
-                                {linkTypeDef.direction !== 'undirected' && (
-                                    <ArrowTopRightOnSquareIcon className="w-4 h-4 text-slate-400 rotate-45" />
+                            <div className="flex items-center justify-center flex-1 max-w-[240px] relative h-16">
+                                {/* Base Line */}
+                                <div className="absolute top-1/2 left-0 right-0 h-px bg-slate-300 z-0"></div>
+                                
+                                {/* Cardinality Visuals */}
+                                {linkTypeDef.cardinality === 'many-to-many' && (
+                                    <>
+                                        {/* Left Fork (Source Many) */}
+                                        <div className="absolute left-0 top-1/2 -translate-y-1/2 flex flex-col gap-1.5 -ml-3">
+                                            <div className="w-6 h-px bg-slate-300 rotate-[20deg] origin-right"></div>
+                                            <div className="w-6 h-px bg-slate-300"></div>
+                                            <div className="w-6 h-px bg-slate-300 -rotate-[20deg] origin-right"></div>
+                                        </div>
+                                        {/* Right Fork (Target Many) */}
+                                        <div className="absolute right-0 top-1/2 -translate-y-1/2 flex flex-col gap-1.5 -mr-3">
+                                            <div className="w-6 h-px bg-slate-300 -rotate-[20deg] origin-left"></div>
+                                            <div className="w-6 h-px bg-slate-300"></div>
+                                            <div className="w-6 h-px bg-slate-300 rotate-[20deg] origin-left"></div>
+                                        </div>
+                                    </>
                                 )}
+                                
+                                {linkTypeDef.cardinality === 'one-to-many' && (
+                                    /* Right Fork (Target Many) */
+                                    <div className="absolute right-0 top-1/2 -translate-y-1/2 flex flex-col gap-1.5 -mr-3">
+                                        <div className="w-6 h-px bg-slate-300 -rotate-[20deg] origin-left"></div>
+                                        <div className="w-6 h-px bg-slate-300"></div>
+                                        <div className="w-6 h-px bg-slate-300 rotate-[20deg] origin-left"></div>
+                                    </div>
+                                )}
+                                
+                                {linkTypeDef.cardinality === 'many-to-one' && (
+                                    /* Left Fork (Source Many) */
+                                    <div className="absolute left-0 top-1/2 -translate-y-1/2 flex flex-col gap-1.5 -ml-3">
+                                        <div className="w-6 h-px bg-slate-300 rotate-[20deg] origin-right"></div>
+                                        <div className="w-6 h-px bg-slate-300"></div>
+                                        <div className="w-6 h-px bg-slate-300 -rotate-[20deg] origin-right"></div>
+                                    </div>
+                                )}
+
+                                {/* Label & Direction */}
+                                <div className="relative z-10 px-3 py-1 bg-slate-50 border border-slate-200 rounded-full flex items-center gap-2 shadow-sm">
+                                    <span className="text-[10px] text-slate-600 font-semibold uppercase tracking-wider">
+                                        {linkTypeDef.cardinality}
+                                    </span>
+                                    {linkTypeDef.direction !== 'undirected' && (
+                                        <ArrowTopRightOnSquareIcon className={`w-3.5 h-3.5 text-slate-400 ${
+                                            linkTypeDef.direction === 'inverse' ? '-rotate-135' : 'rotate-45'
+                                        }`} />
+                                    )}
+                                </div>
                             </div>
 
                             {/* Target */}
@@ -331,49 +373,62 @@ export default function LinkList() {
                             return (
                                 <div 
                                     key={idx} 
-                                    className="bg-white rounded-lg p-4 border border-amber-200 flex items-center justify-between shadow-sm hover:shadow-md transition-all"
+                                    className="bg-white rounded-lg px-4 py-3 border border-amber-200 shadow-sm hover:shadow-md transition-all"
                                 >
-                                    <div className="flex items-center justify-center gap-4 flex-1">
-                                        {/* Source Property */}
-                                        <div className="flex flex-col items-end min-w-[200px]">
-                                            <div className="bg-blue-50 rounded px-3 py-2 border border-blue-100 w-full">
-                                                <div className="flex items-center justify-between gap-2 mb-1">
-                                                    <span className="text-xs font-semibold text-blue-900">{linkTypeDef.source_type}</span>
-                                                    <span className="text-[10px] text-blue-400 font-mono bg-white px-1.5 py-0.5 rounded border border-blue-100">{sourceProp?.data_type || 'unknown'}</span>
-                                                </div>
-                                                <div className="flex items-baseline justify-end gap-2">
-                                                    {(sourceProp?.description) && (
-                                                        <span className="text-xs text-blue-600 font-medium truncate" title={sourceProp.description}>
-                                                            {sourceProp.description}
-                                                        </span>
-                                                    )}
-                                                    <span className="text-xs text-blue-800 font-mono font-bold">.{sourcePropName}</span>
-                                                </div>
+                                    <div className="flex items-center justify-between gap-4">
+                                        {/* Source Side */}
+                                        <div className="flex items-center justify-end gap-3 flex-1 min-w-0">
+                                            {/* Source Type & Prop Type */}
+                                            <div className="flex flex-col items-end flex-shrink-0">
+                                                <span className="text-xs font-bold text-blue-900 leading-tight">{linkTypeDef.source_type}</span>
+                                                <span className="text-[10px] text-blue-400 font-mono bg-blue-50/50 px-1 rounded mt-0.5 border border-blue-100/50">
+                                                    {sourceProp?.data_type || 'unknown'}
+                                                </span>
+                                            </div>
+
+                                            {/* Source Field Info (Right Aligned) */}
+                                            <div className="flex items-center gap-2 min-w-0 flex-1 justify-end bg-blue-50/30 rounded px-2 py-1.5 border border-blue-100/50">
+                                                {(sourceProp?.description) && (
+                                                    <span className="text-xs text-blue-600/70 font-medium truncate max-w-[120px]" title={sourceProp.description}>
+                                                        {sourceProp.description}
+                                                    </span>
+                                                )}
+                                                <span className="text-sm text-blue-800 font-mono font-bold whitespace-nowrap">.{sourcePropName}</span>
                                             </div>
                                         </div>
 
-                                        <div className="text-amber-400 font-bold text-lg px-2">=</div>
+                                        {/* Connector */}
+                                        <div className="flex-shrink-0 flex items-center justify-center w-8 h-8 rounded-full bg-amber-50 border border-amber-100 text-amber-500 font-bold text-lg shadow-sm">
+                                            =
+                                        </div>
 
-                                        {/* Target Property */}
-                                        <div className="flex flex-col items-start min-w-[200px]">
-                                            <div className="bg-emerald-50 rounded px-3 py-2 border border-emerald-100 w-full">
-                                                <div className="flex items-center justify-between gap-2 mb-1">
-                                                    <span className="text-xs font-semibold text-emerald-900">{linkTypeDef.target_type}</span>
-                                                    <span className="text-[10px] text-emerald-400 font-mono bg-white px-1.5 py-0.5 rounded border border-emerald-100">{targetProp?.data_type || 'unknown'}</span>
-                                                </div>
-                                                <div className="flex items-baseline justify-start gap-2">
-                                                    <span className="text-xs text-emerald-800 font-mono font-bold">.{targetPropName}</span>
-                                                    {(targetProp?.description) && (
-                                                        <span className="text-xs text-emerald-600 font-medium truncate" title={targetProp.description}>
-                                                            {targetProp.description}
-                                                        </span>
-                                                    )}
-                                                </div>
+                                        {/* Target Side */}
+                                        <div className="flex items-center justify-start gap-3 flex-1 min-w-0">
+                                            {/* Target Field Info (Left Aligned) */}
+                                            <div className="flex items-center gap-2 min-w-0 flex-1 justify-start bg-emerald-50/30 rounded px-2 py-1.5 border border-emerald-100/50">
+                                                <span className="text-sm text-emerald-800 font-mono font-bold whitespace-nowrap">.{targetPropName}</span>
+                                                {(targetProp?.description) && (
+                                                    <span className="text-xs text-emerald-600/70 font-medium truncate max-w-[120px]" title={targetProp.description}>
+                                                        {targetProp.description}
+                                                    </span>
+                                                )}
+                                            </div>
+
+                                            {/* Target Type & Prop Type */}
+                                            <div className="flex flex-col items-start flex-shrink-0">
+                                                <span className="text-xs font-bold text-emerald-900 leading-tight">{linkTypeDef.target_type}</span>
+                                                <span className="text-[10px] text-emerald-400 font-mono bg-emerald-50/50 px-1 rounded mt-0.5 border border-emerald-100/50">
+                                                    {targetProp?.data_type || 'unknown'}
+                                                </span>
                                             </div>
                                         </div>
-                                    </div>
-                                    <div className="ml-4 text-xs text-slate-400 font-medium bg-slate-50 px-2 py-1 rounded border border-slate-100 self-center">
-                                        #{idx + 1}
+
+                                        {/* Index */}
+                                        <div className="flex-shrink-0 ml-2">
+                                            <span className="text-[10px] font-mono text-slate-400 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">
+                                                #{idx + 1}
+                                            </span>
+                                        </div>
                                     </div>
                                 </div>
                             );
@@ -447,18 +502,40 @@ export default function LinkList() {
                         
                         {/* Additional Metrics */}
                         <div className="flex-1 grid grid-cols-2 gap-4 pb-1">
-                           <div className="px-3 py-2 bg-indigo-50/50 rounded-lg border border-indigo-100">
-                              <div className="text-[10px] uppercase text-indigo-400 font-semibold tracking-wider mb-0.5">平均关联</div>
-                              <div className="flex items-baseline gap-1">
-                                <span className="text-lg font-bold text-indigo-700">{(stats.link_count / (stats.source_count || 1)).toFixed(2)}</span>
-                                <span className="text-xs text-indigo-400">/源对象</span>
+                           <div className="px-3 py-2 bg-indigo-50/50 rounded-lg border border-indigo-100 flex flex-col justify-between">
+                              <div className="text-[10px] uppercase text-indigo-400 font-semibold tracking-wider mb-1.5">平均关联度</div>
+                              <div className="flex flex-col gap-1.5">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-xs text-indigo-500 font-medium">源对象</span>
+                                  <div className="flex items-baseline gap-1">
+                                    <span className="text-sm font-bold text-indigo-700">{(stats.link_count / (stats.source_count || 1) * 100).toFixed(0)}%</span>
+                                  </div>
+                                </div>
+                                <div className="w-full h-px bg-indigo-100/50"></div>
+                                <div className="flex items-center justify-between">
+                                  <span className="text-xs text-indigo-500 font-medium">目标对象</span>
+                                  <div className="flex items-baseline gap-1">
+                                    <span className="text-sm font-bold text-indigo-700">{(stats.link_count / (stats.target_count || 1) * 100).toFixed(0)}%</span>
+                                  </div>
+                                </div>
                               </div>
                            </div>
-                           <div className="px-3 py-2 bg-indigo-50/50 rounded-lg border border-indigo-100">
-                              <div className="text-[10px] uppercase text-indigo-400 font-semibold tracking-wider mb-0.5">孤立对象</div>
-                              <div className="flex items-baseline gap-1">
-                                <span className="text-lg font-bold text-indigo-700">{(100 - stats.source_coverage * 100).toFixed(1)}%</span>
-                                <span className="text-xs text-indigo-400">无关联</span>
+                           <div className="px-3 py-2 bg-indigo-50/50 rounded-lg border border-indigo-100 flex flex-col justify-between">
+                              <div className="text-[10px] uppercase text-indigo-400 font-semibold tracking-wider mb-1.5">孤立对象</div>
+                              <div className="flex flex-col gap-1.5">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-xs text-indigo-500 font-medium">源对象</span>
+                                  <div className="flex items-baseline gap-1">
+                                    <span className="text-sm font-bold text-indigo-700">{Math.max(0, 100 - stats.source_coverage * 100).toFixed(1)}%</span>
+                                  </div>
+                                </div>
+                                <div className="w-full h-px bg-indigo-100/50"></div>
+                                <div className="flex items-center justify-between">
+                                  <span className="text-xs text-indigo-500 font-medium">目标对象</span>
+                                  <div className="flex items-baseline gap-1">
+                                    <span className="text-sm font-bold text-indigo-700">{Math.max(0, 100 - stats.target_coverage * 100).toFixed(1)}%</span>
+                                  </div>
+                                </div>
                               </div>
                            </div>
                         </div>
