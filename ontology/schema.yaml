@@ -1194,137 +1194,136 @@ object_types:
         required: false
         description: "拆分备注"
 
-  - name: Section
-    display_name: 高速公路路段信息
-    description: "高速公路路段信息"
-    url: "http://192.168.22.217:8000/demo/Section_profile.html"
+  - name: TollSection
+    display_name: 收费路段
+    description: "表示高速公路收费路段的信息"
     properties:
       - name: id
         display_name: 路段ID
         data_type: string
         required: true
-        description: "路段ID"
-      
+        description: "路段ID（主键）"
+
       - name: road_id
         display_name: 道路ID
         data_type: string
         required: false
         description: "道路ID"
-      
+
       - name: name
         display_name: 名称
         data_type: string
         required: false
         description: "名称"
-      
+
       - name: section_owner_id
         display_name: 路段所有者ID
         data_type: string
         required: false
         description: "路段所有者ID"
-      
+
       - name: type
         display_name: 类型
         data_type: integer
         required: false
         description: "类型"
-      
+
       - name: length
         display_name: 长度
         data_type: integer
         required: false
         description: "长度"
-      
+
       - name: start_stake_num
         display_name: 起点桩号
         data_type: string
         required: false
         description: "起点桩号"
-      
+
       - name: start_lat
         display_name: 起点纬度
         data_type: string
         required: false
         description: "起点纬度"
-      
+
       - name: start_lng
         display_name: 起点经度
         data_type: string
         required: false
         description: "起点经度"
-      
+
       - name: end_stake_num
         display_name: 终点桩号
         data_type: string
         required: false
         description: "终点桩号"
-      
+
       - name: end_lat
         display_name: 终点纬度
         data_type: string
         required: false
         description: "终点纬度"
-      
+
       - name: end_lng
         display_name: 终点经度
         data_type: string
         required: false
         description: "终点经度"
-      
+
       - name: tax
         display_name: 税费
         data_type: integer
         required: false
         description: "税费"
-      
+
       - name: tax_rate
         display_name: 税率
         data_type: double
         required: false
         description: "税率"
-      
+
       - name: charge_type
         display_name: 收费类型
         data_type: integer
         required: false
         description: "收费类型"
-      
+
       - name: toll_roads
         display_name: 收费路段
         data_type: string
         required: false
         description: "收费路段"
-      
+
       - name: build_time
         display_name: 建造时间
         data_type: date
         required: false
         description: "建造时间"
-      
+
       - name: start_time
         display_name: 开始时间
         data_type: date
         required: false
         description: "开始时间"
-      
+
       - name: end_time
         display_name: 结束时间
         data_type: date
         required: false
         description: "结束时间"
-      
+
       - name: operation
         display_name: 操作
         data_type: integer
         required: false
         description: "操作"
-      
-      - name: record_gentime
+
+      - name: record_gen_time
         display_name: 记录生成时间
         data_type: date
         required: false
         description: "记录生成时间"
-      
+
       - name: status
         display_name: 状态
         data_type: string
@@ -1646,11 +1645,751 @@ object_types:
         data_type: bigdecimal
         required: false
         description: "微信退费金额"
+  - name: TollInterval
+    display_name: 收费单元
+    description: "表示公路收费系统中的收费单元信息，用于记录路段的分段收费数据"
+    properties:
+      - name: id
+        display_name: ID
+        data_type: string
+        required: true
+        description: "主键ID"
 
+      - name: section_id
+        display_name: 路段ID
+        data_type: string
+        required: false
+        description: "id截取前11位为路段ID"
+
+      - name: name
+        display_name: 名称
+        data_type: string
+        required: false
+        description: "收费单元名称"
+
+      - name: type
+        display_name: 类型
+        data_type: integer
+        required: false
+        description: "收费单元类型"
+
+      - name: length
+        display_name: 长度
+        data_type: integer
+        required: false
+        description: "收费单元长度"
+
+      - name: start_lat
+        display_name: 起点纬度
+        data_type: string
+        required: false
+        description: "起点纬度"
+
+      - name: start_lng
+        display_name: 起点经度
+        data_type: string
+        required: false
+        description: "起点经度"
+
+      - name: start_stake_num
+        display_name: 起点桩号
+        data_type: string
+        required: false
+        description: "起点桩号"
+
+      - name: end_stake_num
+        display_name: 终点桩号
+        data_type: string
+        required: false
+        description: "终点桩号"
+
+      - name: end_lat
+        display_name: 终点纬度
+        data_type: string
+        required: false
+        description: "终点纬度"
+
+      - name: end_lng
+        display_name: 终点经度
+        data_type: string
+        required: false
+        description: "终点经度"
+
+      - name: toll_roads
+        display_name: 收费道路
+        data_type: string
+        required: false
+        description: "收费道路信息"
+
+      - name: province_type
+        display_name: 省份类型
+        data_type: integer
+        required: false
+        description: "省份类型"
+
+      - name: end_time
+        display_name: 结束时间
+        data_type: date
+        required: false
+        description: "收费单元结束时间"
+
+      - name: operation
+        display_name: 操作
+        data_type: integer
+        required: false
+        description: "操作类型"
+
+      - name: record_gen_time
+        display_name: 记录生成时间
+        data_type: date
+        required: false
+        description: "记录生成时间"
+
+      - name: response_code
+        display_name: 响应代码
+        data_type: integer
+        required: false
+        description: "系统响应代码"
+
+      - name: response_info
+        display_name: 响应信息
+        data_type: string
+        required: false
+        description: "系统响应信息"
+
+      - name: receive_time
+        display_name: 接收时间
+        data_type: date
+        required: false
+        description: "数据接收时间"
+
+      - name: pro_time
+        display_name: 处理时间
+        data_type: date
+        required: false
+        description: "系统处理时间"
+
+      - name: batch_file_name
+        display_name: 批次文件名
+        data_type: string
+        required: false
+        description: "批次处理文件名"
+
+      - name: status
+        display_name: 状态
+        data_type: integer
+        required: false
+        description: "收费单元状态"
+
+      - name: direction
+        display_name: 方向
+        data_type: integer
+        required: false
+        description: "通行方向"
+
+      - name: begin_time
+        display_name: 开始时间
+        data_type: date
+        required: false
+        description: "收费单元开始时间"
+
+      - name: vertical_section_type
+        display_name: 垂直断面类型
+        data_type: integer
+        required: false
+        description: "垂直断面类型"
+  - name: SectionOwner
+    display_name: 收费路段业主
+    description: "表示高速公路收费路段的业主信息，包含业主基本信息和银行账户信息"
+    properties:
+      - name: id
+        display_name: ID
+        data_type: string
+        required: true
+        description: "主键ID"
+
+      - name: owner_id
+        display_name: 业主ID
+        data_type: string
+        required: false
+        description: "业主唯一标识"
+
+      - name: name
+        display_name: 名称
+        data_type: string
+        required: false
+        description: "业主名称"
+
+      - name: contact
+        display_name: 联系人
+        data_type: string
+        required: false
+        description: "业主联系人姓名"
+
+      - name: tel
+        display_name: 电话
+        data_type: string
+        required: false
+        description: "联系人电话号码"
+
+      - name: address
+        display_name: 地址
+        data_type: string
+        required: false
+        description: "业主详细地址"
+
+      - name: bank
+        display_name: 开户行
+        data_type: string
+        required: false
+        description: "银行名称"
+
+      - name: bank_addr
+        display_name: 开户行地址
+        data_type: string
+        required: false
+        description: "银行详细地址"
+
+      - name: bank_account
+        display_name: 银行账号
+        data_type: string
+        required: false
+        description: "银行账户号码"
+
+      - name: tax_payer_code
+        display_name: 纳税人识别号
+        data_type: string
+        required: false
+        description: "税务登记编号"
+
+      - name: credit_code
+        display_name: 统一社会信用代码
+        data_type: string
+        required: false
+        description: "企业统一社会信用代码"
+
+      - name: operation
+        display_name: 操作
+        data_type: integer
+        required: false
+        description: "操作类型（新增/修改/删除）"
+
+      - name: record_gen_time
+        display_name: 记录生成时间
+        data_type: date
+        required: false
+        description: "数据记录生成时间"
+
+      - name: status
+        display_name: 状态
+        data_type: string
+        required: false
+        description: "业主状态（有效/失效）"
+
+      - name: batch_file_name
+        display_name: 批次文件名
+        data_type: string
+        required: false
+        description: "数据处理批次文件名"
+
+      - name: response_code
+        display_name: 响应代码
+        data_type: integer
+        required: false
+        description: "系统响应代码"
+
+      - name: response_info
+        display_name: 响应信息
+        data_type: string
+        required: false
+        description: "系统响应信息"
+
+      - name: receive_time
+        display_name: 接收时间
+        data_type: date
+        required: false
+        description: "数据接收时间"
+
+      - name: pro_time
+        display_name: 处理时间
+        data_type: date
+        required: false
+        description: "数据处理完成时间"
+  - name: TollGantry
+    display_name: 收费门架
+    description: "表示高速公路ETC门架系统的基本信息，用于记录门架的硬件配置、位置信息及运行状态"
+    properties:
+      - name: id
+        display_name: ID
+        data_type: string
+        required: true
+        description: "主键ID"
+
+      - name: name
+        display_name: 名称
+        data_type: string
+        required: false
+        description: "收费门架名称"
+
+      - name: type
+        display_name: 类型
+        data_type: integer
+        required: false
+        description: "收费门架类型"
+
+      - name: toll_intervals
+        display_name: 收费区间
+        data_type: string
+        required: false
+        description: "收费区间信息"
+
+      - name: lat
+        display_name: 纬度
+        data_type: string
+        required: false
+        description: "门架地理位置纬度"
+
+      - name: lng
+        display_name: 经度
+        data_type: string
+        required: false
+        description: "门架地理位置经度"
+
+      - name: pile_number
+        display_name: 桩号
+        data_type: string
+        required: false
+        description: "门架所在位置的桩号"
+
+      - name: status
+        display_name: 状态
+        data_type: integer
+        required: false
+        description: "门架运行状态"
+
+      - name: start_time
+        display_name: 开始时间
+        data_type: date
+        required: false
+        description: "门架开始运行时间"
+
+      - name: end_time
+        display_name: 结束时间
+        data_type: date
+        required: false
+        description: "门架停止运行时间"
+
+      - name: etc_gantry_hex
+        display_name: ETC门架十六进制
+        data_type: string
+        required: false
+        description: "ETC门架的十六进制标识"
+
+      - name: rsu_man_uid
+        display_name: RSU管理UID
+        data_type: string
+        required: false
+        description: "RSU(路侧单元)管理唯一标识"
+
+      - name: rsu_model
+        display_name: RSU型号
+        data_type: string
+        required: false
+        description: "RSU设备型号"
+
+      - name: rsu_id
+        display_name: RSU ID
+        data_type: string
+        required: false
+        description: "RSU设备ID"
+
+      - name: vplr_uid
+        display_name: VPLR管理UID
+        data_type: string
+        required: false
+        description: "VPLR(车牌识别设备)管理唯一标识"
+
+      - name: vplr_model
+        display_name: VPLR型号
+        data_type: string
+        required: false
+        description: "VPLR设备型号"
+
+      - name: vplr_id
+        display_name: VPLR ID
+        data_type: string
+        required: false
+        description: "VPLR设备ID"
+
+      - name: hdv_uid
+        display_name: HDV管理UID
+        data_type: string
+        required: false
+        description: "HDV(高清视频设备)管理唯一标识"
+
+      - name: hdv_model
+        display_name: HDV型号
+        data_type: string
+        required: false
+        description: "HDV设备型号"
+
+      - name: hdv_id
+        display_name: HDV ID
+        data_type: string
+        required: false
+        description: "HDV设备ID"
+
+      - name: operation
+        display_name: 操作
+        data_type: integer
+        required: false
+        description: "系统操作类型"
+
+      - name: record_gen_time
+        display_name: 记录生成时间
+        data_type: date
+        required: false
+        description: "数据记录生成时间"
+
+      - name: response_code
+        display_name: 响应代码
+        data_type: integer
+        required: false
+        description: "系统响应代码"
+
+      - name: response_info
+        display_name: 响应信息
+        data_type: string
+        required: false
+        description: "系统响应信息"
+
+      - name: receive_time
+        display_name: 接收时间
+        data_type: date
+        required: false
+        description: "数据接收时间"
+
+      - name: pro_time
+        display_name: 处理时间
+        data_type: date
+        required: false
+        description: "数据处理完成时间"
+
+      - name: batch_file_name
+        display_name: 批次文件名
+        data_type: string
+        required: false
+        description: "数据处理批次文件名"
+
+      - name: boundary_type
+        display_name: 边界类型
+        data_type: integer
+        required: false
+        description: "门架边界类型"
+
+      - name: controller_uid
+        display_name: 控制器UID
+        data_type: string
+        required: false
+        description: "控制器管理唯一标识"
+
+      - name: controller_model
+        display_name: 控制器型号
+        data_type: string
+        required: false
+        description: "控制器设备型号"
+
+      - name: controller_id
+        display_name: 控制器ID
+        data_type: string
+        required: false
+        description: "控制器设备ID"
+
+      - name: controller_sys_ver
+        display_name: 控制器系统版本
+        data_type: string
+        required: false
+        description: "控制器系统版本号"
+
+      - name: server_uid
+        display_name: 服务器UID
+        data_type: string
+        required: false
+        description: "服务器管理唯一标识"
+
+      - name: server_model
+        display_name: 服务器型号
+        data_type: string
+        required: false
+        description: "服务器设备型号"
+
+      - name: server_id
+        display_name: 服务器ID
+        data_type: string
+        required: false
+        description: "服务器设备ID"
+
+      - name: server_sys_ver
+        display_name: 服务器系统版本
+        data_type: string
+        required: false
+        description: "服务器系统版本号"
+
+      - name: server_db_ver
+        display_name: 服务器数据库版本
+        data_type: string
+        required: false
+        description: "服务器数据库版本号"
+
+      - name: veh_detector_uid
+        display_name: 车辆检测器UID
+        data_type: string
+        required: false
+        description: "车辆检测器管理唯一标识"
+
+      - name: veh_detector_model
+        display_name: 车辆检测器型号
+        data_type: string
+        required: false
+        description: "车辆检测器设备型号"
+
+      - name: veh_detector_id
+        display_name: 车辆检测器ID
+        data_type: string
+        required: false
+        description: "车辆检测器设备ID"
+
+      - name: weather_detector_uid
+        display_name: 天气检测器UID
+        data_type: string
+        required: false
+        description: "天气检测器管理唯一标识"
+
+      - name: weather_detector_model
+        display_name: 天气检测器型号
+        data_type: string
+        required: false
+        description: "天气检测器设备型号"
+
+      - name: weather_detector_id
+        display_name: 天气检测器ID
+        data_type: string
+        required: false
+        description: "天气检测器设备ID"
+
+      - name: class_detector_uid
+        display_name: 车型检测器UID
+        data_type: string
+        required: false
+        description: "车型检测器管理唯一标识"
+
+      - name: class_detector_model
+        display_name: 车型检测器型号
+        data_type: string
+        required: false
+        description: "车型检测器设备型号"
+
+      - name: class_detector_id
+        display_name: 车型检测器ID
+        data_type: string
+        required: false
+        description: "车型检测器设备ID"
+
+      - name: load_detection_uid
+        display_name: 载重检测器UID
+        data_type: string
+        required: false
+        description: "载重检测器管理唯一标识"
+
+      - name: load_detection_model
+        display_name: 载重检测器型号
+        data_type: string
+        required: false
+        description: "载重检测器设备型号"
+
+      - name: load_detection_id
+        display_name: 载重检测器ID
+        data_type: string
+        required: false
+        description: "载重检测器设备ID"
+
+      - name: temp_controller_uid
+        display_name: 温度控制器UID
+        data_type: string
+        required: false
+        description: "温度控制器管理唯一标识"
+
+      - name: temp_controller_model
+        display_name: 温度控制器型号
+        data_type: string
+        required: false
+        description: "温度控制器设备型号"
+
+      - name: temp_controller_id
+        display_name: 温度控制器ID
+        data_type: string
+        required: false
+        description: "温度控制器设备ID"
+
+      - name: power_controller_uid
+        display_name: 电源控制器UID
+        data_type: string
+        required: false
+        description: "电源控制器管理唯一标识"
+
+      - name: power_controller_model
+        display_name: 电源控制器型号
+        data_type: string
+        required: false
+        description: "电源控制器设备型号"
+
+      - name: power_controller_id
+        display_name: 电源控制器ID
+        data_type: string
+        required: false
+        description: "电源控制器设备ID"
+
+      - name: safe_equip_uid
+        display_name: 安全设备UID
+        data_type: string
+        required: false
+        description: "安全设备管理唯一标识"
+
+      - name: safe_equip_model
+        display_name: 安全设备型号
+        data_type: string
+        required: false
+        description: "安全设备设备型号"
+
+      - name: safe_equip_id
+        display_name: 安全设备ID
+        data_type: string
+        required: false
+        description: "安全设备设备ID"
+
+      - name: line_type
+        display_name: 线路类型
+        data_type: string
+        required: false
+        description: "通信线路类型"
+
+      - name: operators
+        display_name: 操作员
+        data_type: string
+        required: false
+        description: "系统操作员信息"
+
+      - name: data_merge_point
+        display_name: 数据合并点
+        data_type: string
+        required: false
+        description: "数据合并点标识"
+
+      - name: imei
+        display_name: IMEI号
+        data_type: string
+        required: false
+        description: "设备IMEI号码"
+
+      - name: equipment_ip
+        display_name: 设备IP
+        data_type: string
+        required: false
+        description: "设备IP地址"
+
+      - name: snmp_version
+        display_name: SNMP版本
+        data_type: string
+        required: false
+        description: "SNMP协议版本"
+
+      - name: snmp_port
+        display_name: SNMP端口
+        data_type: integer
+        required: false
+        description: "SNMP协议端口号"
+
+      - name: community
+        display_name: 团体名
+        data_type: string
+        required: false
+        description: "SNMP团体名"
+
+      - name: security_name
+        display_name: 安全名
+        data_type: string
+        required: false
+        description: "SNMP安全名"
+
+      - name: security_level
+        display_name: 安全级别
+        data_type: string
+        required: false
+        description: "SNMP安全级别"
+
+      - name: authentication
+        display_name: 认证
+        data_type: string
+        required: false
+        description: "SNMP认证方式"
+
+      - name: auth_key
+        display_name: 认证密钥
+        data_type: string
+        required: false
+        description: "SNMP认证密钥"
+
+      - name: encryption
+        display_name: 加密
+        data_type: string
+        required: false
+        description: "SNMP加密方式"
+
+      - name: secret_key
+        display_name: 秘钥
+        data_type: string
+        required: false
+        description: "SNMP秘钥"
+
+      - name: use_status
+        display_name: 使用状态
+        data_type: integer
+        required: false
+        description: "设备使用状态"
+
+      - name: gantry_type
+        display_name: 门架类型
+        data_type: string
+        required: false
+        description: "门架类型（如：ETC门架、普通门架等）"
+
+      - name: lane_count
+        display_name: 车道数
+        data_type: string
+        required: false
+        description: "门架覆盖的车道数量"
+
+      - name: reetc_gantry_hex
+        display_name: 重ETC门架十六进制
+        data_type: string
+        required: false
+        description: "重ETC门架的十六进制标识"
+
+      - name: agency_gantry_ids
+        display_name: 机构门架ID
+        data_type: string
+        required: false
+        description: "关联的机构门架ID列表"
+
+      - name: gantry_sign
+        display_name: 门架标识
+        data_type: string
+        required: false
+        description: "门架标识信息"
 link_types:
   - name: entry_to_path
-    display_name: 入口交易汇聚为路径
-    description: "入口交易汇聚为路径信息（passId,vlp,vlpc -> passId,plateNum,plateColor）(函数计算)"
+    display_name: 入口交易关联路径
+    description: "入口交易关联路径信息（passId,vlp,vlpc -> passId,plateNum,plateColor）(函数计算)"
     url: "http://192.168.22.217:8000/demo/entry_to_path_process.html"
     source_type: EntryTransaction
     target_type: Path
@@ -1662,8 +2401,8 @@ link_types:
       vlpc: plate_color
 
   - name: entry_to_path_new
-    display_name: 入口交易汇聚为路径
-    description: "入口交易汇聚为路径信息（passId,vlp,vlpc -> passId,plateNum,plateColor）(函数计算)"
+    display_name: 入口交易关联为路径
+    description: "入口交易关联为路径信息（passId,vlp,vlpc -> passId,plateNum,plateColor）(函数计算)"
     url: "http://192.168.22.217:8000/demo/entry_to_path_new_process.html"
     source_type: EntryTransactionNew
     target_type: Path
@@ -1675,8 +2414,8 @@ link_types:
       vlpc: plate_color
 
   - name: exit_to_path
-    display_name: 出口交易汇聚为路径
-    description: "出口交易汇聚为路径信息（passId,exVlp,exVlpc -> passId,plateNum,plateColor）(函数计算)"
+    display_name: 出口交易关联为路径
+    description: "出口交易关联为路径信息（passId,exVlp,exVlpc -> passId,plateNum,plateColor）(函数计算)"
     url: "http://192.168.22.217:8000/demo/exit_to_path_process.html"
     source_type: ExitTransaction
     target_type: Path
@@ -1688,8 +2427,8 @@ link_types:
       ex_vlpc: plate_color
 
   - name: gantry_to_path
-    display_name: 门架交易汇聚为路径
-    description: "门架交易汇聚为路径信息（passId,vlp,vlpc -> passId,plateNum,plateColor）(函数计算)"
+    display_name: 门架交易关联为路径
+    description: "门架交易关联为路径信息（passId,vlp,vlpc -> passId,plateNum,plateColor）(函数计算)"
     url: "http://192.168.22.217:8000/demo/gantry_to_path_process.html"
     source_type: GantryTransaction
     target_type: Path
@@ -1712,23 +2451,12 @@ link_types:
       pass_id: pass_id
 
   - name: path_has_split_details
-    display_name: 路径拆分为拆分明细
-    description: "路径拆分为多个拆分明细（passId -> passId）"
+    display_name: 路径持有拆分详情
+    description: "路径拆分为多个拆分详情（passId -> passId）"
     url: "http://192.168.22.217:8000/demo/path_has_split_details_process.html"
     source_type: Path
     target_type: SplitDetail
     cardinality: one-to-many
-    direction: directed
-    property_mappings:
-      pass_id: pass_id
-
-  - name: split_detail_to_section
-    display_name: 拆分明细关联路段
-    description: "拆分明细关联路段信息（passId -> passId）"
-    url: "http://192.168.22.217:8000/demo/split_detail_to_section_process.html"
-    source_type: SplitDetail
-    target_type: Section
-    cardinality: many-to-one
     direction: directed
     property_mappings:
       pass_id: pass_id
@@ -1745,8 +2473,8 @@ link_types:
       pass_id: pass_id
 
   - name: split_detail_to_clear_result
-    display_name: 拆分明细映射为清分结果
-    description: "拆分明细映射为清分结果（passId,transactionId,intervalId -> passId,transactionId,intervalId）"
+    display_name: 拆分详情映射清分结果
+    description: "拆分详情映射清分结果（passId,transactionId,intervalId -> passId,transactionId,intervalId）"
     url: "http://192.168.22.217:8000/demo/split_detail_to_clear_result_process.html"
     source_type: SplitDetail
     target_type: ClearResult
@@ -1756,18 +2484,66 @@ link_types:
       pass_id: pass_id
       transaction_id: transaction_id
       interval_id: interval_id
+  - name: toll_gantry_to_toll_interval
+    display_name: 收费门架关联收费单元
+    description: "收费门架关联多个收费单元( tollIntervals -> id)"
+    source_type: TollGantry
+    target_type: TollInterval
+    cardinality: one-to-many
+    direction: directed
+    property_mappings:
+      toll_intervals: id
 
-  - name: section_to_clear_result
-    display_name: 路段映射为清分结果
-    description: "路段映射为清分结果（sectionOwnerId,roadId -> cropId,roadId）"
-    url: "http://192.168.22.217:8000/demo/section_to_clear_result_process.html"
-    source_type: Section
+  - name: split_detail_to_toll_interval
+    display_name: 拆分明细关联收费单元
+    description: "多个拆分明细关联收费单元关联( intervalId -> id )"
+    source_type: SplitDetail
+    target_type: TollInterval
+    cardinality: many-to-one
+    direction: directed
+    property_mappings:
+      interval_id: id
+
+  - name: toll_interval_belong_toll_section
+    display_name: 收费单元属于收费路段
+    description: "多个收费单元属于收费路段(sectionId -> id)"
+    source_type: TollInterval
+    target_type: TollSection
+    cardinality: many-to-one
+    direction: directed
+    property_mappings:
+      section_id: id
+
+  - name: toll_section_belong_section_owner
+    display_name: 收费路段属于路段业主
+    description: "多个收费单元属于收费业主(sectionOwnerId -> id)"
+    source_type: TollSection
+    target_type: SectionOwner
+    cardinality: many-to-one
+    direction: directed
+    property_mappings:
+      section_owner_id: id
+
+  - name: toll_section_to_clear_result
+    display_name: 收费路段映射清分结果
+    description: "收费路段映射多个清分结果(sectionownerid,roadId -> cropId,roadId)"
+    source_type: TollSection
     target_type: ClearResult
     cardinality: one-to-many
     direction: directed
     property_mappings:
       section_owner_id: crop_id
       road_id: road_id
+
+  - name: section_owner_to_clear_result
+    display_name: 路段业主关联清分结果
+    description: "路段业主关联多个清分结果(id -> cropId)"
+    source_type: SectionOwner
+    target_type: ClearResult
+    cardinality: one-to-many
+    direction: directed
+    property_mappings:
+      id: crop_id
 
   - name: clear_result_to_clear_report
     display_name: 清分结果统计汇总为清分报表

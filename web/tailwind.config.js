@@ -23,8 +23,8 @@ export default {
         text: '#1E293B',
       },
       fontFamily: {
-        sans: ['"Fira Sans"', 'sans-serif'],
-        mono: ['"Fira Code"', 'monospace'],
+        sans: ['system-ui', '-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto', 'sans-serif'],
+        mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', '"Liberation Mono"', '"Courier New"', 'monospace'],
       },
     },
   },
