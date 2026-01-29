@@ -142,18 +142,20 @@ public class InstanceController {
     @PostMapping("/{objectType}/sync-from-mapping/{mappingId}")
     public ResponseEntity<ApiResponse<Map<String, Object>>> syncFromMapping(
             @PathVariable String objectType,
-            @PathVariable String mappingId) {
+            @PathVariable String mappingId,
+            @RequestParam(required = false) String targetDatabaseId) {
         try {
-            mappedDataService.syncMappedDataToInstances(objectType, mappingId);
-            Map<String, Object> result = new HashMap<>();
-            result.put("message", "Data synced successfully");
-            return ResponseEntity.ok(ApiResponse.success(result));
+            // 默认使用同步抽取方法（构建表+抽取数据）
+            // targetDatabaseId为null时，使用源数据库作为目标数据库
+            MappedDataService.SyncExtractResult result = mappedDataService.syncExtractWithTable(
+                objectType, mappingId, targetDatabaseId);
+            return ResponseEntity.ok(ApiResponse.success(result.toMap()));
         } catch (Loader.NotFoundException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(ApiResponse.error(400, e.getMessage()));
+                    .body(ApiResponse.error(400, e.getMessage()));
         } catch (IOException | SQLException e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ApiResponse.error(500, "Failed to sync data: " + e.getMessage()));
+                    .body(ApiResponse.error(500, "Failed to sync data: " + e.getMessage()));
         }
     }
 

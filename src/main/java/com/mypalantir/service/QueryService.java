@@ -8,9 +8,11 @@ import com.mypalantir.query.QueryExecutor;
 import com.mypalantir.query.QueryParser;
 import com.mypalantir.repository.IInstanceStorage;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
-import java.util.Map;
+import java.io.IOException;
+import java.util.*;
 
 /**
  * 查询服务
@@ -27,7 +29,7 @@ public class QueryService {
     private FederatedCalciteRunner federatedRunner;
 
     @Autowired
-    public QueryService(Loader loader, IInstanceStorage instanceStorage,
+    public QueryService(Loader loader, @Lazy IInstanceStorage instanceStorage,
                        MappingService mappingService, DatabaseMetadataService databaseMetadataService,
                        ExecutionRouter executionRouter) {
         this.loader = loader;
@@ -118,6 +120,42 @@ public class QueryService {
         } catch (Loader.NotFoundException e) {
             throw new IllegalArgumentException("Object type '" + query.getFrom() + "' not found");
         }
+    }
+
+    /**
+     * 根据ID查询实例（用于RelationalInstanceStorage）
+     */
+    public Map<String, Object> queryInstanceById(String objectType, String id) throws Exception {
+        Map<String, Object> queryMap = new HashMap<>();
+        queryMap.put("from", objectType);
+        
+        // 选择所有属性
+        com.mypalantir.meta.ObjectType objectTypeDef = loader.getObjectType(objectType);
+        List<String> selectFields = new ArrayList<>();
+        selectFields.add("id");
+        if (objectTypeDef.getProperties() != null) {
+            for (com.mypalantir.meta.Property prop : objectTypeDef.getProperties()) {
+                selectFields.add(prop.getName());
+            }
+        }
+        queryMap.put("select", selectFields);
+        
+        // WHERE条件
+        Map<String, Object> where = new HashMap<>();
+        where.put("id", id);
+        queryMap.put("where", where);
+        
+        queryMap.put("limit", 1);
+        queryMap.put("offset", 0);
+
+        // 执行查询
+        QueryExecutor.QueryResult result = executeQuery(queryMap);
+        
+        if (result.getRows().isEmpty()) {
+            throw new IOException("instance not found");
+        }
+
+        return result.getRows().get(0);
     }
 }
 

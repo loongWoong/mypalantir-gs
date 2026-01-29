@@ -358,7 +358,178 @@ object_types:
         data_type: string
         required: false
         description: "业务分析特情状态"
+  - name: EntryTransactionNew001
+    display_name: 入口车道流水New
+    description: "入口车道流水"
+    url: "http://192.168.22.217:8000/demo/EntryTransactionNew_profile.html"
+    properties:
+      - name: id
+        display_name: 交易流水号
+        data_type: string
+        required: true
+        description: "交易流水号"
 
+      - name: pass_id
+        display_name: 通行标识ID
+        data_type: string
+        required: false
+        description: "通行标识ID"
+
+      - name: l_date
+        display_name: 逻辑日期
+        data_type: date
+        required: false
+        description: "逻辑日期"
+
+      - name: en_time
+        display_name: 入口时间
+        data_type: date
+        required: false
+        description: "入口时间"
+
+      - name: station_receive_time
+        display_name: 站级接收时间
+        data_type: date
+        required: false
+        description: "站级接收时间"
+
+      - name: receive_time
+        display_name: 接收时间
+        data_type: date
+        required: false
+        description: "接收时间"
+
+      - name: oper_id
+        display_name: 操作员工号
+        data_type: string
+        required: false
+        description: "操作员工号"
+
+      - name: oper_name
+        display_name: 操作员姓名
+        data_type: string
+        required: false
+        description: "操作员姓名"
+
+      - name: en_toll_lane_id
+        display_name: 入口车道号(国标)
+        data_type: string
+        required: false
+        description: "入口车道号(国标)"
+
+      - name: media_type
+        display_name: 通行介质类型
+        data_type: integer
+        required: false
+        description: "通行介质类型"
+
+      - name: vlp
+        display_name: 车牌号
+        data_type: string
+        required: false
+        description: "车牌号"
+
+      - name: vlpc
+        display_name: 车牌颜色
+        data_type: integer
+        required: false
+        description: "车牌颜色"
+
+      - name: identify_vlp
+        display_name: 识别车牌号
+        data_type: string
+        required: false
+        description: "识别车牌号"
+
+      - name: identify_vlpc
+        display_name: 识别车牌颜色
+        data_type: integer
+        required: false
+        description: "识别车牌颜色"
+
+      - name: trans_code
+        display_name: 交易编码
+        data_type: string
+        required: false
+        description: "交易编码"
+
+      - name: trans_type
+        display_name: 交易类型
+        data_type: string
+        required: false
+        description: "交易类型"
+
+      - name: balance_before
+        display_name: 交易前余额（分）
+        data_type: integer
+        required: false
+        description: "交易前余额（分）"
+
+      - name: trans_fee
+        display_name: 卡面扣费金额
+        data_type: long
+        required: false
+        description: "卡面扣费金额"
+
+      - name: direction
+        display_name: 行驶方向
+        data_type: integer
+        required: false
+        description: "行驶方向"
+
+      - name: en_axle_count
+        display_name: 入口轴数
+        data_type: integer
+        required: false
+        description: "入口轴数"
+
+      - name: axis_info
+        display_name: 轴组信息
+        data_type: string
+        required: false
+        description: "轴组信息"
+
+      - name: en_weight
+        display_name: 入口重量
+        data_type: string
+        required: false
+        description: "入口重量"
+
+      - name: limit_weight
+        display_name: 限载总重(kg)
+        data_type: integer
+        required: false
+        description: "限载总重(kg)"
+
+      - name: over_weight_rate
+        display_name: 超限率
+        data_type: integer
+        required: false
+        description: "超限率"
+
+      - name: description
+        display_name: 对交易的文字解释
+        data_type: string
+        required: false
+        description: "对交易的文字解释"
+
+      - name: special_type
+        display_name: 部特情类型
+        data_type: string
+        required: false
+        description: "部特情类型"
+
+      - name: lane_sp_info
+        display_name: 车道特情状态
+        data_type: string
+        required: false
+        description: "车道特情状态"
+
+      - name: sp_info
+        display_name: 业务分析特情状态
+        data_type: string
+        required: false
+        description: "业务分析特情状态"
   - name: ExitTransaction
     display_name: 出口车道流水
     description: "出口车道流水"

@@ -99,7 +99,7 @@ public class MyPalantirApplication {
     }
 
     @Bean
-    public QueryService queryService(@Lazy Loader loader, IInstanceStorage instanceStorage,
+    public QueryService queryService(@Lazy Loader loader, @Lazy IInstanceStorage instanceStorage,
                                     com.mypalantir.service.MappingService mappingService,
                                     com.mypalantir.service.DatabaseMetadataService databaseMetadataService,
                                     com.mypalantir.query.ExecutionRouter executionRouter) {

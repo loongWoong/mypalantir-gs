@@ -193,6 +193,39 @@ public class DatabaseMetadataService {
     }
 
     /**
+     * 执行更新SQL（INSERT, UPDATE, DELETE, CREATE TABLE等）
+     */
+    public int executeUpdate(String sql, String databaseId) throws SQLException, IOException {
+        Connection conn = getConnectionForDatabase(databaseId);
+        try (Statement stmt = conn.createStatement()) {
+            return stmt.executeUpdate(sql);
+        } finally {
+            if (conn != null && !conn.isClosed()) {
+                conn.close();
+            }
+        }
+    }
+
+    /**
+     * 检查表是否存在
+     */
+    public boolean tableExists(String databaseId, String tableName) throws SQLException, IOException {
+        Connection conn = getConnectionForDatabase(databaseId);
+        try {
+            DatabaseMetaData metaData = conn.getMetaData();
+            String catalog = getDatabaseName(databaseId);
+            
+            try (ResultSet rs = metaData.getTables(catalog, null, tableName, new String[]{"TABLE"})) {
+                return rs.next();
+            }
+        } finally {
+            if (conn != null && !conn.isClosed()) {
+                conn.close();
+            }
+        }
+    }
+
+    /**
      * 将 SQL 类型转换为基本类型，以便保存到 Neo4j
      */
     private Object convertSqlValue(Object value) {
