@@ -145,6 +145,22 @@ public class HybridInstanceStorage implements IInstanceStorage {
         }
     }
 
+    /**
+     * 检查是否为系统对象类型（table, database, mapping等）
+     * 系统对象类型应该直接使用 Neo4j 存储，不经过 RelationalInstanceStorage，避免递归调用
+     */
+    private boolean isSystemObjectType(String objectType) {
+        if (objectType == null) {
+            return false;
+        }
+        String lowerType = objectType.toLowerCase();
+        return "table".equals(lowerType) 
+            || "database".equals(lowerType) 
+            || "mapping".equals(lowerType)
+            || "column".equals(lowerType)
+            || "workspace".equals(lowerType);
+    }
+
     @Override
     public String createInstance(String objectType, Map<String, Object> data) throws IOException {
         // 1. 提取关键字段
@@ -180,35 +196,59 @@ public class HybridInstanceStorage implements IInstanceStorage {
 
     @Override
     public Map<String, Object> getInstance(String objectType, String id) throws IOException {
-        // 1. 优先从关系型数据库查询详细数据
-        if (hasRelationalMapping(objectType)) {
-            try {
-                Map<String, Object> instance = relationalStorage.getInstance(objectType, id);
-                
-                // 合并Neo4j中的关键字段（用于图展示）
-                try {
-                    Map<String, Object> neo4jInstance = neo4jStorage.getInstance(objectType, id);
-                    // 如果关系型数据库中没有某些字段，从Neo4j补充
-                    for (Map.Entry<String, Object> entry : neo4jInstance.entrySet()) {
-                        if (!instance.containsKey(entry.getKey())) {
-                            instance.put(entry.getKey(), entry.getValue());
-                        }
-                    }
-                } catch (IOException e) {
-                    // Neo4j中没有，只使用关系型数据库的数据
-                    logger.debug("Instance {} not found in Neo4j, using relational data only", id);
-                }
-                
-                return instance;
-            } catch (IOException e) {
-                // 如果关系型数据库查询失败，回退到Neo4j（兼容旧数据）
-                logger.warn("Failed to query from relational DB for instance {} of type {}, falling back to Neo4j: {}", 
-                    id, objectType, e.getMessage());
-            }
+        logger.info("[HybridInstanceStorage] ========== getInstance (hybrid模式) ==========");
+        logger.info("[HybridInstanceStorage] getInstance called for objectType: {}, id: {}", objectType, id);
+        logger.info("[HybridInstanceStorage] Storage mode: HYBRID (reading from relational DB and Neo4j, NOT from file storage)");
+        
+        // 系统对象类型（table, database, mapping等）直接使用 Neo4j，避免递归调用
+        if (isSystemObjectType(objectType)) {
+            logger.info("[HybridInstanceStorage] System object type {} detected, using Neo4j directly to avoid recursion", objectType);
+            logger.info("[HybridInstanceStorage] Data source: NEO4J only (NOT file storage)");
+            Map<String, Object> result = neo4jStorage.getInstance(objectType, id);
+            logger.info("[HybridInstanceStorage] ========== getInstance END ==========");
+            return result;
         }
         
-        // 2. 从Neo4j查询（兼容旧数据或未配置映射的对象类型）
-        return neo4jStorage.getInstance(objectType, id);
+        // 1. 优先从关系型数据库查询详细数据（包括同步表）
+        // 即使没有配置数据源映射，也尝试查询默认数据库中的同步表
+        // 严格查询界限：只从关系型数据库和Neo4j读取，不从文件读取
+        boolean hasMapping = hasRelationalMapping(objectType);
+        logger.info("[HybridInstanceStorage] hasRelationalMapping({}) = {}", objectType, hasMapping);
+        
+        // 尝试从关系型数据库查询（包括同步表）
+        // 实例存储查询只查询同步表，如果同步表不存在或查询失败，抛出异常，不回退到 Neo4j
+        // 严格查询界限：只从关系型数据库和Neo4j读取，不从文件读取
+        try {
+            logger.info("[HybridInstanceStorage] Attempting to query from RelationalInstanceStorage (sync table only, NOT file storage)");
+            Map<String, Object> instance = relationalStorage.getInstance(objectType, id);
+            
+            // 合并Neo4j中的关键字段（用于图展示）
+            try {
+                Map<String, Object> neo4jInstance = neo4jStorage.getInstance(objectType, id);
+                // 如果关系型数据库中没有某些字段，从Neo4j补充
+                for (Map.Entry<String, Object> entry : neo4jInstance.entrySet()) {
+                    if (!instance.containsKey(entry.getKey())) {
+                        instance.put(entry.getKey(), entry.getValue());
+                    }
+                }
+                logger.debug("[HybridInstanceStorage] Merged instance data from relational DB and Neo4j");
+            } catch (IOException e) {
+                // Neo4j中没有，只使用关系型数据库的数据
+                logger.debug("[HybridInstanceStorage] Instance {} not found in Neo4j, using relational data only", id);
+            }
+            
+            logger.info("[HybridInstanceStorage] Successfully retrieved instance from RelationalInstanceStorage (relational DB, NOT file storage)");
+            logger.info("[HybridInstanceStorage] Data source: RELATIONAL DB (sync table) + NEO4J (key fields), NOT file storage");
+            logger.info("[HybridInstanceStorage] ========== getInstance END ==========");
+            return instance;
+        } catch (IOException e) {
+            // 实例存储查询失败（同步表不存在或其他错误），直接抛出异常，不回退到 Neo4j
+            // 严格查询界限：不从文件读取
+            logger.info("[HybridInstanceStorage] Failed to query sync table for instance {} of type {} (sync table may not exist): {}, throwing exception (NOT reading from file storage)", 
+                id, objectType, e.getMessage());
+            logger.info("[HybridInstanceStorage] ========== getInstance END ==========");
+            throw e;
+        }
     }
 
     @Override
@@ -236,52 +276,154 @@ public class HybridInstanceStorage implements IInstanceStorage {
         logger.debug("Deleted instance {} of type {} from hybrid storage (Neo4j only)", id, objectType);
     }
 
+    /**
+     * 查询实例存储（同步数据）
+     * 严格查询界限：只查询同步表和Neo4j数据，不查询原始表
+     */
     @Override
     public InstanceStorage.ListResult listInstances(String objectType, int offset, int limit) throws IOException {
-        // 优先从关系型数据库查询
-        if (hasRelationalMapping(objectType)) {
+        logger.info("[HybridInstanceStorage] ========== INSTANCE STORAGE QUERY (同步数据查询) ==========");
+        logger.info("[HybridInstanceStorage] Query mode: INSTANCE_STORAGE (同步表和Neo4j查询)");
+        logger.info("[HybridInstanceStorage] Storage mode: HYBRID (reading from relational DB and Neo4j, NOT from file storage)");
+        logger.info("[HybridInstanceStorage] listInstances called for objectType: {}, offset: {}, limit: {}", 
+            objectType, offset, limit);
+        logger.info("[HybridInstanceStorage] Data source: SYNC TABLE (同步表) + NEO4J (图数据库)，不查询原始表，不从文件读取");
+        
+        // 系统对象类型（table, database, mapping等）直接使用 Neo4j，避免递归调用
+        if (isSystemObjectType(objectType)) {
+            logger.info("[HybridInstanceStorage] System object type {} detected, using Neo4j directly to avoid recursion", objectType);
+            InstanceStorage.ListResult result = neo4jStorage.listInstances(objectType, offset, limit);
+            logger.info("[HybridInstanceStorage] ========== INSTANCE STORAGE QUERY END ==========");
+            return result;
+        }
+        
+        // 严格查询界限：
+        // 1. 优先查询同步表（表名 = 模型名，在默认数据库中）
+        // 2. 不查询原始表（原始表查询应该通过 MappedDataService.queryMappedInstances() 进行）
+        // 3. 如果同步表查询失败，可以查询Neo4j（但需要明确界限）
+        boolean hasMapping = hasRelationalMapping(objectType);
+        logger.info("[HybridInstanceStorage] hasRelationalMapping({}) = {}", objectType, hasMapping);
+        
+        // 尝试从关系型数据库查询同步表
+        // 严格查询界限：只查询同步表，不查询原始表
+        InstanceStorage.ListResult syncTableResult = null;
+        boolean syncTableQuerySucceeded = false;
+        
+        try {
+            logger.info("[HybridInstanceStorage] Attempting to query from RelationalInstanceStorage (SYNC TABLE only, NOT querying ORIGINAL TABLE)");
+            syncTableResult = relationalStorage.listInstances(objectType, offset, limit);
+            syncTableQuerySucceeded = true;
+            logger.info("[HybridInstanceStorage] Successfully queried from RelationalInstanceStorage, returned {} instances (total: {})", 
+                syncTableResult.getItems().size(), syncTableResult.getTotal());
+            
+            // 详细分析返回的数据
+            if (syncTableResult.getItems().isEmpty()) {
+                logger.info("[HybridInstanceStorage] DATA SOURCE ANALYSIS: RelationalInstanceStorage returned EMPTY result for objectType={} - sync table exists but has no data, will try Neo4j", objectType);
+            } else {
+                logger.info("[HybridInstanceStorage] DATA SOURCE ANALYSIS: RelationalInstanceStorage returned {} instances for objectType={} - data from SYNC TABLE, first instance id={}", 
+                    syncTableResult.getItems().size(), objectType, 
+                    syncTableResult.getItems().isEmpty() ? "N/A" : syncTableResult.getItems().get(0).get("id"));
+                // 如果同步表有数据，直接返回，不查询Neo4j
+                logger.info("[HybridInstanceStorage] ========== INSTANCE STORAGE QUERY END ==========");
+                return syncTableResult;
+            }
+        } catch (IOException e) {
+            // 实例存储查询失败（同步表不存在或其他错误）
+            // 严格查询界限：不查询原始表，可以查询Neo4j作为备选
+            logger.info("[HybridInstanceStorage] Failed to query SYNC TABLE for type {} (sync table may not exist): {}", 
+                objectType, e.getMessage());
+            logger.info("[HybridInstanceStorage] DATA SOURCE ANALYSIS: SYNC TABLE query failed for objectType={}, trying Neo4j as fallback (NOT querying ORIGINAL TABLE)", objectType);
+        }
+        
+        // 如果同步表查询失败或返回空结果，尝试查询Neo4j
+        // 严格查询界限：只查询Neo4j，不查询原始表
+        if (!syncTableQuerySucceeded || (syncTableResult != null && syncTableResult.getItems().isEmpty())) {
             try {
-                return relationalStorage.listInstances(objectType, offset, limit);
-            } catch (IOException e) {
-                logger.warn("Failed to list from relational DB for type {}, falling back to Neo4j: {}", 
-                    objectType, e.getMessage());
+                logger.info("[HybridInstanceStorage] Attempting to query from Neo4j (SYNC TABLE query failed or returned empty)");
+                InstanceStorage.ListResult neo4jResult = neo4jStorage.listInstances(objectType, offset, limit);
+                logger.info("[HybridInstanceStorage] Successfully queried from Neo4j, returned {} instances (total: {})", 
+                    neo4jResult.getItems().size(), neo4jResult.getTotal());
+                
+                if (neo4jResult.getItems().isEmpty()) {
+                    logger.info("[HybridInstanceStorage] DATA SOURCE ANALYSIS: Both SYNC TABLE and NEO4J returned EMPTY results for objectType={}", objectType);
+                } else {
+                    logger.info("[HybridInstanceStorage] DATA SOURCE ANALYSIS: Data from NEO4J for objectType={} (SYNC TABLE had no data)", objectType);
+                }
+                logger.info("[HybridInstanceStorage] ========== INSTANCE STORAGE QUERY END ==========");
+                return neo4jResult;
+            } catch (IOException neo4jEx) {
+                logger.info("[HybridInstanceStorage] Neo4j query also failed for objectType={}: {}", objectType, neo4jEx.getMessage());
+                logger.info("[HybridInstanceStorage] DATA SOURCE ANALYSIS: Both SYNC TABLE and NEO4J queries failed/empty for objectType={}, returning EMPTY result (NOT querying ORIGINAL TABLE)", objectType);
+                logger.info("[HybridInstanceStorage] ========== INSTANCE STORAGE QUERY END ==========");
+                return new InstanceStorage.ListResult(new ArrayList<>(), 0);
             }
         }
         
-        // 回退到Neo4j
-        return neo4jStorage.listInstances(objectType, offset, limit);
+        // 理论上不应该到达这里，但为了安全起见
+        logger.warn("[HybridInstanceStorage] Unexpected code path reached, returning empty result");
+        return new InstanceStorage.ListResult(new ArrayList<>(), 0);
     }
 
     @Override
     public List<Map<String, Object>> searchInstances(String objectType, Map<String, Object> filters) throws IOException {
-        // 优先从关系型数据库查询
-        if (hasRelationalMapping(objectType)) {
-            try {
-                return relationalStorage.searchInstances(objectType, filters);
-            } catch (IOException e) {
-                logger.warn("Failed to search from relational DB for type {}, falling back to Neo4j: {}", 
-                    objectType, e.getMessage());
-            }
+        logger.info("[HybridInstanceStorage] searchInstances called for objectType: {}, filters: {}", objectType, filters);
+        
+        // 系统对象类型（table, database, mapping等）直接使用 Neo4j，避免递归调用
+        if (isSystemObjectType(objectType)) {
+            logger.info("[HybridInstanceStorage] System object type {} detected, using Neo4j directly to avoid recursion", objectType);
+            return neo4jStorage.searchInstances(objectType, filters);
         }
         
-        // 回退到Neo4j
-        return neo4jStorage.searchInstances(objectType, filters);
+        // 优先从关系型数据库查询（包括同步表）
+        // 即使没有配置数据源映射，也尝试查询默认数据库中的同步表
+        boolean hasMapping = hasRelationalMapping(objectType);
+        logger.info("[HybridInstanceStorage] hasRelationalMapping({}) = {}", objectType, hasMapping);
+        
+        // 尝试从关系型数据库查询（包括同步表）
+        // 实例存储查询只查询同步表，如果同步表不存在或查询失败，返回空结果，不回退到 Neo4j
+        try {
+            logger.info("[HybridInstanceStorage] Attempting to search from RelationalInstanceStorage (sync table only, no mapping table, no Neo4j fallback)");
+            List<Map<String, Object>> results = relationalStorage.searchInstances(objectType, filters);
+            logger.info("[HybridInstanceStorage] Successfully searched from RelationalInstanceStorage, returned {} instances", 
+                results.size());
+            return results;
+        } catch (IOException e) {
+            // 实例存储查询失败（同步表不存在或其他错误），直接返回空结果，不回退到 Neo4j
+            logger.info("[HybridInstanceStorage] Failed to search sync table for type {} (sync table may not exist): {}, returning empty result (no Neo4j fallback)", 
+                objectType, e.getMessage());
+            return new ArrayList<>();
+        }
     }
 
     @Override
     public Map<String, Map<String, Object>> getInstancesBatch(String objectType, List<String> ids) throws IOException {
-        // 优先从关系型数据库查询
-        if (hasRelationalMapping(objectType)) {
-            try {
-                return relationalStorage.getInstancesBatch(objectType, ids);
-            } catch (IOException e) {
-                logger.warn("Failed to get batch from relational DB for type {}, falling back to Neo4j: {}", 
-                    objectType, e.getMessage());
-            }
+        logger.info("[HybridInstanceStorage] getInstancesBatch called for objectType: {}, ids count: {}", objectType, ids.size());
+        
+        // 系统对象类型（table, database, mapping等）直接使用 Neo4j，避免递归调用
+        if (isSystemObjectType(objectType)) {
+            logger.info("[HybridInstanceStorage] System object type {} detected, using Neo4j directly to avoid recursion", objectType);
+            return neo4jStorage.getInstancesBatch(objectType, ids);
         }
         
-        // 回退到Neo4j
-        return neo4jStorage.getInstancesBatch(objectType, ids);
+        // 优先从关系型数据库查询（包括同步表）
+        // 即使没有配置数据源映射，也尝试查询默认数据库中的同步表
+        boolean hasMapping = hasRelationalMapping(objectType);
+        logger.info("[HybridInstanceStorage] hasRelationalMapping({}) = {}", objectType, hasMapping);
+        
+        // 尝试从关系型数据库查询（包括同步表）
+        // 实例存储查询只查询同步表，如果同步表不存在或查询失败，返回空结果，不回退到 Neo4j
+        try {
+            logger.info("[HybridInstanceStorage] Attempting to get batch from RelationalInstanceStorage (sync table only, no mapping table, no Neo4j fallback)");
+            Map<String, Map<String, Object>> results = relationalStorage.getInstancesBatch(objectType, ids);
+            logger.info("[HybridInstanceStorage] Successfully got batch from RelationalInstanceStorage, returned {} instances", 
+                results.size());
+            return results;
+        } catch (IOException e) {
+            // 实例存储查询失败（同步表不存在或其他错误），直接返回空结果，不回退到 Neo4j
+            logger.info("[HybridInstanceStorage] Failed to get batch from sync table for type {} (sync table may not exist): {}, returning empty result (no Neo4j fallback)", 
+                objectType, e.getMessage());
+            return new HashMap<>();
+        }
     }
 
     @Override
@@ -293,6 +435,17 @@ public class HybridInstanceStorage implements IInstanceStorage {
         for (Map.Entry<String, List<String>> entry : typeIdMap.entrySet()) {
             String objectType = entry.getKey();
             List<String> ids = entry.getValue();
+            
+            // 系统对象类型（table, database, mapping等）直接使用 Neo4j，避免递归调用
+            if (isSystemObjectType(objectType)) {
+                logger.info("[HybridInstanceStorage] System object type {} detected, using Neo4j directly to avoid recursion", objectType);
+                Map<String, Map<String, Object>> instances = neo4jStorage.getInstancesBatch(objectType, ids);
+                for (Map.Entry<String, Map<String, Object>> instanceEntry : instances.entrySet()) {
+                    String key = objectType + ":" + instanceEntry.getKey();
+                    result.put(key, instanceEntry.getValue());
+                }
+                continue;
+            }
             
             if (hasRelationalMapping(objectType)) {
                 try {

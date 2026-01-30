@@ -60,6 +60,7 @@ public class LinkSyncService {
                 // 检查关系是否已存在
                 if (!linkExists(linkTypeName, sourceId, targetId)) {
                     try {
+                        // 在hybrid模式下，links会存储到Neo4j，而不是文件存储
                         linkService.createLink(linkTypeName, sourceId, targetId, new HashMap<>());
                         result.linksCreated++;
                     } catch (Exception e) {

@@ -38,7 +38,10 @@ export default function InstanceList() {
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState<Array<{ property: string; value: string }>>([]);
   const [availableMappings, setAvailableMappings] = useState<any[]>([]);
-  const [queryMode, setQueryMode] = useState<'mapping' | 'storage'>('storage'); // 'mapping' 表示映射数据查询，'storage' 表示实例存储查询
+  // 查询模式：严格区分两种查询模式
+  // 'mapping': 原始数据查询 - 查询根据mapping映射的原始表（不查询同步表）
+  // 'storage': 同步数据查询 - 查询同步表和Neo4j数据（不查询原始表）
+  const [queryMode, setQueryMode] = useState<'mapping' | 'storage'>('storage');
   const [viewMode, setViewMode] = useState<'properties' | 'list'>('properties'); // 'properties' 表示属性分析视图，'list' 表示数据列表视图
   const [allInstances, setAllInstances] = useState<Instance[]>([]); // 用于统计分析的所有实例数据
   const [loadingStats, setLoadingStats] = useState(false);
@@ -193,17 +196,17 @@ export default function InstanceList() {
     try {
       const mappingsList = await mappingApi.getByObjectType(objectType);
       setAvailableMappings(mappingsList);
-      // 如果URL中有mappingId，设置为映射查询模式
+      // 如果URL中有mappingId，设置为原始数据查询模式
       if (mappingId && mappingsList.some(m => m.id === mappingId)) {
         setQueryMode('mapping');
       } else {
-        // 如果没有mappingId，设置为存储查询模式
+        // 如果没有mappingId，设置为同步数据查询模式
         setQueryMode('storage');
       }
     } catch (error) {
       console.error('Failed to load mappings:', error);
       setAvailableMappings([]);
-      // 出错时默认使用存储查询模式
+      // 出错时默认使用同步数据查询模式
       setQueryMode('storage');
     }
   };
@@ -220,8 +223,12 @@ export default function InstanceList() {
       setObjectTypeDef(objectTypeData); // 设置对象类型定义，这样页面才能渲染
       
       // 根据查询模式决定使用哪种查询方式
+      // 严格查询界限：
+      // 1. 原始数据查询：查询根据mapping映射的原始表（不查询同步表）
+      // 2. 同步数据查询：查询同步表和Neo4j数据（不查询原始表）
+      
       if (queryMode === 'mapping' && availableMappings.length > 0) {
-        // 映射数据查询：加载所有数据（使用较大的 limit）
+        // 原始数据查询：加载所有数据（使用较大的 limit）
         const targetMappingId = mappingId || availableMappings[0]?.id;
         if (targetMappingId) {
           try {
@@ -232,7 +239,7 @@ export default function InstanceList() {
             setLoadingStats(false);
             return;
           } catch (error) {
-            console.warn('Failed to load mapping data for stats, trying smaller limit:', error);
+            console.warn('原始数据查询失败，尝试更小的 limit:', error);
             // 尝试更小的 limit
             try {
               const instancesData = await instanceApi.listWithMapping(objectType, targetMappingId, 0, 1000);
@@ -242,14 +249,16 @@ export default function InstanceList() {
               setLoadingStats(false);
               return;
             } catch (error2) {
-              console.error('Failed to load mapping data with smaller limit:', error2);
-              // 如果映射查询失败，继续尝试实例存储查询
+              console.error('原始数据查询失败（更小的 limit）:', error2);
+              // 如果原始数据查询失败，继续尝试同步数据查询
             }
           }
         }
       }
       
-      // 实例存储查询：优先使用直接 API 调用（更稳定）
+      // 同步数据查询：直接使用 instance API 查询同步表和Neo4j
+      // 注意：不使用 OntologyQuery，因为 OntologyQuery 会通过 QueryService 查询原始表
+      // 同步数据查询应该只查询同步表（表名 = 模型名，在默认数据库中）和Neo4j
       setFromMapping(false);
       try {
         // 先尝试使用较大的 limit
@@ -266,39 +275,13 @@ export default function InstanceList() {
           setLoading(false);
           setLoadingStats(false);
         } catch (apiError2) {
-          console.warn('Direct API call with smaller limit failed, trying OntologyQuery:', apiError2);
-          // 最后尝试使用 OntologyQuery
-          try {
-            const selectFields: string[] = ['id'];
-            if (objectTypeData.properties) {
-              objectTypeData.properties.forEach(prop => {
-                selectFields.push(prop.name);
-              });
-            }
-            
-            const queryRequest: QueryRequest = {
-              object: objectType,
-              select: selectFields,
-              limit: 1000, // 使用较小的 limit
-              offset: 0,
-            };
-            
-            const queryResult = await queryApi.execute(queryRequest);
-            const instances: Instance[] = queryResult.rows.map((row: Record<string, any>) => ({
-              id: row.id || '',
-              ...row,
-            }));
-            
-            setAllInstances(instances);
-            setLoading(false);
-            setLoadingStats(false);
-          } catch (queryError) {
-            console.error('All methods failed to load data for statistics:', queryError);
-            setAllInstances([]);
-            setLoading(false);
-            setLoadingStats(false);
-            showToast('加载统计数据失败，请稍后重试', 'error');
-          }
+          // 如果同步表不存在或查询失败，直接返回空数据
+          // 严格查询界限：不查询原始表，因为这是同步数据查询模式
+          console.warn('同步表查询失败（表可能不存在），返回空数据:', apiError2);
+          setAllInstances([]);
+          setLoading(false);
+          setLoadingStats(false);
+          // 不显示错误提示，因为同步表不存在是正常情况
         }
       }
     } catch (error) {
@@ -319,14 +302,36 @@ export default function InstanceList() {
       const objectTypeData = await schemaApi.getObjectType(objectType);
       setObjectTypeDef(objectTypeData);
       
-      // 根据查询模式决定使用哪种查询方式
-      // 映射数据查询：使用 mappingId 从数据库实时查询
+      // ========== 查询界限严格区分 ==========
+      // 1. 原始数据查询：查询根据mapping映射的原始表（不查询同步表）
+      // 2. 同步数据查询：查询同步表和Neo4j数据（不查询原始表）
+      
+      // 原始数据查询：使用 mappingId 从原始表实时查询
       if (queryMode === 'mapping' && availableMappings.length > 0) {
+        console.log('[InstanceList] ========== 原始数据查询 (ORIGINAL DATA QUERY) ==========');
+        console.log('[InstanceList] Query mode: 原始数据 (ORIGINAL DATA)');
+        console.log('[InstanceList] objectType:', objectType, 'queryMode:', queryMode);
+        console.log('[InstanceList] 数据源: 原始表 (ORIGINAL TABLE) - 根据mapping映射的原始表');
+        console.log('[InstanceList] 严格查询界限: 只查询原始表，不查询同步表');
+        
         // 优先使用URL中的mappingId，否则使用第一个可用的mapping
         const targetMappingId = mappingId || availableMappings[0]?.id;
         if (targetMappingId) {
-          // 使用 mappingId 查询数据库（通过 MappedDataService）
-          const instancesData = await instanceApi.listWithMapping(objectType, targetMappingId, offset, limit);
+          console.log('[InstanceList] 使用 mappingId:', targetMappingId, '查询原始表');
+          
+          // 使用 mappingId 查询原始表（通过 MappedDataService.queryMappedInstances）
+          // 严格查询界限：只查询原始表，不查询同步表
+          const instancesData = await instanceApi.listWithMapping(
+            objectType, 
+            targetMappingId, 
+            appliedOffset !== undefined ? appliedOffset : offset, 
+            appliedLimit || limit
+          );
+          
+          console.log('[InstanceList] 原始数据查询结果: itemsCount=', instancesData.items.length, 'total=', instancesData.total);
+          console.log('[InstanceList] 数据源确认: 原始表 (ORIGINAL TABLE)');
+          console.log('[InstanceList] ========== 原始数据查询结束 ==========');
+          
           setInstances(instancesData.items);
           setTotal(instancesData.total);
           setFromMapping(true);
@@ -334,7 +339,13 @@ export default function InstanceList() {
         }
       }
       
-      // 实例存储查询：使用 instance 从本地存储查询（OntologyQuery 或直接 API）
+      // 同步数据查询：查询同步表和Neo4j数据
+      console.log('[InstanceList] ========== 同步数据查询 (SYNC DATA QUERY) ==========');
+      console.log('[InstanceList] Query mode: 同步数据 (SYNC DATA)');
+      console.log('[InstanceList] objectType:', objectType, 'queryMode:', queryMode);
+      console.log('[InstanceList] 数据源: 同步表 (SYNC TABLE) + NEO4J (图数据库)');
+      console.log('[InstanceList] 严格查询界限: 只查询同步表和Neo4j，不查询原始表');
+      
       setFromMapping(false);
       
       // 构建筛选条件
@@ -345,82 +356,26 @@ export default function InstanceList() {
         }
       });
       
-      // 优先使用 OntologyQuery，如果失败则回退到直接 API 调用
-      try {
-        // 构建 ontology query：查询当前 object type 的所有实例
-        const selectFields: string[] = ['id']; // 首先添加 id 字段（查询系统会自动映射 id_column 为 id）
-        
-        // 添加选中的属性字段（如果未选择任何字段，则选择所有字段）
-        if (objectTypeData.properties) {
-          if (appliedSelectedFields.size > 0) {
-            // 只选择已选中的字段
-            objectTypeData.properties.forEach(prop => {
-              if (appliedSelectedFields.has(prop.name)) {
-                selectFields.push(prop.name);
-              }
-            });
-          } else {
-            // 如果没有选择任何字段，默认选择所有字段
-            objectTypeData.properties.forEach(prop => {
-              selectFields.push(prop.name);
-            });
-          }
-        }
-        
-        // 构建过滤条件（转换为 OntologyQuery 格式）
-        const queryFilters: FilterExpression[] = [];
-        Object.entries(filterParams).forEach(([key, value]) => {
-          queryFilters.push(['=' as const, key, value]);
-        });
-        
-        // 合并查询配置中的过滤条件（使用应用的配置）
-        const allFilters: FilterExpression[] = [...queryFilters, ...appliedFilterExpressions.filter(expr => {
-          // 只保留有效的过滤表达式（有字段和值）
-          const field = expr[1] as string;
-          const value = expr[2];
-          return field && value !== undefined && value !== null && value !== '';
-        })];
-        
-        const queryRequest: QueryRequest = {
-          object: objectType,
-          select: selectFields,
-          limit: appliedLimit || limit,
-          offset: appliedOffset !== undefined ? appliedOffset : offset,
-          ...(allFilters.length > 0 && { filter: allFilters }),
-          ...(appliedOrderBy.length > 0 && { orderBy: appliedOrderBy }),
-        };
-        
-        // 执行 ontology query
-        const queryResult = await queryApi.execute(queryRequest);
-        
-        // 将查询结果转换为实例列表格式
-        const instances: Instance[] = queryResult.rows.map((row: Record<string, any>) => {
-          const instance: Instance = {
-            id: row.id || '',
-            ...row,
-          };
-          return instance;
-        });
-        
-        setInstances(instances);
-        setTotal(queryResult.rowCount || instances.length);
-        return;
-      } catch (queryError) {
-        console.warn('OntologyQuery failed, falling back to direct API:', queryError);
-      }
-      
-      // 回退到直接 API 调用（支持筛选）
-      // 注意：直接 API 调用不支持 links 和 orderBy，所以只在 OntologyQuery 失败时使用
+      // 直接使用 instance API 调用，查询同步表和Neo4j
+      // 严格查询界限：
+      // 1. 只查询同步表（表名 = 模型名，在默认数据库中）和Neo4j
+      // 2. 不查询原始表（原始表查询应该通过 listWithMapping 进行）
+      // 这会通过 InstanceService -> HybridInstanceStorage -> RelationalInstanceStorage 查询同步表
       const instancesData = await instanceApi.list(
         objectType, 
         appliedOffset !== undefined ? appliedOffset : offset, 
         appliedLimit || limit, 
         Object.keys(filterParams).length > 0 ? filterParams : undefined
       );
+      
+      console.log('[InstanceList] 同步数据查询结果: itemsCount=', instancesData.items.length, 'total=', instancesData.total);
+      console.log('[InstanceList] 数据源确认: 同步表 (SYNC TABLE) 或 NEO4J');
+      console.log('[InstanceList] ========== 同步数据查询结束 ==========');
+      
       setInstances(instancesData.items);
       setTotal(instancesData.total);
     } catch (error) {
-      console.error('Failed to load data:', error);
+      console.error('[InstanceList] Failed to load data:', error);
     } finally {
       setLoading(false);
     }
@@ -655,12 +610,12 @@ export default function InstanceList() {
               )}
             {queryMode === 'mapping' && fromMapping && (
               <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-lg text-sm font-medium">
-                实例存储查询
+                原始数据查询
               </span>
             )}
             {queryMode === 'storage' && !fromMapping && (
               <span className="px-3 py-1 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium">
-                映射数据查询
+                同步数据查询
               </span>
             )}
             </div>
@@ -669,12 +624,12 @@ export default function InstanceList() {
             )}
             {queryMode === 'mapping' && fromMapping && (
               <p className="text-sm text-gray-500 mt-1">
-                数据来自本地实例存储
+                数据来源：原始表（根据mapping映射的原始表，不查询同步表）
               </p>
             )}
             {queryMode === 'storage' && !fromMapping && (
               <p className="text-sm text-gray-500 mt-1">
-               数据来自数据库映射，实时查询 
+                数据来源：同步表（表名=模型名，在默认数据库中）和Neo4j（不查询原始表）
               </p>
             )}
           </div>
@@ -695,14 +650,14 @@ export default function InstanceList() {
               onChange={(val) => {
                 const mode = val as 'mapping' | 'storage';
                 if (mode === 'storage') {
-                  // 切换到实例存储查询模式
+                  // 切换到同步数据查询模式
                   setQueryMode('storage');
                   setOffset(0);
                   const newParams = new URLSearchParams(searchParams);
                   newParams.delete('mappingId');
                   navigate(`/instances/${objectType}${newParams.toString() ? '?' + newParams.toString() : ''}`, { replace: true });
                 } else {
-                  // 切换到映射数据查询模式
+                  // 切换到原始数据查询模式
                   setQueryMode('mapping');
                   setOffset(0);
                   const newParams = new URLSearchParams(searchParams);
@@ -714,8 +669,18 @@ export default function InstanceList() {
                 }
               }}
               options={[
-                { value: 'storage', label: '映射数据', icon: CircleStackIcon, title: '映射数据查询：使用 mappingId 从数据库实时查询' },
-                { value: 'mapping', label: '实例存储', icon: ServerIcon, title: '实例存储查询：使用 instance 从本地存储查询' },
+                { 
+                  value: 'mapping', 
+                  label: '原始数据', 
+                  icon: CircleStackIcon, 
+                  title: '原始数据查询：查询根据mapping映射的原始表（不查询同步表）' 
+                },
+                { 
+                  value: 'storage', 
+                  label: '同步数据', 
+                  icon: ServerIcon, 
+                  title: '同步数据查询：查询同步表（表名=模型名）和Neo4j（不查询原始表）' 
+                },
               ]}
               activeClassName="bg-indigo-600 text-white"
             />

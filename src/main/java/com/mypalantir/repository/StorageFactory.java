@@ -83,6 +83,7 @@ public class StorageFactory {
                 throw new IllegalStateException(errorMsg.toString());
             }
             logger.info("Using Hybrid instance storage (Relational DB + Neo4j)");
+            logger.info("[StorageFactory] DATA SOURCE ANALYSIS: Selected HybridInstanceStorage as primary storage - will query sync table first, then Neo4j if needed");
             return hybridStorage;
         } else if ("neo4j".equalsIgnoreCase(storageType)) {
             if (neo4jDriver == null) {
@@ -127,13 +128,15 @@ public class StorageFactory {
         String storageType = config.getStorageType();
         logger.info("Initializing link storage with type: {}", storageType);
         
-        if ("neo4j".equalsIgnoreCase(storageType)) {
+        // hybrid模式和neo4j模式都使用Neo4j存储links
+        // hybrid模式：实例详细数据存储在关系型数据库，links和关键字段存储在Neo4j
+        if ("neo4j".equalsIgnoreCase(storageType) || "hybrid".equalsIgnoreCase(storageType)) {
             if (neo4jDriver == null) {
                 String uri = config.getNeo4jUri();
                 String user = config.getNeo4jUser();
                 String password = config.getNeo4jPassword();
                 
-                StringBuilder errorMsg = new StringBuilder("Neo4j storage is configured but Neo4j driver is not available.\n");
+                StringBuilder errorMsg = new StringBuilder("Storage type '").append(storageType).append("' requires Neo4j but driver is not available.\n");
                 errorMsg.append("Please configure Neo4j in one of the following ways:\n");
                 errorMsg.append("1. Set environment variables:\n");
                 errorMsg.append("   - NEO4J_URI=bolt://localhost:7687\n");
@@ -155,7 +158,12 @@ public class StorageFactory {
                 logger.error(errorMsg.toString());
                 throw new IllegalStateException(errorMsg.toString());
             }
-            logger.info("Using Neo4j link storage");
+            
+            if ("hybrid".equalsIgnoreCase(storageType)) {
+                logger.info("Using Neo4j link storage (hybrid mode: links stored in Neo4j, NOT in file storage)");
+            } else {
+                logger.info("Using Neo4j link storage");
+            }
             return neo4jStorage;
         } else {
             logger.info("Using file link storage");

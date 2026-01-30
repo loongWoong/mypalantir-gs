@@ -7,6 +7,7 @@ import org.neo4j.driver.Values;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import jakarta.annotation.PostConstruct;
 
 import java.io.IOException;
 import java.time.Instant;
@@ -21,6 +22,25 @@ public class Neo4jInstanceStorage implements IInstanceStorage {
 
     @Autowired(required = false)
     private Driver neo4jDriver;
+
+    @PostConstruct
+    public void init() {
+        logger.info("========== Neo4jInstanceStorage 初始化 ==========");
+        if (neo4jDriver != null) {
+            logger.info("Neo4j Driver 已注入，连接状态: 可用");
+            try {
+                // 尝试获取连接信息
+                neo4jDriver.verifyConnectivity();
+                logger.info("Neo4j 连接验证成功");
+            } catch (Exception e) {
+                logger.warn("Neo4j 连接验证失败: {}", e.getMessage());
+            }
+        } else {
+            logger.warn("Neo4j Driver 未注入，Neo4jInstanceStorage 将无法使用");
+            logger.warn("请检查 Neo4j 配置是否正确");
+        }
+        logger.info("===============================================");
+    }
 
     @Override
     public String createInstance(String objectType, Map<String, Object> data) throws IOException {
@@ -240,7 +260,11 @@ public class Neo4jInstanceStorage implements IInstanceStorage {
 
     @Override
     public InstanceStorage.ListResult listInstances(String objectType, int offset, int limit) throws IOException {
+        logger.info("[Neo4jInstanceStorage] listInstances called: objectType={}, offset={}, limit={}, driverNull={}", 
+            objectType, offset, limit, neo4jDriver == null);
+        
         if (neo4jDriver == null) {
+            logger.error("[Neo4jInstanceStorage] Neo4j driver is not initialized - cannot query Neo4j");
             throw new IOException("Neo4j driver is not initialized");
         }
 
@@ -301,6 +325,7 @@ public class Neo4jInstanceStorage implements IInstanceStorage {
                 // #endregion
 
                 long total = session.run(countCypher).single().get("total").asLong();
+                logger.info("[Neo4jInstanceStorage] Neo4j count query result: objectType={}, total={}", objectType, total);
                 
                 // #region agent log
                 try {
@@ -323,6 +348,17 @@ public class Neo4jInstanceStorage implements IInstanceStorage {
                         instance.put(key, convertValue(value));
                     });
                     instances.add(instance);
+                }
+                
+                logger.info("[Neo4jInstanceStorage] Neo4j query result: objectType={}, instancesRetrieved={}, total={}", 
+                    objectType, instances.size(), total);
+                
+                // 详细分析返回的数据
+                if (instances.isEmpty()) {
+                    logger.info("[Neo4jInstanceStorage] DATA SOURCE ANALYSIS: Neo4j returned EMPTY result for objectType={} - no data in Neo4j", objectType);
+                } else {
+                    logger.warn("[Neo4jInstanceStorage] DATA SOURCE ANALYSIS: Neo4j returned {} instances for objectType={} - DATA EXISTS in Neo4j, first instance id={}", 
+                        instances.size(), objectType, instances.isEmpty() ? "N/A" : instances.get(0).get("id"));
                 }
                 
                 // #region agent log

@@ -9,6 +9,7 @@ import org.neo4j.driver.Values;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.env.Environment;
 
 import java.io.IOException;
 import java.time.Instant;
@@ -26,6 +27,15 @@ public class Neo4jLinkStorage implements ILinkStorage {
 
     @Autowired(required = false)
     private Loader loader;
+
+    @Autowired(required = false)
+    private IInstanceStorage instanceStorage; // 用于查询节点数据（在hybrid模式下会查询同步表）
+
+    @Autowired(required = false)
+    private Neo4jInstanceStorage neo4jInstanceStorage; // 用于创建节点到Neo4j
+
+    @Autowired(required = false)
+    private Environment environment; // 用于读取Neo4j字段配置
 
     /**
      * 验证并重试连接（如果连接失败）
@@ -60,6 +70,9 @@ public class Neo4jLinkStorage implements ILinkStorage {
 
     @Override
     public String createLink(String linkType, String sourceID, String targetID, Map<String, Object> properties) throws IOException {
+        logger.debug("[Neo4jLinkStorage] Creating link: linkType={}, sourceID={}, targetID={}", linkType, sourceID, targetID);
+        logger.debug("[Neo4jLinkStorage] Storage mode: NEO4J (links stored in Neo4j, NOT in file storage)");
+        
         if (neo4jDriver == null) {
             throw new IOException("Neo4j driver is not initialized");
         }
@@ -72,27 +85,40 @@ public class Neo4jLinkStorage implements ILinkStorage {
 
         try (Session session = neo4jDriver.session()) {
             // 优先使用 linkType 定义中的类型，如果 loader 不可用则回退到查询节点标签
+            String sourceType;
+            String targetType;
             String sourceLabel;
             String targetLabel;
             
             if (loader != null) {
                 try {
                     LinkType linkTypeDef = loader.getLinkType(linkType);
-                    sourceLabel = normalizeLabel(linkTypeDef.getSourceType());
-                    targetLabel = normalizeLabel(linkTypeDef.getTargetType());
+                    sourceType = linkTypeDef.getSourceType();
+                    targetType = linkTypeDef.getTargetType();
+                    sourceLabel = normalizeLabel(sourceType);
+                    targetLabel = normalizeLabel(targetType);
                     logger.debug("Using linkType definition: source={}, target={}", sourceLabel, targetLabel);
                 } catch (Loader.NotFoundException e) {
                     // 如果找不到 linkType 定义，回退到查询节点标签
                     logger.warn("LinkType '{}' not found, falling back to querying node labels", linkType);
                     sourceLabel = getNodeLabel(session, sourceID);
                     targetLabel = getNodeLabel(session, targetID);
+                    sourceType = null;
+                    targetType = null;
                 }
             } else {
                 // 如果 loader 不可用，回退到查询节点标签
                 logger.warn("Loader not available, falling back to querying node labels");
                 sourceLabel = getNodeLabel(session, sourceID);
                 targetLabel = getNodeLabel(session, targetID);
+                sourceType = null;
+                targetType = null;
             }
+            
+            // 确保源节点和目标节点在Neo4j中存在
+            // 如果节点不存在，从同步表查询并创建到Neo4j
+            ensureNodeExists(session, sourceID, sourceType, sourceLabel);
+            ensureNodeExists(session, targetID, targetType, targetLabel);
             
             String relType = normalizeRelType(linkType);
             
@@ -136,6 +162,9 @@ public class Neo4jLinkStorage implements ILinkStorage {
 
     @Override
     public Map<String, Object> getLink(String linkType, String id) throws IOException {
+        logger.debug("[Neo4jLinkStorage] Getting link: linkType={}, id={}", linkType, id);
+        logger.debug("[Neo4jLinkStorage] Storage mode: NEO4J (reading from Neo4j, NOT from file storage)");
+        
         if (neo4jDriver == null) {
             throw new IOException("Neo4j driver is not initialized");
         }
@@ -342,6 +371,9 @@ public class Neo4jLinkStorage implements ILinkStorage {
 
     @Override
     public InstanceStorage.ListResult listLinks(String linkType, int offset, int limit) throws IOException {
+        logger.debug("[Neo4jLinkStorage] Listing links: linkType={}, offset={}, limit={}", linkType, offset, limit);
+        logger.debug("[Neo4jLinkStorage] Storage mode: NEO4J (reading from Neo4j, NOT from file storage)");
+        
         if (neo4jDriver == null) {
             throw new IOException("Neo4j driver is not initialized");
         }
@@ -418,6 +450,174 @@ public class Neo4jLinkStorage implements ILinkStorage {
         
         // 返回第一个标签
         return labels.get(0).toString();
+    }
+
+    /**
+     * 检查节点是否在Neo4j中存在，如果不存在则从同步表查询并创建
+     * 
+     * @param session Neo4j会话
+     * @param nodeId 节点ID
+     * @param objectType 对象类型（如果已知）
+     * @param label 节点标签（如果已知）
+     */
+    private void ensureNodeExists(Session session, String nodeId, String objectType, String label) throws IOException {
+        // 检查节点是否已存在
+        String checkCypher = "MATCH (n {id: $id}) RETURN n.id AS id";
+        var checkResult = session.run(checkCypher, Values.parameters("id", nodeId));
+        var checkRecords = checkResult.list();
+        
+        if (!checkRecords.isEmpty()) {
+            // 节点已存在，无需创建
+            logger.debug("[Neo4jLinkStorage] Node {} already exists in Neo4j", nodeId);
+            return;
+        }
+        
+        // 节点不存在，需要从同步表查询并创建
+        logger.info("[Neo4jLinkStorage] Node {} not found in Neo4j, querying from sync table to create", nodeId);
+        
+        if (instanceStorage == null || neo4jInstanceStorage == null) {
+            logger.warn("[Neo4jLinkStorage] instanceStorage or neo4jInstanceStorage not available, cannot create missing node");
+            throw new IOException("Node with id '" + nodeId + "' not found in Neo4j and cannot create from sync table (instanceStorage not available)");
+        }
+        
+        // 如果objectType未知，尝试从Neo4j查询标签（如果节点存在但查询失败，说明节点真的不存在）
+        if (objectType == null || objectType.isEmpty()) {
+            logger.warn("[Neo4jLinkStorage] Object type unknown for node {}, cannot query from sync table", nodeId);
+            throw new IOException("Node with id '" + nodeId + "' not found in Neo4j and object type is unknown");
+        }
+        
+        try {
+            // 从instanceStorage查询节点数据（在hybrid模式下会查询同步表）
+            logger.info("[Neo4jLinkStorage] Querying node {} of type {} from sync table (via instanceStorage)", nodeId, objectType);
+            Map<String, Object> instanceData = instanceStorage.getInstance(objectType, nodeId);
+            
+            // 提取关键字段用于Neo4j存储
+            // 使用配置的字段列表（与HybridInstanceStorage保持一致）
+            List<String> neo4jFields = getNeo4jFields(objectType);
+            Map<String, Object> summaryFields = new HashMap<>();
+            
+            // 提取配置的字段
+            for (String field : neo4jFields) {
+                if (instanceData.containsKey(field)) {
+                    summaryFields.put(field, instanceData.get(field));
+                }
+            }
+            
+            // 确保id字段存在
+            if (!summaryFields.containsKey("id")) {
+                summaryFields.put("id", instanceData.get("id"));
+            }
+            
+            logger.debug("[Neo4jLinkStorage] Extracted {} key fields for Neo4j storage: {}", 
+                summaryFields.size(), summaryFields.keySet());
+            
+            // 使用Neo4jInstanceStorage创建节点到Neo4j
+            logger.info("[Neo4jLinkStorage] Creating node {} of type {} in Neo4j with key fields from sync table", nodeId, objectType);
+            try {
+                neo4jInstanceStorage.createInstanceWithId(objectType, nodeId, summaryFields);
+                logger.info("[Neo4jLinkStorage] Successfully created node {} of type {} in Neo4j from sync table", nodeId, objectType);
+            } catch (IOException e) {
+                // 如果节点已存在（可能在其他地方已经创建），忽略异常
+                if (e.getMessage() != null && e.getMessage().contains("already exists")) {
+                    logger.debug("[Neo4jLinkStorage] Node {} of type {} already exists in Neo4j (created elsewhere), continuing", nodeId, objectType);
+                } else {
+                    // 其他异常重新抛出
+                    logger.error("[Neo4jLinkStorage] Failed to create node {} of type {} in Neo4j: {}", 
+                        nodeId, objectType, e.getMessage());
+                    throw e;
+                }
+            }
+            
+        } catch (IOException e) {
+            logger.error("[Neo4jLinkStorage] Failed to query or create node {} of type {} from sync table: {}", 
+                nodeId, objectType, e.getMessage());
+            throw new IOException("Node with id '" + nodeId + "' not found in Neo4j and failed to create from sync table: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 获取需要存储在Neo4j的字段列表
+     * 优先级：
+     * 1. 从配置文件读取 storage.neo4j.fields.{objectType}
+     * 2. 从配置文件读取 storage.neo4j.fields.default
+     * 3. 从ObjectType定义中查找（name, display_name）
+     * 4. 使用默认字段：id, name, display_name
+     */
+    private List<String> getNeo4jFields(String objectType) {
+        // 1. 优先从配置文件读取指定对象类型的字段
+        if (environment != null) {
+            String configKey = "storage.neo4j.fields." + objectType.toLowerCase();
+            String fieldsConfig = environment.getProperty(configKey);
+            
+            if (fieldsConfig != null && !fieldsConfig.trim().isEmpty()) {
+                List<String> fields = new ArrayList<>();
+                String[] fieldArray = fieldsConfig.split(",");
+                for (String field : fieldArray) {
+                    String trimmed = field.trim();
+                    if (!trimmed.isEmpty()) {
+                        fields.add(trimmed);
+                    }
+                }
+                if (!fields.isEmpty()) {
+                    logger.debug("[Neo4jLinkStorage] Using configured Neo4j fields for {}: {}", objectType, fields);
+                    return fields;
+                }
+            }
+            
+            // 2. 尝试读取默认配置
+            String defaultFieldsConfig = environment.getProperty("storage.neo4j.fields.default");
+            if (defaultFieldsConfig != null && !defaultFieldsConfig.trim().isEmpty()) {
+                List<String> fields = new ArrayList<>();
+                String[] fieldArray = defaultFieldsConfig.split(",");
+                for (String field : fieldArray) {
+                    String trimmed = field.trim();
+                    if (!trimmed.isEmpty()) {
+                        fields.add(trimmed);
+                    }
+                }
+                if (!fields.isEmpty()) {
+                    logger.debug("[Neo4jLinkStorage] Using default Neo4j fields for {}: {}", objectType, fields);
+                    return fields;
+                }
+            }
+        }
+        
+        // 3. 从ObjectType定义中查找（兼容旧逻辑）
+        if (loader != null) {
+            try {
+                com.mypalantir.meta.ObjectType objectTypeDef = loader.getObjectType(objectType);
+                List<String> fields = new ArrayList<>();
+                
+                // id必须包含
+                fields.add("id");
+                
+                // 从属性定义中查找标记为neo4j_field的字段
+                if (objectTypeDef.getProperties() != null) {
+                    for (com.mypalantir.meta.Property prop : objectTypeDef.getProperties()) {
+                        String propName = prop.getName();
+                        if ("name".equals(propName) || "display_name".equals(propName)) {
+                            fields.add(propName);
+                        }
+                    }
+                }
+                
+                // 如果没有找到，使用默认字段
+                if (fields.size() == 1) { // 只有id
+                    fields.add("name");
+                    fields.add("display_name");
+                }
+                
+                logger.debug("[Neo4jLinkStorage] Using ObjectType-based Neo4j fields for {}: {}", objectType, fields);
+                return fields;
+            } catch (com.mypalantir.meta.Loader.NotFoundException e) {
+                // 4. 如果找不到对象类型定义，返回默认字段
+                logger.debug("[Neo4jLinkStorage] ObjectType not found for {}, using default fields", objectType);
+                return Arrays.asList("id", "name", "display_name");
+            }
+        }
+        
+        // 4. 如果找不到对象类型定义，返回默认字段
+        return Arrays.asList("id", "name", "display_name");
     }
 
     /**

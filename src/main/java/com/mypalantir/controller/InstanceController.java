@@ -9,7 +9,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.HashMap;
@@ -19,6 +20,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/v1/instances")
 public class InstanceController {
+    private static final Logger logger = LoggerFactory.getLogger(InstanceController.class);
     private final InstanceService instanceService;
 
     @Autowired
@@ -97,9 +99,23 @@ public class InstanceController {
             @RequestParam(required = false) String mappingId,
             @RequestParam Map<String, String> allParams) {
         try {
-            // 如果指定了mappingId，使用映射数据查询
+            // ========== 查询界限严格区分 ==========
+            // 1. 映射数据查询（原始数据）：查询根据mapping映射的原始表
+            // 2. 实例存储查询（同步数据）：查询同步表和Neo4j数据
+            
+            // 如果指定了mappingId，使用映射数据查询（原始表）
             if (mappingId != null && !mappingId.isEmpty()) {
+                logger.info("[InstanceController] ========== MAPPED DATA QUERY (原始数据) ==========");
+                logger.info("[InstanceController] Query mode: MAPPED_DATA (原始表查询)");
+                logger.info("[InstanceController] objectType={}, mappingId={}, offset={}, limit={}", 
+                    objectType, mappingId, offset, limit);
+                logger.info("[InstanceController] Data source: ORIGINAL TABLE (根据mapping映射的原始表)");
+                
                 InstanceStorage.ListResult result = mappedDataService.queryMappedInstances(objectType, mappingId, offset, limit);
+                
+                logger.info("[InstanceController] Mapped data query result: objectType={}, itemsCount={}, total={}, dataSource=ORIGINAL_TABLE", 
+                    objectType, result.getItems().size(), result.getTotal());
+                logger.info("[InstanceController] ========== MAPPED DATA QUERY END ==========");
                 
                 Map<String, Object> response = new HashMap<>();
                 response.put("items", result.getItems());
@@ -107,11 +123,15 @@ public class InstanceController {
                 response.put("offset", offset);
                 response.put("limit", limit);
                 response.put("from_mapping", true);
+                response.put("query_mode", "mapped_data"); // 明确标识查询模式
 
                 return ResponseEntity.ok(ApiResponse.success(response));
             }
 
-            // 否则使用常规查询
+            // 否则使用实例存储查询（同步表+Neo4j）
+            logger.info("[InstanceController] ========== INSTANCE STORAGE QUERY (同步数据) ==========");
+            logger.info("[InstanceController] Query mode: INSTANCE_STORAGE (同步表和Neo4j查询)");
+            
             // 提取过滤参数
             Map<String, Object> filters = new HashMap<>();
             for (Map.Entry<String, String> entry : allParams.entrySet()) {
@@ -121,13 +141,31 @@ public class InstanceController {
                 }
             }
 
+            logger.info("[InstanceController] objectType={}, offset={}, limit={}, filters={}, mappingId=null", 
+                objectType, offset, limit, filters);
+            logger.info("[InstanceController] Data source: SYNC TABLE (同步表) + NEO4J (图数据库)");
+            
             InstanceStorage.ListResult result = instanceService.listInstances(objectType, offset, limit, filters);
+            
+            logger.info("[InstanceController] Instance storage query result: objectType={}, itemsCount={}, total={}, dataSource=SYNC_TABLE_OR_NEO4J", 
+                objectType, result.getItems().size(), result.getTotal());
+            
+            // 详细记录返回的数据来源分析
+            if (result.getItems().isEmpty()) {
+                logger.info("[InstanceController] Query returned empty result - sync table and Neo4j both have no data for objectType={}", objectType);
+            } else {
+                logger.info("[InstanceController] Query returned {} instances for objectType={} - data from SYNC TABLE or NEO4J", 
+                    result.getItems().size(), objectType);
+            }
+            logger.info("[InstanceController] ========== INSTANCE STORAGE QUERY END ==========");
             
             Map<String, Object> response = new HashMap<>();
             response.put("items", result.getItems());
             response.put("total", result.getTotal());
             response.put("offset", offset);
             response.put("limit", limit);
+            response.put("from_mapping", false);
+            response.put("query_mode", "instance_storage"); // 明确标识查询模式
 
             return ResponseEntity.ok(ApiResponse.success(response));
         } catch (Loader.NotFoundException e) {

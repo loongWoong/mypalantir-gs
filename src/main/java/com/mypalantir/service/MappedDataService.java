@@ -30,7 +30,23 @@ public class MappedDataService {
     @Autowired
     private Loader loader;
 
+    /**
+     * 查询映射数据（原始数据）
+     * 严格查询界限：只查询根据mapping映射的原始表，不查询同步表
+     * 
+     * @param objectType 对象类型
+     * @param mappingId 映射ID
+     * @param offset 偏移量
+     * @param limit 限制数量
+     * @return 查询结果
+     */
     public com.mypalantir.repository.InstanceStorage.ListResult queryMappedInstances(String objectType, String mappingId, int offset, int limit) throws IOException, SQLException, Loader.NotFoundException {
+        logger.info("[MappedDataService] ========== MAPPED DATA QUERY (原始数据查询) ==========");
+        logger.info("[MappedDataService] Query mode: MAPPED_DATA (原始表查询)");
+        logger.info("[MappedDataService] objectType={}, mappingId={}, offset={}, limit={}", 
+            objectType, mappingId, offset, limit);
+        logger.info("[MappedDataService] Data source: ORIGINAL TABLE (根据mapping映射的原始表，不查询同步表)");
+        
         // 获取映射关系
         Map<String, Object> mapping = mappingService.getMapping(mappingId);
         String tableId = (String) mapping.get("table_id");
@@ -42,15 +58,19 @@ public class MappedDataService {
         // 获取数据库ID
         String databaseId = (String) table.get("database_id");
         
+        logger.info("[MappedDataService] Original table: tableName={}, databaseId={}", tableName, databaseId);
+        
         // 获取列到属性的映射
         @SuppressWarnings("unchecked")
         Map<String, String> columnPropertyMappings = (Map<String, String>) mapping.get("column_property_mappings");
         
-        // 构建查询SQL
+        // 构建查询SQL（查询原始表）
         String sql = buildSelectQuery(tableName, columnPropertyMappings, offset, limit);
+        logger.info("[MappedDataService] Executing SQL on ORIGINAL TABLE: {}", sql);
         
-        // 执行查询
+        // 执行查询（只查询原始表，不查询同步表）
         List<Map<String, Object>> dbRows = databaseMetadataService.executeQuery(sql, databaseId);
+        logger.info("[MappedDataService] Retrieved {} rows from ORIGINAL TABLE", dbRows.size());
         
         // 转换为实例对象
         List<Map<String, Object>> instances = new ArrayList<>();
@@ -83,10 +103,15 @@ public class MappedDataService {
             instances.add(instance);
         }
         
-        // 获取总数（需要执行COUNT查询）
+        // 获取总数（需要执行COUNT查询，查询原始表）
         String countSql = "SELECT COUNT(*) as total FROM `" + tableName + "`";
+        logger.info("[MappedDataService] Executing COUNT SQL on ORIGINAL TABLE: {}", countSql);
         List<Map<String, Object>> countResult = databaseMetadataService.executeQuery(countSql, databaseId);
         long total = countResult.isEmpty() ? 0 : ((Number) countResult.get(0).get("total")).longValue();
+        
+        logger.info("[MappedDataService] Mapped data query result: objectType={}, itemsCount={}, total={}, dataSource=ORIGINAL_TABLE", 
+            objectType, instances.size(), total);
+        logger.info("[MappedDataService] ========== MAPPED DATA QUERY END ==========");
         
         return new com.mypalantir.repository.InstanceStorage.ListResult(instances, total);
     }

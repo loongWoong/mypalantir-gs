@@ -3,6 +3,7 @@ package com.mypalantir.service;
 import com.mypalantir.config.DatabaseConfig;
 import com.mypalantir.repository.IInstanceStorage;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -18,7 +19,15 @@ public class DatabaseMetadataService {
     private DatabaseConfig.DatabaseConnectionManager connectionManager;
 
     @Autowired
+    @Lazy
     private IInstanceStorage instanceStorage;
+
+    @Autowired
+    @Lazy
+    private com.mypalantir.repository.Neo4jInstanceStorage neo4jInstanceStorage;
+
+    // 线程本地变量，用于防止递归调用
+    private static final ThreadLocal<Boolean> isGettingDatabaseInstance = ThreadLocal.withInitial(() -> false);
 
     public List<Map<String, Object>> getTables(String databaseId) throws SQLException, IOException {
         List<Map<String, Object>> tables = new ArrayList<>();
@@ -161,7 +170,20 @@ public class DatabaseMetadataService {
         }
 
         // 获取数据库实例信息
-        Map<String, Object> database = instanceStorage.getInstance("database", databaseId);
+        // 注意：直接使用 Neo4jInstanceStorage 避免循环调用
+        // 因为 HybridInstanceStorage.hasRelationalMapping() 会调用 tableExists()，而 tableExists() 又会调用这里
+        // 使用线程本地变量防止递归调用
+        if (isGettingDatabaseInstance.get()) {
+            throw new IOException("Recursive call detected while getting database instance: " + databaseId);
+        }
+        Map<String, Object> database;
+        try {
+            isGettingDatabaseInstance.set(true);
+            database = neo4jInstanceStorage.getInstance("database", databaseId);
+        } finally {
+            isGettingDatabaseInstance.set(false);
+        }
+        
         String host = (String) database.get("host");
         Integer port = database.get("port") instanceof Number 
             ? ((Number) database.get("port")).intValue() 
@@ -185,11 +207,22 @@ public class DatabaseMetadataService {
 
     private String getDatabaseName(String databaseId) throws IOException {
         if (databaseId == null || databaseId.isEmpty()) {
+            // 使用默认数据库配置（从 application.properties 读取）
             return connectionManager.getConfig().getDbName();
         }
         
-        Map<String, Object> database = instanceStorage.getInstance("database", databaseId);
-        return (String) database.get("database_name");
+        // 注意：直接使用 Neo4jInstanceStorage 避免循环调用
+        // 使用线程本地变量防止递归调用
+        if (isGettingDatabaseInstance.get()) {
+            throw new IOException("Recursive call detected while getting database name: " + databaseId);
+        }
+        try {
+            isGettingDatabaseInstance.set(true);
+            Map<String, Object> database = neo4jInstanceStorage.getInstance("database", databaseId);
+            return (String) database.get("database_name");
+        } finally {
+            isGettingDatabaseInstance.set(false);
+        }
     }
 
     /**
@@ -208,16 +241,64 @@ public class DatabaseMetadataService {
 
     /**
      * 检查表是否存在
+     * 使用 SQL 查询 INFORMATION_SCHEMA 来检查表是否存在，这比 DatabaseMetaData.getTables 更可靠
      */
     public boolean tableExists(String databaseId, String tableName) throws SQLException, IOException {
         Connection conn = getConnectionForDatabase(databaseId);
         try {
-            DatabaseMetaData metaData = conn.getMetaData();
-            String catalog = getDatabaseName(databaseId);
+            // 方法1：使用 SQL 查询 INFORMATION_SCHEMA（更可靠）
+            String dbName = getDatabaseName(databaseId);
+            String sql;
+            PreparedStatement stmt;
             
-            try (ResultSet rs = metaData.getTables(catalog, null, tableName, new String[]{"TABLE"})) {
-                return rs.next();
+            if (dbName != null && !dbName.isEmpty()) {
+                // 如果指定了数据库名，查询指定数据库
+                sql = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND TABLE_TYPE = 'BASE TABLE'";
+                stmt = conn.prepareStatement(sql);
+                stmt.setString(1, dbName);
+                stmt.setString(2, tableName);
+            } else {
+                // 如果没有指定数据库名，查询当前连接的数据库
+                sql = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND TABLE_TYPE = 'BASE TABLE'";
+                stmt = conn.prepareStatement(sql);
+                stmt.setString(1, tableName);
             }
+            
+            try (stmt) {
+                try (ResultSet rs = stmt.executeQuery()) {
+                    if (rs.next()) {
+                        int count = rs.getInt(1);
+                        return count > 0;
+                    }
+                }
+            }
+            
+            return false;
+        } catch (SQLException e) {
+            // 如果 SQL 查询失败，回退到 DatabaseMetaData 方法
+            try {
+                DatabaseMetaData metaData = conn.getMetaData();
+                // 当连接已经指定了数据库时，catalog 应该使用 null 或连接的实际数据库
+                // 尝试使用 null（查询当前连接的数据库）
+                try (ResultSet rs = metaData.getTables(null, null, tableName, new String[]{"TABLE"})) {
+                    if (rs.next()) {
+                        return true;
+                    }
+                }
+                
+                // 如果使用 null 没找到，尝试使用数据库名（不区分大小写）
+                String catalog = getDatabaseName(databaseId);
+                if (catalog != null && !catalog.isEmpty()) {
+                    try (ResultSet rs = metaData.getTables(catalog, null, tableName, new String[]{"TABLE"})) {
+                        return rs.next();
+                    }
+                }
+            } catch (SQLException e2) {
+                // 如果两种方法都失败，抛出原始异常
+                throw new SQLException("Failed to check table existence: " + e.getMessage(), e);
+            }
+            
+            return false;
         } finally {
             if (conn != null && !conn.isClosed()) {
                 conn.close();

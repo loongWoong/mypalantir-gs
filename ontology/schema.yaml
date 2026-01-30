@@ -359,7 +359,7 @@ object_types:
         required: false
         description: "业务分析特情状态"
   - name: EntryTransactionNew001
-    display_name: 入口车道流水New
+    display_name: 入口车道流水New001
     description: "入口车道流水"
     url: "http://192.168.22.217:8000/demo/EntryTransactionNew_profile.html"
     properties:
