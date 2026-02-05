@@ -86,15 +86,28 @@ MyPalantir 的核心思想是**将业务概念与物理存储解耦**，通过 O
 OntologyQuery (JSON/YAML)
     ↓ [QueryParser]
 OntologyQuery (Java Object)
-    ↓ [RelNodeBuilder]
-Calcite RelNode (关系代数树)
-    ↓ [Calcite Optimizer]
-Optimized RelNode
-    ↓ [OntologyRelToSqlConverter]
-SQL (物理数据库查询)
-    ↓ [JDBC Execution]
-QueryResult (结果集)
+    ↓ [ExecutionRouter]  # 路由决策：单源 vs 联邦
+    ├─→ 单数据源路径
+    │   ↓ [RelNodeBuilder]
+    │   Calcite RelNode (关系代数树)
+    │   ↓ [Calcite Optimizer]
+    │   Optimized RelNode
+    │   ↓ [OntologyRelToSqlConverter]
+    │   SQL (物理数据库查询)
+    │   ↓ [JDBC Execution]
+    │   QueryResult (结果集)
+    │
+    └─→ 跨数据源路径（联邦查询）
+        ↓ [FederatedCalciteRunner]
+        Calcite 联邦执行计划
+        ↓ [多数据源并行查询 + Calcite Join]
+        QueryResult (结果集)
 ```
+
+**执行路由机制**：
+- `ExecutionRouter` 自动分析查询涉及的数据源
+- 单数据源查询：走传统 SQL 路径（性能最优）
+- 跨数据源查询：走 Calcite 联邦执行（支持跨库 JOIN）
 
 #### 关键组件
 
@@ -123,6 +136,17 @@ QueryResult (结果集)
    - 自定义 SQL 转换器
    - 将 Calcite 生成的 SQL 中的 Ontology 名称映射为数据库物理名称
    - 处理表名、列名的引用
+
+6. **ExecutionRouter**
+   - 查询执行路由决策器
+   - 自动分析查询涉及的数据源数量
+   - 单数据源走 SQL 路径，跨数据源走联邦执行路径
+
+7. **FederatedCalciteRunner**
+   - 跨数据源联邦查询执行器
+   - 基于 Calcite 的 JdbcSchema 挂载多个数据源
+   - 支持跨数据源的 JOIN、聚合等操作
+   - 自动下推过滤和投影到各数据源，减少数据传输量
 
 ### LinkType 映射模式
 
@@ -292,19 +316,30 @@ src/main/java/com/mypalantir/
 │   ├── OntologyQuery.java              # 查询 DSL 定义
 │   ├── RelNodeBuilder.java             # RelNode 构建器
 │   ├── OntologyRelToSqlConverter.java  # SQL 转换器
+│   ├── ExecutionRouter.java            # 查询执行路由
+│   ├── FederatedCalciteRunner.java     # 联邦查询执行器
 │   └── ...
 │
 ├── service/           # 业务逻辑层
-│   ├── QueryService.java      # 查询服务
-│   ├── MetricService.java     # 指标服务
-│   ├── LLMService.java        # LLM 服务
-│   ├── DataComparisonService.java # 数据对比服务
+│   ├── QueryService.java              # 查询服务
+│   ├── MetricService.java             # 指标服务
+│   ├── LLMService.java                 # LLM 服务
+│   ├── DataComparisonService.java      # 数据对比服务
+│   ├── EtlModelBuilderService.java    # ETL 模型构建服务
+│   ├── EtlDefinitionIntegrationService.java # ETL 定义集成服务
+│   ├── DatasourceIntegrationService.java    # 数据源集成服务
+│   ├── DomeAuthService.java           # Dome 认证服务
+│   ├── ETLLinkService.java            # ETL 关系服务
+│   ├── OntologyModelService.java      # Ontology 模型服务
 │   └── ...
 │
 ├── controller/        # REST API 层
 │   ├── QueryController.java           # 查询 API
 │   ├── MetricController.java          # 指标 API
 │   ├── NaturalLanguageQueryController.java # NLQ API
+│   ├── EtlModelController.java        # ETL 模型 API
+│   ├── ETLLinkController.java         # ETL 关系 API
+│   ├── OntologyModelController.java   # Ontology 模型 API
 │   └── ...
 │
 └── repository/        # 数据存储层
@@ -366,16 +401,68 @@ mvn spring-boot:run
 
 ```properties
 server.port=8080
-schema.file.path=./ontology/schema.yaml
+
+# Ontology 模型配置
+# 可选值：schema（收费系统）、powergrid（电网规划）等
+ontology.model=schema
+schema.file.path=./ontology/${ontology.model}.yaml
 schema.system.file.path=./ontology/schema-system.yaml
+
+# 数据存储配置
 data.root.path=./data
+# 存储类型：file（文件系统）、neo4j（Neo4j图数据库）、hybrid（混合模式）
+storage.type=hybrid
+
+# Web 静态文件路径
 web.static.path=./web/dist
 
 # LLM 配置 (用于自然语言查询)
-llm.api.key=your-api-key
-llm.api.url=https://api.deepseek.com/v1/chat/completions
-llm.model=deepseek-chat
+# 敏感信息建议配置在项目根目录的 .env 文件中
+llm.api.key=${LLM_API_KEY:your-api-key}
+llm.api.url=${LLM_API_URL:https://api.deepseek.com/v1/chat/completions}
+llm.model=${LLM_MODEL:deepseek-chat}
+
+# 数据库配置（敏感信息请配置在 .env 文件中）
+db.host=${DB_HOST:localhost}
+db.port=${DB_PORT:3306}
+db.name=${DB_NAME:}
+db.user=${DB_USER:}
+db.password=${DB_PASSWORD:}
+db.type=${DB_TYPE:mysql}
+
+# Neo4j 配置（敏感信息请配置在 .env 文件中）
+neo4j.uri=${NEO4J_URI:bolt://localhost:7687}
+neo4j.user=${NEO4J_USER:neo4j}
+neo4j.password=${NEO4J_PASSWORD:}
+
+# Dome 服务集成配置（敏感信息请配置在 .env 文件中）
+# dome-datasource 服务地址
+dome.datasource.base-url=${DOME_DATASOURCE_BASE_URL:}
+# dome-scheduler 服务地址
+dome.scheduler.base-url=${DOME_SCHEDULER_BASE_URL:}
+
+# Dome 认证配置
+# 方式一：自动获取 token（推荐）
+dome.auth.base-url=${DOME_AUTH_BASE_URL:}
+dome.auth.client-id=${DOME_AUTH_CLIENT_ID:}
+dome.auth.client-secret=${DOME_AUTH_CLIENT_SECRET:}
+dome.auth.username=${DOME_AUTH_USERNAME:}
+dome.auth.password=${DOME_AUTH_PASSWORD:}
+dome.auth.tenant-id=${DOME_AUTH_TENANT_ID:}
+dome.auth.enabled=${DOME_AUTH_ENABLED:true}
+
+# 方式二：使用静态 token（如果配置了静态 token，将优先使用）
+dome.auth.token=${DOME_AUTH_TOKEN:}
+
+# 默认目标数据源ID（ETL模型构建时使用）
+dome.default.target.datasource.id=${DEFAULT_TARGET_DATASOURCE_ID:}
 ```
+
+**配置说明**：
+- 敏感信息（密码、API Key、Token 等）建议配置在项目根目录的 `.env` 文件中
+- 配置优先级：`.env` 文件 > `application.properties` > 默认值
+- Dome 认证支持两种方式：自动获取 token（推荐）或使用静态 token
+- 混合存储模式（`storage.type=hybrid`）将详细数据存储在关系数据库，关系数据存储在 Neo4j
 
 ## 核心功能特性
 
@@ -411,17 +498,42 @@ llm.model=deepseek-chat
 - **差异报告**：详细展示完全匹配、值不一致、仅源表存在、仅目标表存在的数据
 - **字段映射**：支持自定义源字段与目标字段的映射关系
 
-### 4. 模型与数据源管理
+### 4. ETL 模型构建与集成 (ETL Model Building & Integration)
+
+提供与外部 ETL 系统的深度集成，支持自动构建 ETL 模型定义并创建 ETL 任务。
+
+**主要特性**：
+- **自动构建 ETL 模型**：基于 Ontology 对象类型与物理表的映射关系，自动构建符合 ETL 系统要求的模型定义
+- **集成 dome-scheduler**：自动调用外部 ETL 调度系统创建 ETL 定义
+- **集成 dome-datasource**：自动获取外部数据源的表结构和字段信息
+- **批量构建支持**：支持为多个对象类型批量构建 ETL 模型
+- **智能映射**：自动处理字段映射、主键映射、数据类型转换等
+
+**工作流程**：
+1. 根据对象类型的 `mapping` 关系获取源表信息
+2. 通过 `dome-datasource` 接口获取源表字段详情
+3. 构建 ETL 模型（包含 nodes、edges、frontScript 等）
+4. 调用 `dome-scheduler` 接口创建 ETL 定义
+
+**配置要求**：
+- 需要在 `database` 对象中配置 `database_id` 字段，关联外部 ETL 工具的数据源ID
+- 需要配置 `dome.datasource.base-url` 和 `dome.scheduler.base-url`
+- 需要配置 Dome 认证信息（见配置章节）
+
+### 5. 模型与数据源管理
 
 **模型管理 (Model Management)**：
 - 支持动态切换 Ontology 模型文件
 - 支持多版本模型共存
+- 支持通过 `ontology.model` 配置项选择不同模型（如 `schema`、`powergrid` 等）
 
 **数据源管理 (Data Source Management)**：
 - 可视化配置 JDBC 数据源
 - 内置连接测试与元数据探测功能
+- 集成 `dome-datasource` 服务，支持从外部数据源管理系统获取数据源信息
+- 支持数据源认证（通过 Dome 认证服务）
 
-### 5. 工作空间管理
+### 6. 工作空间管理
 
 工作空间功能允许对对象类型和关系类型进行分组管理，实现系统模型与业务模型的分离。
 
@@ -436,7 +548,22 @@ llm.model=deepseek-chat
 - 按业务领域分组管理（如"收费管理"、"车辆管理"等）
 - 简化界面，只显示相关的内容
 
-### 数据映射功能
+### 7. ETL 关系管理 (ETL Link Management)
+
+提供专门为 ETL 系统设计的关系批量操作 API，支持大规模关系数据的导入和管理。
+
+**主要功能**：
+- **批量获取关系**：支持分页查询指定关系类型的所有关系实例
+- **批量创建关系**：支持一次性创建大量关系实例
+- **批量删除关系**：支持批量删除关系实例
+- **属性匹配查询**：根据源对象和目标对象的属性值匹配查找关系
+
+**使用场景**：
+- ETL 任务执行后批量导入关系数据
+- 数据同步时批量更新关系
+- 数据清理时批量删除无效关系
+
+### 8. 数据映射功能
 
 支持将外部数据库的表和字段映射到 Ontology 对象类型和属性。
 
@@ -447,7 +574,7 @@ llm.model=deepseek-chat
 - 从数据库抽取数据到模型实例
 - 支持主键映射，保持数据一致性
 
-### 关系自动同步
+### 9. 关系自动同步
 
 基于属性映射规则自动创建关系实例。
 
@@ -466,7 +593,27 @@ link_types:
       收费站编号: 收费站编号  # 当收费站的"收费站编号" = 收费记录的"收费站编号"时，自动创建关系
 ```
 
-### 血缘查询
+### 10. 跨数据源联邦查询 (Federated Query)
+
+支持跨多个数据源的联合查询，无需手动处理数据源间的数据搬运。
+
+**主要特性**：
+- **自动路由**：系统自动检测查询是否涉及多个数据源，智能选择执行路径
+- **联邦执行**：基于 Apache Calcite 的联邦查询能力，支持跨数据源的 JOIN、聚合等操作
+- **查询下推**：自动将过滤、投影等操作下推到各数据源，减少数据传输量
+- **性能优化**：单数据源查询仍走传统 SQL 路径，保证最佳性能
+
+**使用场景**：
+- 跨数据库的关联查询（如 MySQL 表 JOIN PostgreSQL 表）
+- 跨数据源的数据聚合分析
+- 统一查询接口访问多个异构数据源
+
+**注意事项**：
+- 跨数据源查询不是原子事务，数据一致性由业务保证
+- 建议为跨源查询添加过滤条件，避免全表扫描
+- 跨源 JOIN 建议使用等值连接，性能更优
+
+### 11. 血缘查询
 
 支持在实例关系图中进行血缘查询，追踪数据流向。
 
@@ -511,6 +658,230 @@ link_types:
 - 支持复杂过滤条件（包括字段路径过滤）
 - 实时 JSON 预览和复制功能
 - 根据工作空间过滤可用的对象类型
+
+## 功能介绍
+
+### Schema 浏览器
+
+Schema 浏览器提供了图形化的 Ontology 模型查看界面，帮助用户直观地理解数据模型的结构和关系。
+
+![Schema 浏览器](docs/images/schema.png)
+
+**核心功能**：
+- 以卡片形式展示所有对象类型和关系类型
+- 支持点击对象/关系进行关联过滤
+- 显示对象类型的属性定义和数据源映射信息
+- 支持 Tab 切换查看 Properties 和 Data Source 配置
+- 展示 LinkType 的属性映射关系（property_mappings）
+
+### Schema 关系图
+
+Schema 关系图使用力导向图可视化展示整个 Ontology 模型的关系网络，帮助用户理解对象之间的关联关系。
+
+![Schema 关系图](docs/images/schema%20graph.png)
+
+**核心功能**：
+- 力导向图自动布局，清晰展示对象间的关系
+- 支持节点拖动和自动缩放
+- 虚线箭头表示关系，区分有向和无向关系
+- 点击节点和边查看详细信息
+- 支持交互式探索和过滤
+
+### Schema 关系详情
+
+详细展示关系类型的配置信息，包括属性映射、数据源映射等。
+
+![Schema 关系详情](docs/images/schema-links.png)
+
+### 查询构建器
+
+查询构建器提供了可视化的查询构建界面，无需编写 JSON 即可构建复杂的 OntologyQuery 查询。
+
+![查询构建器](docs/images/query%20builder.png)
+
+**核心功能**：
+- 拖拽式选择对象类型和关系类型
+- 可视化配置过滤条件（支持字段路径）
+- 支持聚合查询（分组、聚合函数）
+- 实时预览生成的 JSON 查询
+- 一键复制查询 JSON
+- 根据工作空间自动过滤可用的对象类型
+
+### 自然语言查询
+
+自然语言查询功能集成了 LLM 能力，让用户可以用自然语言描述查询需求，系统自动转换为 OntologyQuery DSL 并执行。
+
+![自然语言查询](docs/images/自然语言查询.png)
+
+**核心功能**：
+- 聊天式交互界面，支持多轮对话
+- 自动将自然语言转换为 OntologyQuery DSL
+- 实时预览转换结果和查询结果
+- 支持查看转换过程的中间结果（调试模式）
+- 基于当前 Ontology Schema 自动生成上下文
+
+### 指标管理
+
+指标管理模块提供了完整的指标定义、计算和管理能力，支持从原子指标到复合指标的构建。
+
+![指标管理](docs/images/指标管理.png)
+
+**核心功能**：
+- 指标定义列表管理
+- 指标分类和筛选
+- 指标详情查看和编辑
+- 指标计算历史记录
+
+### 原子指标
+
+原子指标是基于 SQL 直接查询的基础指标，是构建派生指标和复合指标的基础。
+
+![原子指标](docs/images/原子指标.png)
+
+**核心功能**：
+- 可视化定义原子指标
+- 基于 OntologyQuery DSL 构建查询
+- 支持聚合函数和分组
+- 指标公式预览和验证
+
+### 模型数据列表
+
+模型数据列表展示了指定对象类型的所有实例数据，支持筛选、排序和分页。
+
+![模型数据列表](docs/images/模型数据列表.png)
+
+**核心功能**：
+- 分页展示实例数据
+- 支持按属性筛选和排序
+- 显示实例的关键属性
+- 支持查看实例详情
+- 支持批量操作
+
+### 模型实例详情
+
+模型实例详情页面展示单个实例的完整信息，包括所有属性值和关联的关系。
+
+![模型实例详情](docs/images/模型实例详情.png)
+
+**核心功能**：
+- 展示实例的所有属性
+- 显示关联的关系列表
+- 支持编辑实例属性
+- 支持删除实例
+- 支持查看关系图谱
+
+### 模型数据映射
+
+模型数据映射功能支持将外部数据库的表和字段映射到 Ontology 对象类型和属性。
+
+![模型数据映射](docs/images/模型数据映射.png)
+
+**核心功能**：
+- 可视化配置表字段与对象属性的映射关系
+- ER 图形式展示映射关系
+- 支持主键映射配置
+- 从数据库抽取数据到模型实例
+- 支持同步表结构
+
+### 模型属性分析
+
+模型属性分析提供了对象类型属性的统计分析功能，帮助用户了解数据的分布情况。
+
+![模型属性分析](docs/images/模型属性分析.png)
+
+**核心功能**：
+- 属性值分布统计
+- 数据质量分析
+- 空值统计
+- 唯一值统计
+
+### 关系数据列表
+
+关系数据列表展示了指定关系类型的所有关系实例，支持筛选和分页。
+
+![关系数据列表](docs/images/关系数据列表.png)
+
+**核心功能**：
+- 分页展示关系实例
+- 显示源对象和目标对象信息
+- 显示关系属性
+- 支持筛选和搜索
+- 支持批量操作
+
+### 关系属性分析
+
+关系属性分析提供了关系类型属性的统计分析功能。
+
+![关系属性分析](docs/images/关系属性分析.png)
+
+**核心功能**：
+- 关系属性值分布统计
+- 关系数量统计
+- 关系质量分析
+
+### 实例数据血缘分析
+
+实例数据血缘分析功能支持在实例关系图中进行血缘查询，追踪数据的流向和影响范围。
+
+![实例数据血缘分析](docs/images/实例数据血缘分析.png)
+
+**核心功能**：
+- 图形化展示实例关系网络
+- 支持直接关系查询
+- 支持正向血缘查询（下游影响）
+- 支持反向血缘查询（上游来源）
+- 支持全链血缘查询
+
+### 实例血缘分层正向影响分析
+
+正向影响分析从当前节点向后递归查询所有下游节点，分析数据变更的影响范围。
+
+![实例血缘分层正向影响分析](docs/images/实例血缘分层正向影响分析.png)
+
+**核心功能**：
+- 分层展示影响范围
+- 按层级展开和折叠
+- 显示影响路径
+- 支持导出分析结果
+
+### 实例血缘分层反向推导分析
+
+反向推导分析从当前节点向前递归查询所有上游节点，追踪数据的来源。
+
+![实例血缘分层反向推导分析](docs/images/实例血缘分层反向推导分析.png)
+
+**核心功能**：
+- 分层展示数据来源
+- 按层级展开和折叠
+- 显示数据流向路径
+- 支持导出分析结果
+
+### 数据对账
+
+数据对账功能用于验证不同数据源或不同模型之间的数据一致性，保障数据质量。
+
+![数据对账](docs/images/数据对账.png)
+
+**核心功能**：
+- 配置对账任务（源表/目标表、字段映射等）
+- 支持基于数据表的对比
+- 支持基于对象模型的对比
+- 执行对账任务
+- 查看对账历史
+
+### 数据对账结果
+
+数据对账结果页面详细展示对账任务的执行结果，包括匹配、不匹配、缺失等数据。
+
+![数据对账结果](docs/images/数据对账结果.png)
+
+**核心功能**：
+- 详细展示完全匹配的数据
+- 展示值不一致的数据
+- 展示仅源表存在的数据
+- 展示仅目标表存在的数据
+- 支持导出对账报告
+- 支持数据差异钻取
 
 ## 查询示例
 
@@ -681,6 +1052,31 @@ mypalantir/
 - **GET** `/api/v1/links/{linkType}` - 获取关系列表
 - **POST** `/api/v1/links/{linkType}/sync` - 同步关系（基于属性映射）
 
+### ETL 模型 API
+
+- **POST** `/api/v1/etl-model/build` - 构建并创建 ETL 模型
+  - 参数：`objectType`（必需）、`mappingId`（可选）、`targetDatasourceId`（可选）、`targetTableName`（可选）
+- **POST** `/api/v1/etl-model/build-batch` - 批量构建 ETL 模型
+  - 请求体：对象类型名称列表
+  - 参数：`targetDatasourceId`（可选）
+
+### ETL 关系 API
+
+- **GET** `/api/v1/etl/links/{linkType}` - 获取指定关系类型的所有关系（支持分页）
+  - 参数：`sourceType`（可选）、`targetType`（可选）、`limit`（可选）、`offset`（可选）
+- **POST** `/api/v1/etl/links/{linkType}/batch` - 批量创建关系
+  - 请求体：关系创建请求列表 `[{"sourceId": "xxx", "targetId": "yyy", "properties": {...}}, ...]`
+- **POST** `/api/v1/etl/links/{linkType}/match` - 根据属性匹配查找关系
+  - 请求体：`{"sourceType": "xxx", "targetType": "yyy", "sourceFilters": {...}, "targetFilters": {...}}`
+- **DELETE** `/api/v1/etl/links/{linkType}/batch` - 批量删除关系
+  - 请求体：关系ID列表 `["linkId1", "linkId2", ...]`
+
+### Ontology 模型 API
+
+- **GET** `/api/v1/models` - 获取所有可用的模型列表
+- **GET** `/api/v1/models/{modelId}/object-types` - 获取指定模型的对象类型列表
+- **GET** `/api/v1/models/current` - 获取当前使用的模型信息
+
 ### 数据库 API
 
 - **GET** `/api/v1/databases` - 获取数据库列表
@@ -691,11 +1087,20 @@ mypalantir/
 
 ## 数据存储
 
-系统支持多种数据存储后端：
+系统支持多种数据存储后端，可通过 `storage.type` 配置项选择：
 
-### Neo4j 图数据库
+### 文件存储模式 (file)
 
-系统支持使用 Neo4j 作为关系存储后端，提供高性能的图数据查询能力。
+使用本地文件系统存储实例和关系数据，以 JSON 格式保存。
+
+**适用场景**：
+- 开发测试环境
+- 小规模数据
+- 无需高性能查询的场景
+
+### Neo4j 图数据库模式 (neo4j)
+
+使用 Neo4j 作为存储后端，提供高性能的图数据查询能力。
 
 **配置**：
 - 在 `application.properties` 中配置 Neo4j 连接信息
@@ -706,9 +1111,33 @@ mypalantir/
 - 支持复杂的关系查询
 - 适合大规模关系数据
 
+### 混合存储模式 (hybrid) - 推荐
+
+结合关系数据库和 Neo4j 的优势，实现最佳性能和功能平衡。
+
+**存储策略**：
+- **关系数据库**：存储完整的实例详细数据（所有属性）
+- **Neo4j**：存储关系数据和关键字段（通过 `storage.neo4j.fields.*` 配置）
+
+**配置示例**：
+```properties
+storage.type=hybrid
+# 默认存储在 Neo4j 的字段
+storage.neo4j.fields.default=id,name,display_name
+# 特定对象类型存储在 Neo4j 的字段
+storage.neo4j.fields.workspace=id,name,display_name,description,object_types,link_types
+storage.neo4j.fields.database=id,name,type,host,port,database_name
+```
+
+**优势**：
+- 关系查询性能优异（Neo4j）
+- 详细数据查询灵活（关系数据库）
+- 支持大规模数据存储
+- 可根据业务需求灵活配置存储字段
+
 ### H2 数据库
 
-默认使用 H2 作为本地测试数据库，支持内存模式和文件模式。
+默认使用 H2 作为本地测试数据库，支持内存模式和文件模式。在混合存储模式下，H2 可作为关系数据库后端使用。
 
 ## 注意事项
 
@@ -735,6 +1164,19 @@ mypalantir/
 - 同步表结构时，会自动创建 `database_has_table` 和 `table_has_column` 关系
 - 同步数据时，如果定义了 `primary_key_column`，实例 ID 会使用数据库主键值
 - 关系自动同步基于 `property_mappings` 规则，所有映射条件必须同时满足
+
+### ETL 模型构建
+
+- 构建 ETL 模型前，需要确保 `database` 对象已配置 `database_id` 字段（关联外部 ETL 工具的数据源ID）
+- 如果未指定 `targetDatasourceId`，系统会使用配置的默认目标数据源
+- 批量构建时，失败的模型不会影响其他模型的构建
+
+### Dome 认证
+
+- 系统支持两种认证方式：自动获取 token（推荐）或使用静态 token
+- 自动认证模式下，系统会自动登录并刷新 token，无需手动管理
+- 静态 token 模式下，需要定期更新 token（token 会过期）
+- 认证失败时，相关 API 调用会返回错误，请检查配置信息
 
 ## 相关文档
 

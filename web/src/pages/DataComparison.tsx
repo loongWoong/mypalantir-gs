@@ -370,7 +370,7 @@ export default function DataComparison() {
   return (
     <div className="max-w-7xl mx-auto space-y-6">
       <div className="flex justify-between items-center">
-          <h1 className="text-2xl font-bold text-text">数据交叉对比 (Data Reconciliation)</h1>
+          <h1 className="text-2xl font-bold text-text">数据对账 (Data Reconciliation)</h1>
           
           {/* Mode Toggle */}
           <div className="bg-white p-1 rounded-lg border border-gray-200 flex shadow-sm">
