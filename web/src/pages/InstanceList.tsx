@@ -74,6 +74,25 @@ export default function InstanceList() {
   const limit = 20;
   const { toasts, showToast, removeToast } = useToast();
 
+  // 将 FilterExpression 转换为简单的键值对格式（后端只支持等值查询）
+  const convertFilterExpressionsToParams = (expressions: FilterExpression[]): Record<string, any> => {
+    const params: Record<string, any> = {};
+    
+    for (const expr of expressions) {
+      // 只处理简单的等值查询 ['=', field, value]
+      if (Array.isArray(expr) && expr.length >= 3 && expr[0] === '=') {
+        const field = expr[1];
+        const value = expr[2];
+        if (field && value !== null && value !== undefined && value !== '') {
+          params[field] = value;
+        }
+      }
+      // 忽略其他操作符（>, <, LIKE, between 等），因为后端只支持等值查询
+    }
+    
+    return params;
+  };
+
   // Initialize visible properties when object type definition is loaded
   useEffect(() => {
     if (objectTypeDef?.properties) {
@@ -319,13 +338,30 @@ export default function InstanceList() {
         if (targetMappingId) {
           console.log('[InstanceList] 使用 mappingId:', targetMappingId, '查询原始表');
           
+          // 构建筛选条件：优先使用新的查询配置系统（appliedFilterExpressions）
+          let filterParams: Record<string, any> = {};
+          if (appliedFilterExpressions && appliedFilterExpressions.length > 0) {
+            filterParams = convertFilterExpressionsToParams(appliedFilterExpressions);
+            console.log('[InstanceList] Using appliedFilterExpressions:', appliedFilterExpressions);
+            console.log('[InstanceList] Converted to filterParams:', filterParams);
+          } else if (filters && filters.length > 0) {
+            // 回退到旧的 filters 系统（向后兼容）
+            filters.forEach(filter => {
+              if (filter.property && filter.value) {
+                filterParams[filter.property] = filter.value;
+              }
+            });
+            console.log('[InstanceList] Using legacy filters:', filters);
+          }
+          
           // 使用 mappingId 查询原始表（通过 MappedDataService.queryMappedInstances）
           // 严格查询界限：只查询原始表，不查询同步表
           const instancesData = await instanceApi.listWithMapping(
             objectType, 
             targetMappingId, 
             appliedOffset !== undefined ? appliedOffset : offset, 
-            appliedLimit || limit
+            appliedLimit || limit,
+            filterParams
           );
           
           console.log('[InstanceList] 原始数据查询结果: itemsCount=', instancesData.items.length, 'total=', instancesData.total);
@@ -348,13 +384,24 @@ export default function InstanceList() {
       
       setFromMapping(false);
       
-      // 构建筛选条件
-      const filterParams: Record<string, any> = {};
-      filters.forEach(filter => {
-        if (filter.property && filter.value) {
-          filterParams[filter.property] = filter.value;
-        }
-      });
+      // 构建筛选条件：优先使用新的查询配置系统（appliedFilterExpressions）
+      // 如果新的查询配置为空，则回退到旧的 filters 系统（向后兼容）
+      let filterParams: Record<string, any> = {};
+      
+      if (appliedFilterExpressions && appliedFilterExpressions.length > 0) {
+        // 使用新的查询配置系统
+        filterParams = convertFilterExpressionsToParams(appliedFilterExpressions);
+        console.log('[InstanceList] Using appliedFilterExpressions:', appliedFilterExpressions);
+        console.log('[InstanceList] Converted to filterParams:', filterParams);
+      } else if (filters && filters.length > 0) {
+        // 回退到旧的 filters 系统（向后兼容）
+        filters.forEach(filter => {
+          if (filter.property && filter.value) {
+            filterParams[filter.property] = filter.value;
+          }
+        });
+        console.log('[InstanceList] Using legacy filters:', filters);
+      }
       
       // 直接使用 instance API 调用，查询同步表和Neo4j
       // 严格查询界限：
@@ -529,6 +576,41 @@ export default function InstanceList() {
     } catch (error: any) {
       console.error('Failed to extract data:', error);
       alert('数据抽取失败: ' + (error.response?.data?.message || error.message));
+    } finally {
+      setExtracting(false);
+    }
+  };
+
+  const handleEtlSyncClick = async () => {
+    if (!objectType || isSystemObjectType(objectType)) return;
+
+    try {
+      // 加载该对象类型的所有映射
+      const mappingsList = await mappingApi.getByObjectType(objectType);
+      
+      if (mappingsList.length === 0) {
+        alert('该对象类型尚未配置数据映射，请先配置数据映射');
+        return;
+      }
+
+      // 使用第一个映射（或让用户选择）
+      const mappingId = mappingsList[0].id;
+      
+      if (!confirm(`将为对象类型 "${objectType}" 构建ETL模型并创建ETL定义。\n\n映射配置: ${mappingsList[0].table_name || mappingId}\n\n是否继续？`)) {
+        return;
+      }
+
+      setExtracting(true);
+      const result = await instanceApi.buildEtlModel(objectType, mappingId);
+      
+      if (result.success) {
+        showToast('ETL模型构建成功！已创建ETL定义。', 'success');
+      } else {
+        showToast('ETL模型构建完成，但创建ETL定义时可能存在问题。', 'warning');
+      }
+    } catch (error: any) {
+      console.error('Failed to build ETL model:', error);
+      alert('ETL模型构建失败: ' + (error.response?.data?.message || error.message));
     } finally {
       setExtracting(false);
     }
@@ -709,6 +791,14 @@ export default function InstanceList() {
               >
                 <ArrowDownTrayIcon className="w-5 h-5 mr-2" />
                 同步抽取
+              </button>
+              <button
+                onClick={handleEtlSyncClick}
+                disabled={extracting}
+                className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Cog6ToothIcon className="w-5 h-5 mr-2" />
+                {extracting ? '构建中...' : 'ETL数据同步'}
               </button>
             </>
           )}

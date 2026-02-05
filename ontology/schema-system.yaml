@@ -81,6 +81,12 @@ object_types:
         data_type: string
         required: false
         description: "数据库密码（加密存储）"
+      
+      - name: database_id
+        display_name: 外部数据源ID
+        data_type: string
+        required: false
+        description: "关联到外部ETL工具模块（dome-datasource）的数据源ID，用于ETL模型构建时的数据源映射"
 
   - name: table
     display_name: 数据表

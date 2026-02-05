@@ -109,9 +109,20 @@ public class InstanceController {
                 logger.info("[InstanceController] Query mode: MAPPED_DATA (原始表查询)");
                 logger.info("[InstanceController] objectType={}, mappingId={}, offset={}, limit={}", 
                     objectType, mappingId, offset, limit);
+                
+                // 提取过滤参数（排除 offset, limit, mappingId）
+                Map<String, Object> filters = new HashMap<>();
+                for (Map.Entry<String, String> entry : allParams.entrySet()) {
+                    String key = entry.getKey();
+                    if (!"offset".equals(key) && !"limit".equals(key) && !"mappingId".equals(key)) {
+                        filters.put(key, entry.getValue());
+                    }
+                }
+                
+                logger.info("[InstanceController] Filters: {}", filters);
                 logger.info("[InstanceController] Data source: ORIGINAL TABLE (根据mapping映射的原始表)");
                 
-                InstanceStorage.ListResult result = mappedDataService.queryMappedInstances(objectType, mappingId, offset, limit);
+                InstanceStorage.ListResult result = mappedDataService.queryMappedInstances(objectType, mappingId, offset, limit, filters);
                 
                 logger.info("[InstanceController] Mapped data query result: objectType={}, itemsCount={}, total={}, dataSource=ORIGINAL_TABLE", 
                     objectType, result.getItems().size(), result.getTotal());

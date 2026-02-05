@@ -202,11 +202,12 @@ export const instanceApi = {
     await apiClient.delete(`/instances/${objectType}/${id}`);
   },
 
-  listWithMapping: async (objectType: string, mappingId: string, offset = 0, limit = 20): Promise<{ items: Instance[]; total: number }> => {
+  listWithMapping: async (objectType: string, mappingId: string, offset = 0, limit = 20, filters?: Record<string, any>): Promise<{ items: Instance[]; total: number }> => {
     const params = new URLSearchParams({
       offset: offset.toString(),
       limit: limit.toString(),
       mappingId: mappingId,
+      ...filters,
     });
     const response = await apiClient.get<ApiResponse<{ items: Instance[]; total: number; offset: number; limit: number }>>(
       `/instances/${objectType}?${params}`
@@ -216,6 +217,24 @@ export const instanceApi = {
 
   syncFromMapping: async (objectType: string, mappingId: string): Promise<void> => {
     await apiClient.post(`/instances/${objectType}/sync-from-mapping/${mappingId}`);
+  },
+
+  buildEtlModel: async (
+    objectType: string,
+    mappingId?: string,
+    targetDatasourceId?: string,
+    targetTableName?: string
+  ): Promise<{ etlModel: any; createResult: any; success: boolean }> => {
+    const params = new URLSearchParams();
+    params.append('objectType', objectType);
+    if (mappingId) params.append('mappingId', mappingId);
+    if (targetDatasourceId) params.append('targetDatasourceId', targetDatasourceId);
+    if (targetTableName) params.append('targetTableName', targetTableName);
+    
+    const response = await apiClient.post<ApiResponse<{ etlModel: any; createResult: any; success: boolean }>>(
+      `/etl-model/build?${params.toString()}`
+    );
+    return response.data.data;
   },
 
   // 批量获取单个对象类型的实例

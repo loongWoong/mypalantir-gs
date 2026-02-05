@@ -150,10 +150,32 @@ public class Neo4jLinkStorage implements ILinkStorage {
             cypher.append(String.join(", ", propKeys));
             cypher.append("}]->(target) RETURN r.id AS id");
             
-            session.run(cypher.toString(), params).single();
+            logger.debug("[Neo4jLinkStorage] Executing Cypher query: {} with params: sourceId={}, targetId={}", 
+                cypher.toString(), sourceID, targetID);
             
-            logger.debug("Created link {} of type {} in Neo4j", id, linkType);
-            return id;
+            var result = session.run(cypher.toString(), params);
+            var records = result.list();
+            
+            if (records.isEmpty()) {
+                // 检查节点是否存在
+                String checkSourceCypher = "MATCH (n:" + sourceLabel + " {id: $id}) RETURN n.id AS id";
+                var sourceCheck = session.run(checkSourceCypher, Values.parameters("id", sourceID)).list();
+                String checkTargetCypher = "MATCH (n:" + targetLabel + " {id: $id}) RETURN n.id AS id";
+                var targetCheck = session.run(checkTargetCypher, Values.parameters("id", targetID)).list();
+                
+                logger.error("[Neo4jLinkStorage] Failed to create link: query returned empty result. " +
+                    "Source node exists: {}, Target node exists: {}", 
+                    !sourceCheck.isEmpty(), !targetCheck.isEmpty());
+                throw new IOException("Failed to create link: query returned empty result. " +
+                    "Source node " + sourceID + " exists: " + !sourceCheck.isEmpty() + ", " +
+                    "Target node " + targetID + " exists: " + !targetCheck.isEmpty());
+            }
+            
+            var record = records.get(0);
+            String createdLinkId = record.get("id").asString();
+            
+            logger.debug("Created link {} of type {} in Neo4j", createdLinkId, linkType);
+            return createdLinkId;
         } catch (Exception e) {
             logger.error("Failed to create link in Neo4j: {}", e.getMessage(), e);
             throw new IOException("Failed to create link: " + e.getMessage(), e);
@@ -503,9 +525,24 @@ public class Neo4jLinkStorage implements ILinkStorage {
                 }
             }
             
-            // 确保id字段存在
-            if (!summaryFields.containsKey("id")) {
-                summaryFields.put("id", instanceData.get("id"));
+            // 确保id字段存在，优先使用instanceData中的id，如果不存在则使用nodeId参数
+            if (!summaryFields.containsKey("id") || summaryFields.get("id") == null) {
+                Object idFromData = instanceData.get("id");
+                if (idFromData != null && !idFromData.toString().trim().isEmpty()) {
+                    summaryFields.put("id", idFromData);
+                    logger.debug("[Neo4jLinkStorage] Using id from instanceData: {}", idFromData);
+                } else {
+                    // 如果instanceData中没有id，使用传入的nodeId参数
+                    summaryFields.put("id", nodeId);
+                    logger.info("[Neo4jLinkStorage] ID not found in instanceData, using nodeId parameter: {}", nodeId);
+                }
+            }
+            
+            // 确保summaryFields中的id值与nodeId一致（用于后续查询）
+            if (!nodeId.equals(String.valueOf(summaryFields.get("id")))) {
+                logger.warn("[Neo4jLinkStorage] ID mismatch: nodeId={}, instanceData.id={}, using nodeId for consistency", 
+                    nodeId, summaryFields.get("id"));
+                summaryFields.put("id", nodeId);
             }
             
             logger.debug("[Neo4jLinkStorage] Extracted {} key fields for Neo4j storage: {}", 

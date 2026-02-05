@@ -38,13 +38,15 @@ public class MappedDataService {
      * @param mappingId 映射ID
      * @param offset 偏移量
      * @param limit 限制数量
+     * @param filters 查询条件（属性名 -> 值）
      * @return 查询结果
      */
-    public com.mypalantir.repository.InstanceStorage.ListResult queryMappedInstances(String objectType, String mappingId, int offset, int limit) throws IOException, SQLException, Loader.NotFoundException {
+    public com.mypalantir.repository.InstanceStorage.ListResult queryMappedInstances(String objectType, String mappingId, int offset, int limit, Map<String, Object> filters) throws IOException, SQLException, Loader.NotFoundException {
+        // filters 可以为 null，表示无查询条件
         logger.info("[MappedDataService] ========== MAPPED DATA QUERY (原始数据查询) ==========");
         logger.info("[MappedDataService] Query mode: MAPPED_DATA (原始表查询)");
-        logger.info("[MappedDataService] objectType={}, mappingId={}, offset={}, limit={}", 
-            objectType, mappingId, offset, limit);
+        logger.info("[MappedDataService] objectType={}, mappingId={}, offset={}, limit={}, filters={}", 
+            objectType, mappingId, offset, limit, filters);
         logger.info("[MappedDataService] Data source: ORIGINAL TABLE (根据mapping映射的原始表，不查询同步表)");
         
         // 获取映射关系
@@ -65,7 +67,7 @@ public class MappedDataService {
         Map<String, String> columnPropertyMappings = (Map<String, String>) mapping.get("column_property_mappings");
         
         // 构建查询SQL（查询原始表）
-        String sql = buildSelectQuery(tableName, columnPropertyMappings, offset, limit);
+        String sql = buildSelectQuery(tableName, columnPropertyMappings, offset, limit, filters);
         logger.info("[MappedDataService] Executing SQL on ORIGINAL TABLE: {}", sql);
         
         // 执行查询（只查询原始表，不查询同步表）
@@ -103,8 +105,8 @@ public class MappedDataService {
             instances.add(instance);
         }
         
-        // 获取总数（需要执行COUNT查询，查询原始表）
-        String countSql = "SELECT COUNT(*) as total FROM `" + tableName + "`";
+        // 获取总数（需要执行COUNT查询，查询原始表，包含相同的WHERE条件）
+        String countSql = buildCountQuery(tableName, columnPropertyMappings, filters);
         logger.info("[MappedDataService] Executing COUNT SQL on ORIGINAL TABLE: {}", countSql);
         List<Map<String, Object>> countResult = databaseMetadataService.executeQuery(countSql, databaseId);
         long total = countResult.isEmpty() ? 0 : ((Number) countResult.get(0).get("total")).longValue();
@@ -116,7 +118,7 @@ public class MappedDataService {
         return new com.mypalantir.repository.InstanceStorage.ListResult(instances, total);
     }
 
-    private String buildSelectQuery(String tableName, Map<String, String> columnPropertyMappings, int offset, int limit) {
+    private String buildSelectQuery(String tableName, Map<String, String> columnPropertyMappings, int offset, int limit, Map<String, Object> filters) {
         StringBuilder sql = new StringBuilder("SELECT ");
         
         // 添加所有映射的列
@@ -134,10 +136,104 @@ public class MappedDataService {
         // 转义表名
         sql.append(" FROM `").append(tableName).append("`");
         
+        // 添加WHERE条件
+        String whereClause = buildWhereClause(columnPropertyMappings, filters);
+        if (whereClause != null && !whereClause.isEmpty()) {
+            sql.append(" WHERE ").append(whereClause);
+        }
+        
         // MySQL分页语法：LIMIT offset, limit
         sql.append(" LIMIT ").append(offset).append(", ").append(limit);
         
         return sql.toString();
+    }
+    
+    /**
+     * 构建COUNT查询SQL
+     */
+    private String buildCountQuery(String tableName, Map<String, String> columnPropertyMappings, Map<String, Object> filters) {
+        StringBuilder sql = new StringBuilder("SELECT COUNT(*) as total FROM `").append(tableName).append("`");
+        
+        // 添加WHERE条件
+        String whereClause = buildWhereClause(columnPropertyMappings, filters);
+        if (whereClause != null && !whereClause.isEmpty()) {
+            sql.append(" WHERE ").append(whereClause);
+        }
+        
+        return sql.toString();
+    }
+    
+    /**
+     * 构建WHERE子句
+     * 将属性名转换为列名，并构建等值查询条件
+     * 
+     * @param columnPropertyMappings 列名到属性名的映射
+     * @param filters 查询条件（属性名 -> 值）
+     * @return WHERE子句（不包含WHERE关键字）
+     */
+    private String buildWhereClause(Map<String, String> columnPropertyMappings, Map<String, Object> filters) {
+        if (filters == null || filters.isEmpty()) {
+            return null;
+        }
+        
+        // 构建属性名到列名的反向映射
+        Map<String, String> propertyColumnMappings = new HashMap<>();
+        for (Map.Entry<String, String> entry : columnPropertyMappings.entrySet()) {
+            propertyColumnMappings.put(entry.getValue(), entry.getKey());
+        }
+        
+        List<String> conditions = new ArrayList<>();
+        for (Map.Entry<String, Object> filter : filters.entrySet()) {
+            String propertyName = filter.getKey();
+            Object value = filter.getValue();
+            
+            // 跳过空值
+            if (value == null || (value instanceof String && ((String) value).isEmpty())) {
+                continue;
+            }
+            
+            // 查找对应的列名
+            String columnName = propertyColumnMappings.get(propertyName);
+            if (columnName == null) {
+                logger.warn("[MappedDataService] Property '{}' not found in column mappings, skipping filter", propertyName);
+                continue;
+            }
+            
+            // 构建条件：列名 = 值（转义值以防止SQL注入）
+            // 注意：这里使用简单的字符串拼接，实际生产环境应该使用PreparedStatement
+            String escapedValue = escapeSqlValue(value);
+            conditions.add("`" + columnName + "` = " + escapedValue);
+        }
+        
+        if (conditions.isEmpty()) {
+            return null;
+        }
+        
+        return String.join(" AND ", conditions);
+    }
+    
+    /**
+     * 转义SQL值（简单实现，防止SQL注入）
+     * 注意：这是简化版本，实际生产环境应该使用PreparedStatement
+     */
+    private String escapeSqlValue(Object value) {
+        if (value == null) {
+            return "NULL";
+        }
+        
+        if (value instanceof Number) {
+            return value.toString();
+        }
+        
+        if (value instanceof Boolean) {
+            return ((Boolean) value) ? "1" : "0";
+        }
+        
+        // 字符串值：转义单引号并添加引号
+        String str = value.toString();
+        str = str.replace("'", "''");  // 转义单引号
+        str = str.replace("\\", "\\\\");  // 转义反斜杠
+        return "'" + str + "'";
     }
 
     /**

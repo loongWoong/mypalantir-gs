@@ -62,6 +62,9 @@ public class Config {
     @Value("${neo4j.password:}")
     private String neo4jPassword;
 
+    @Value("${dome.default.target.datasource.id:}")
+    private String defaultTargetDatasourceId;
+
     @PostConstruct
     public void init() {
         // 从 .env 文件或环境变量中读取 Neo4j 配置，覆盖默认值
@@ -155,6 +158,10 @@ public class Config {
 
     public String getNeo4jPassword() {
         return neo4jPassword;
+    }
+
+    public String getDefaultTargetDatasourceId() {
+        return defaultTargetDatasourceId;
     }
 }
 
