@@ -1,0 +1,247 @@
+@startuml 当前平台架构图
+!theme plain
+skinparam componentStyle rectangle
+skinparam linetype ortho
+
+title MyPalantir 平台架构图
+
+package "应用层 (Application Layer)" {
+  component [Web UI\nReact + TypeScript] as WebUI
+  component [REST API\nSpring Boot] as RESTAPI
+  component [Query DSL\nJSON/YAML] as QueryDSL
+}
+
+package "智能服务层 (Intelligence Layer)" {
+  component [Metric Engine\n指标计算引擎] as MetricEngine
+  component [LLM Service\n自然语言转换] as LLMService
+}
+
+package "Ontology 层 (Ontology Layer)" {
+  component [Schema Definition\nYAML] as SchemaDef
+  component [Query Engine\n查询引擎] as QueryEngine
+  component [RelNodeBuilder] as RelNodeBuilder
+  component [ExecutionRouter] as ExecutionRouter
+  component [FederatedCalciteRunner] as FederatedRunner
+  component [OntologyRelToSqlConverter] as SQLConverter
+}
+
+package "数据源层 (Data Source Layer)" {
+  database "JDBC\n(PostgreSQL/MySQL/H2)" as JDBC
+  database "File System\n(JSON)" as FileSystem
+  database "Neo4j\n(Graph DB)" as Neo4j
+}
+
+' 应用层连接
+WebUI --> RESTAPI
+RESTAPI --> QueryDSL
+QueryDSL --> MetricEngine
+QueryDSL --> LLMService
+
+' 智能服务层到 Ontology 层
+MetricEngine --> QueryEngine
+LLMService --> QueryEngine
+
+' Ontology 层内部连接
+SchemaDef --> QueryEngine
+QueryEngine --> ExecutionRouter
+ExecutionRouter --> RelNodeBuilder
+ExecutionRouter --> FederatedRunner
+RelNodeBuilder --> SQLConverter
+FederatedRunner --> SQLConverter
+
+' Ontology 层到数据源层
+SQLConverter --> JDBC
+QueryEngine --> FileSystem
+QueryEngine --> Neo4j
+
+note right of QueryEngine
+  OntologyQuery DSL → RelNode → SQL
+  基于 Apache Calcite 优化器
+  自动 JOIN 优化
+end note
+
+note right of ExecutionRouter
+  自动路由决策：
+  - 单数据源：SQL 路径
+  - 跨数据源：联邦执行
+end note
+
+@enduml
+
+@startuml 未来完整架构图
+!theme plain
+skinparam componentStyle rectangle
+skinparam linetype ortho
+skinparam packageStyle rectangle
+
+title MyPalantir 未来完整架构图（含外部系统集成）
+
+package "用户交互层" {
+  component [Web UI\nReact + TypeScript] as WebUI
+  component [移动端 App] as MobileApp
+  component [API Gateway] as APIGateway
+}
+
+package "MyPalantir 核心平台" {
+  package "应用服务层" {
+    component [REST API\nSpring Boot] as RESTAPI
+    component [GraphQL API] as GraphQLAPI
+    component [WebSocket Service] as WebSocket
+  }
+  
+  package "智能服务层" {
+    component [Metric Engine\n指标计算引擎] as MetricEngine
+    component [LLM Service\n自然语言转换] as LLMService
+    component [AI Agent Service\n智能代理服务] as AIAgent
+    component [Recommendation Engine\n推荐引擎] as RecommendEngine
+  }
+  
+  package "Ontology 层" {
+    component [Schema Definition\nYAML] as SchemaDef
+    component [Query Engine\n查询引擎] as QueryEngine
+    component [ExecutionRouter] as ExecutionRouter
+    component [FederatedCalciteRunner] as FederatedRunner
+  }
+  
+  package "数据治理层" {
+    component [Data Quality Service\n数据质量服务] as DataQuality
+    component [Data Lineage Service\n数据血缘服务] as DataLineage
+    component [Data Catalog Service\n数据目录服务] as DataCatalog
+  }
+  
+  package "存储层" {
+    database "关系数据库\n(PostgreSQL/MySQL)" as RDBMS
+    database "Neo4j\n图数据库" as Neo4j
+    database "对象存储\n(S3/MinIO)" as ObjectStorage
+    database "时序数据库\n(InfluxDB/TimescaleDB)" as TimeSeriesDB
+  }
+}
+
+package "外部 ETL 系统" {
+  component [Dome Scheduler\nETL 调度系统] as DomeScheduler
+  component [Dome Datasource\n数据源管理] as DomeDatasource
+  component [SeaTunnel\n数据同步引擎] as SeaTunnel
+  component [Airflow\n工作流调度] as Airflow
+}
+
+package "可视化工具" {
+  component [Tableau\nBI 可视化] as Tableau
+  component [Grafana\n监控可视化] as Grafana
+  component [Superset\n开源 BI] as Superset
+  component [Custom Dashboard\n自定义仪表板] as CustomDashboard
+}
+
+package "机器学习平台" {
+  component [MLflow\n模型管理] as MLflow
+  component [Kubeflow\nML 工作流] as Kubeflow
+  component [Feature Store\n特征存储] as FeatureStore
+  component [Model Serving\n模型服务] as ModelServing
+}
+
+package "大模型平台" {
+  component [OpenAI API] as OpenAI
+  component [DeepSeek API] as DeepSeek
+  component [本地 LLM\n(Ollama/LocalAI)] as LocalLLM
+  component [Embedding Service\n向量化服务] as EmbeddingService
+  component [Vector Database\n向量数据库\n(Pinecone/Weaviate)] as VectorDB
+}
+
+package "外部数据源" {
+  database "业务数据库\n(MySQL/PostgreSQL)" as BusinessDB
+  database "数据仓库\n(Snowflake/BigQuery)" as DataWarehouse
+  database "数据湖\n(Hadoop/S3)" as DataLake
+  database "实时数据流\n(Kafka/Pulsar)" as StreamData
+}
+
+' 用户交互层连接
+WebUI --> APIGateway
+MobileApp --> APIGateway
+APIGateway --> RESTAPI
+APIGateway --> GraphQLAPI
+APIGateway --> WebSocket
+
+' 核心平台内部连接
+RESTAPI --> MetricEngine
+RESTAPI --> LLMService
+RESTAPI --> QueryEngine
+GraphQLAPI --> QueryEngine
+WebSocket --> QueryEngine
+
+MetricEngine --> QueryEngine
+LLMService --> AIAgent
+AIAgent --> LLMService
+RecommendEngine --> QueryEngine
+
+QueryEngine --> ExecutionRouter
+ExecutionRouter --> FederatedRunner
+
+DataQuality --> QueryEngine
+DataLineage --> QueryEngine
+DataCatalog --> SchemaDef
+
+QueryEngine --> RDBMS
+QueryEngine --> Neo4j
+QueryEngine --> ObjectStorage
+QueryEngine --> TimeSeriesDB
+
+' 外部 ETL 系统连接
+DomeScheduler --> RESTAPI : ETL 模型构建
+DomeDatasource --> RESTAPI : 数据源元数据
+SeaTunnel --> RDBMS : 数据同步
+Airflow --> DomeScheduler : 工作流编排
+
+' 可视化工具连接
+Tableau --> RESTAPI : 数据查询
+Grafana --> RESTAPI : 监控数据
+Superset --> RESTAPI : BI 分析
+CustomDashboard --> GraphQLAPI : 实时数据
+
+' 机器学习平台连接
+MLflow --> RDBMS : 训练数据
+Kubeflow --> QueryEngine : 特征工程
+FeatureStore --> QueryEngine : 特征查询
+ModelServing --> RESTAPI : 模型推理
+
+' 大模型平台连接
+LLMService --> OpenAI : API 调用
+LLMService --> DeepSeek : API 调用
+LLMService --> LocalLLM : 本地推理
+AIAgent --> EmbeddingService : 文本向量化
+EmbeddingService --> VectorDB : 向量存储
+VectorDB --> AIAgent : 相似度搜索
+
+' 外部数据源连接
+FederatedRunner --> BusinessDB : 联邦查询
+FederatedRunner --> DataWarehouse : 联邦查询
+FederatedRunner --> DataLake : 联邦查询
+StreamData --> QueryEngine : 流式数据接入
+
+' 数据流连接
+DomeScheduler --> BusinessDB : ETL 任务
+SeaTunnel --> DataWarehouse : 数据同步
+Airflow --> DataLake : 数据管道
+
+note right of AIAgent
+  智能代理服务：
+  - 自动数据发现
+  - 智能查询建议
+  - 异常检测
+  - 自动化报告生成
+end note
+
+note right of FederatedRunner
+  联邦查询支持：
+  - 跨数据源 JOIN
+  - 查询下推优化
+  - 并行执行
+end note
+
+note right of VectorDB
+  向量数据库用于：
+  - 语义搜索
+  - 相似度匹配
+  - RAG 检索增强生成
+end note
+
+@enduml
+

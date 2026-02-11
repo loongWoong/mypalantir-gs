@@ -1,8 +1,87 @@
-# MyPalantir - 基于 Ontology 的数据模型管理平台
+<div align="center">
+
+# 🎯 MyPalantir
+
+**基于 Ontology 的数据模型管理平台**
+
+[English](README_EN.md) | 中文
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Java](https://img.shields.io/badge/Java-17-orange.svg)](https://www.oracle.com/java/)
+[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.2.0-brightgreen.svg)](https://spring.io/projects/spring-boot)
+[![React](https://img.shields.io/badge/React-18-blue.svg)](https://reactjs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue.svg)](https://www.typescriptlang.org/)
 
 一个仿照 Palantir Foundry Ontology 设计理念的数据模型管理平台，通过 Ontology（本体）抽象层实现业务概念与物理数据源的解耦，提供统一的查询接口、语义化的数据访问能力以及智能化的数据分析工具。
 
-## 目录
+[特性](#-核心特性) • [快速开始](#-快速开始) • [文档](#-相关文档) • [许可证](#-许可证)
+
+</div>
+
+---
+
+## ✨ 核心特性
+
+- 🎨 **语义化查询** - 使用业务概念（如"车辆"、"收费站"）而非表名、列名进行查询
+- 🔌 **数据源无关** - 同一业务概念可以映射到不同的物理数据源（PostgreSQL、MySQL、H2、Neo4j、文件系统等）
+- 🔗 **关系抽象** - 通过 LinkType 抽象对象间的关系，支持多种物理实现模式
+- 🚀 **统一接口** - 提供统一的查询 DSL，屏蔽底层数据源的差异
+- 🤖 **智能化增强** - 集成 LLM 实现自然语言查询 (Text-to-DSL)
+- 📊 **指标体系** - 内置原子指标与派生指标引擎，支持多维分析
+- 🔍 **数据治理** - 提供跨数据源的数据一致性对比工具
+- 🌐 **跨数据源联邦查询** - 支持跨多个数据源的联合查询，无需手动处理数据源间的数据搬运
+- 📈 **血缘分析** - 支持在实例关系图中进行血缘查询，追踪数据流向
+- 🎯 **ETL 集成** - 与外部 ETL 系统的深度集成，支持自动构建 ETL 模型定义
+
+## 🚀 快速开始
+
+### 前置要求
+
+- **Java 17+**
+- **Maven 3.6+**
+- **Node.js 18+**（用于构建 Web UI）
+
+### 安装与运行
+
+```bash
+# 1. 克隆项目
+git clone https://github.com/caochun/mypalantir.git
+cd mypalantir
+
+# 2. 构建后端
+mvn clean install
+
+# 3. 构建前端
+cd web && npm install && npm run build && cd ..
+
+# 4. 运行服务
+mvn spring-boot:run
+```
+
+访问 http://localhost:8080 查看 Web UI。
+
+### 配置
+
+编辑 `src/main/resources/application.properties`：
+
+```properties
+server.port=8080
+
+# Ontology 模型配置
+ontology.model=schema
+schema.file.path=./ontology/${ontology.model}.yaml
+
+# 数据存储配置
+storage.type=hybrid  # file | neo4j | hybrid
+
+# LLM 配置 (用于自然语言查询)
+llm.api.key=${LLM_API_KEY:your-api-key}
+llm.api.url=${LLM_API_URL:https://api.deepseek.com/v1/chat/completions}
+```
+
+更多配置说明请参考 [配置章节](#配置)。
+
+## 📖 目录
 
 - [核心理念](#核心理念)
   - [Ontology 驱动的数据模型](#ontology-驱动的数据模型)
@@ -94,6 +173,10 @@ MyPalantir 的核心思想是**将业务概念与物理存储解耦**，通过 O
 ## 系统架构
 
 ### 整体架构
+
+> 📊 **架构图**：详细的 PlantUML 架构图请参考 [架构文档](./docs/architecture.puml)
+> - [当前平台架构图](./docs/architecture.puml#当前平台架构图) - 展示现有系统架构
+> - [未来完整架构图](./docs/architecture.puml#未来完整架构图) - 包含外部系统集成的完整架构
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -1241,10 +1324,22 @@ storage.neo4j.fields.database=id,name,type,host,port,database_name
 
 ## 相关文档
 
+- [ARCHITECTURE.md](./docs/ARCHITECTURE.md) - 系统架构文档（含 PlantUML 架构图）
+- [architecture.puml](./docs/architecture.puml) - PlantUML 架构图源文件
 - [CHANGELOG.md](./CHANGELOG.md) - 详细的功能变动记录
 - [CHANGELOG_SUMMARY.md](./CHANGELOG_SUMMARY.md) - 功能变动简洁总结
 - [web/README.md](./web/README.md) - 前端项目说明
 
-## 许可证
+## 📄 许可证
 
-本项目为仿制项目，仅供学习和研究使用。
+本项目采用 [MIT License](LICENSE) 许可证。
+
+---
+
+<div align="center">
+
+**Made with ❤️ by MyPalantir Contributors**
+
+[⭐ Star us on GitHub](https://github.com/caochun/mypalantir) • [📖 Documentation](./docs/) • [🐛 Report Bug](https://github.com/caochun/mypalantir/issues)
+
+</div>

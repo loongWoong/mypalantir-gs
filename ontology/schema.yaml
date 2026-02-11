@@ -533,7 +533,7 @@ object_types:
   - name: ExitTransaction
     display_name: 出口车道流水
     description: "出口车道流水"
-    url: "http://192.168.22.217:8000/demo/ExitTransaction_profile.html"
+    url: "http://192.168.67.130:8081/view/2016786262438313986"
     properties:
       - name: id
         display_name: 交易流水号
@@ -1149,7 +1149,7 @@ object_types:
   - name: Path
     display_name: 车辆通行路径
     description: "车辆通行路径"
-    url: "http://192.168.22.217:8000/demo/Path_profile.html"
+    url: "http://192.168.67.130:8081/view/2016786205915873281"
     properties:
       - name: pass_id
         display_name: 通行标识
@@ -1504,7 +1504,7 @@ object_types:
   - name: ClearResult
     display_name: 清分结果
     description: "清分结果"
-    url: "http://192.168.22.217:8000/demo/ClearResult_profile.html"
+    url: "http://192.168.67.130:8081/view/2016786126458978305"
     properties:
       - name: pass_id
         display_name: 通行标识
@@ -1581,7 +1581,7 @@ object_types:
   - name: ClearReport
     display_name: 清分报表
     description: "清分报表"
-    url: "http://192.168.22.217:8000/demo/ClearReport_profile.html"
+    url: "http://192.168.67.130:8081/view/2016786344978022401"
     properties:
       - name: crop_id
         display_name: 收费路段业主

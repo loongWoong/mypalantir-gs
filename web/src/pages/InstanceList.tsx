@@ -690,16 +690,7 @@ export default function InstanceList() {
                   <ArrowTopRightOnSquareIcon className="w-6 h-6" />
                 </a>
               )}
-            {queryMode === 'mapping' && fromMapping && (
-              <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-lg text-sm font-medium">
-                原始数据查询
-              </span>
-            )}
-            {queryMode === 'storage' && !fromMapping && (
-              <span className="px-3 py-1 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium">
-                同步数据查询
-              </span>
-            )}
+
             </div>
             {objectTypeDef.description && (
               <p className="text-gray-600 mt-1">{objectTypeDef.description}</p>
@@ -710,7 +701,7 @@ export default function InstanceList() {
               </p>
             )}
             {queryMode === 'storage' && !fromMapping && (
-              <p className="text-sm text-gray-500 mt-1">
+              <p className="text-sm text-gray-500 mt-1 max-w-xs">
                 数据来源：同步表（表名=模型名，在默认数据库中）和Neo4j（不查询原始表）
               </p>
             )}
@@ -920,7 +911,7 @@ export default function InstanceList() {
         <div className="space-y-4">
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold text-gray-900">Properties 分析</h2>
+              <h2 className="text-xl font-semibold text-gray-900">属性分析</h2>
               <div className="flex gap-2">
                 <button
                   onClick={() => setShowPropertyFilter(!showPropertyFilter)}

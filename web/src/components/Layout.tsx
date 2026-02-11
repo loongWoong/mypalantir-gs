@@ -220,7 +220,7 @@ export default function Layout({ children }: LayoutProps) {
               }`}
             >
               <Squares2X2Icon className="w-5 h-5 mr-3" />
-              Schema
+              本体模型
             </Link>
 
             <Link
@@ -232,7 +232,7 @@ export default function Layout({ children }: LayoutProps) {
               }`}
             >
               <ChartBarIcon className="w-5 h-5 mr-3" />
-              Schema Graph
+              本体关系图
             </Link>
 
             {/* <Link
@@ -256,7 +256,7 @@ export default function Layout({ children }: LayoutProps) {
               }`}
             >
               <MagnifyingGlassIcon className="w-5 h-5 mr-3" />
-              Query Builder
+              查询构建器
             </Link>
 
             <Link
@@ -280,7 +280,7 @@ export default function Layout({ children }: LayoutProps) {
               }`}
             >
               <SparklesIcon className="w-5 h-5 mr-3" />
-              Natural Language Query
+              自然语言查询
             </Link>
 
             <Link
@@ -292,7 +292,7 @@ export default function Layout({ children }: LayoutProps) {
               }`}
             >
               <ClipboardDocumentCheckIcon className="w-5 h-5 mr-3" />
-              Data Reconciliation
+              数据对账
             </Link>
 
 
@@ -301,7 +301,7 @@ export default function Layout({ children }: LayoutProps) {
               <>
                 <div className="mt-6 mb-2">
                   <h2 className="px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                    Object Types {selectedWorkspace && `(${filteredObjectTypes.length})`}
+                    本体类型 {selectedWorkspace && `(${filteredObjectTypes.length})`}
                   </h2>
                 </div>
                 {filteredObjectTypes.length === 0 && selectedWorkspace ? (
@@ -330,7 +330,7 @@ export default function Layout({ children }: LayoutProps) {
 
                 <div className="mt-6 mb-2">
                   <h2 className="px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                    Link Types {selectedWorkspace && `(${filteredLinkTypes.length})`}
+                    关系类型 {selectedWorkspace && `(${filteredLinkTypes.length})`}
                   </h2>
                 </div>
                 {filteredLinkTypes.length === 0 && selectedWorkspace ? (
@@ -376,9 +376,10 @@ export default function Layout({ children }: LayoutProps) {
               {location.pathname.startsWith('/links/') && 'Links'}
               {location.pathname.startsWith('/schema-graph') && 'Schema Graph'}
               {location.pathname.startsWith('/data-sources') && 'Data Sources'}
-              {location.pathname.startsWith('/metrics') && '指标管理'}
+              {location.pathname.startsWith('/metrics') && 'Metric Manage'}
               {location.pathname === '/query' && 'Query Builder'}
               {location.pathname === '/natural-language-query' && 'Natural Language Query'}
+              {location.pathname === '/data-comparison' && 'Data Comparison'}
             </h2>
           </div>
           
