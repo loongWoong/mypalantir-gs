@@ -1,0 +1,408 @@
+@startuml 保存流程
+title 本体构建器 - 保存流程
+
+actor 用户
+participant "前端UI" as UI
+participant "OntologyModel" as Model
+participant "ontologyValidator" as Validator
+participant "API Client" as API
+participant "OntologyBuilderController" as Controller
+participant "OntologyBuilderService" as Service
+participant "Validator" as BackendValidator
+participant "文件系统" as FileSystem
+
+用户 -> UI: 点击"导入系统内"
+activate UI
+
+UI -> UI: 检查YAML是否已生成
+alt YAML未生成
+    UI -> 用户: 提示"请先生成并校验YML"
+    deactivate UI
+else YAML已生成
+    UI -> UI: 检查文件名是否为空
+    alt 文件名为空
+        UI -> 用户: 提示"请输入文件名"
+        deactivate UI
+    else 文件名不为空
+        UI -> UI: 验证文件名格式
+        alt 文件名格式无效
+            UI -> 用户: 提示"文件名只能包含字母、数字、下划线和连字符"
+            deactivate UI
+        else 文件名格式有效
+            UI -> UI: 检查校验状态
+            alt 校验未通过
+                UI -> 用户: 确认对话框"模型校验未通过，是否仍要保存？"
+                alt 用户取消
+                    deactivate UI
+                else 用户确认
+                    UI -> Model: toApiFormat(model)
+                    activate Model
+                    Model -> Model: 转换实体为object_types
+                    Model -> Model: 转换关系为link_types
+                    Model -> Model: 将unique字段放入constraints
+                    Model --> UI: API格式数据
+                    deactivate Model
+                    
+                    UI -> API: POST /save?filename={filename}
+                    activate API
+                    API -> Controller: save(schema, filename)
+                    activate Controller
+                    Controller -> Service: saveToOntologyFolder(schema, filename)
+                    activate Service
+                    
+                    Service -> BackendValidator: validateAndGenerate(schema)
+                    activate BackendValidator
+                    BackendValidator -> BackendValidator: 结构校验
+                    BackendValidator -> BackendValidator: 语义校验
+                    BackendValidator -> BackendValidator: 完整性校验
+                    BackendValidator --> Service: ValidationResult
+                    deactivate BackendValidator
+                    
+                    alt 校验失败
+                        Service -> Controller: 抛出IllegalArgumentException
+                        Controller -> API: 返回错误响应
+                        API -> UI: 返回错误信息
+                        UI -> 用户: 显示错误信息
+                        deactivate Service
+                        deactivate Controller
+                        deactivate API
+                        deactivate UI
+                    else 校验通过
+                        Service -> Service: 确保文件名以.yaml结尾
+                        Service -> FileSystem: 检查文件是否存在
+                        activate FileSystem
+                        alt 文件已存在
+                            FileSystem --> Service: 文件存在
+                            Service -> Controller: 抛出IOException("文件已存在")
+                            Controller -> API: 返回错误响应
+                            API -> UI: 返回错误信息
+                            UI -> 用户: 提示"文件名重复，请修改文件名后重试"
+                            deactivate FileSystem
+                            deactivate Service
+                            deactivate Controller
+                            deactivate API
+                            deactivate UI
+                        else 文件不存在
+                            FileSystem --> Service: 文件不存在
+                            deactivate FileSystem
+                            Service -> Service: 创建ontology目录（如果不存在）
+                            Service -> Service: 生成YAML内容
+                            Service -> FileSystem: 写入文件
+                            activate FileSystem
+                            FileSystem --> Service: 写入成功
+                            deactivate FileSystem
+                            Service --> Controller: 返回文件路径
+                            deactivate Service
+                            Controller --> API: 返回成功响应
+                            deactivate Controller
+                            API --> UI: 返回成功信息
+                            deactivate API
+                            UI -> 用户: 显示"文件已成功保存到系统"
+                            deactivate UI
+                        end
+                    end
+                end
+            else 校验通过
+                UI -> Model: toApiFormat(model)
+                activate Model
+                Model -> Model: 转换实体为object_types
+                Model -> Model: 转换关系为link_types
+                Model -> Model: 将unique字段放入constraints
+                Model --> UI: API格式数据
+                deactivate Model
+                
+                UI -> API: POST /save?filename={filename}
+                activate API
+                API -> Controller: save(schema, filename)
+                activate Controller
+                Controller -> Service: saveToOntologyFolder(schema, filename)
+                activate Service
+                
+                Service -> BackendValidator: validateAndGenerate(schema)
+                activate BackendValidator
+                BackendValidator -> BackendValidator: 结构校验
+                BackendValidator -> BackendValidator: 语义校验
+                BackendValidator -> BackendValidator: 完整性校验
+                BackendValidator --> Service: ValidationResult
+                deactivate BackendValidator
+                
+                Service -> Service: 确保文件名以.yaml结尾
+                Service -> FileSystem: 检查文件是否存在
+                activate FileSystem
+                alt 文件已存在
+                    FileSystem --> Service: 文件存在
+                    Service -> Controller: 抛出IOException("文件已存在")
+                    Controller -> API: 返回错误响应
+                    API -> UI: 返回错误信息
+                    UI -> 用户: 提示"文件名重复，请修改文件名后重试"
+                    deactivate FileSystem
+                    deactivate Service
+                    deactivate Controller
+                    deactivate API
+                    deactivate UI
+                else 文件不存在
+                    FileSystem --> Service: 文件不存在
+                    deactivate FileSystem
+                    Service -> Service: 创建ontology目录（如果不存在）
+                    Service -> Service: 生成YAML内容
+                    Service -> FileSystem: 写入文件
+                    activate FileSystem
+                    FileSystem --> Service: 写入成功
+                    deactivate FileSystem
+                    Service --> Controller: 返回文件路径
+                    deactivate Service
+                    Controller --> API: 返回成功响应
+                    deactivate Controller
+                    API --> UI: 返回成功信息
+                    deactivate API
+                    UI -> 用户: 显示"文件已成功保存到系统"
+                    deactivate UI
+                end
+            end
+        end
+    end
+end
+
+@enduml
+
+@startuml 加载流程
+title 本体构建器 - 加载流程
+
+actor 用户
+participant "前端UI" as UI
+participant "localStorage" as Storage
+participant "OntologyModel" as Model
+participant "fromApiFormat" as Converter
+
+用户 -> UI: 点击"加载"按钮
+activate UI
+
+UI -> Storage: 获取所有ontology-model-*键
+activate Storage
+Storage --> UI: 返回键列表
+deactivate Storage
+
+alt 没有保存的模型
+    UI -> 用户: 提示"没有找到保存的模型"
+    deactivate UI
+else 有保存的模型
+    UI -> Storage: 获取最新的模型数据
+    activate Storage
+    Storage --> UI: 返回JSON字符串
+    deactivate Storage
+    
+    UI -> UI: JSON.parse(数据)
+    alt 解析失败
+        UI -> 用户: 提示"加载模型失败"
+        deactivate UI
+    else 解析成功
+        UI -> Model: 设置模型数据
+        activate Model
+        Model -> Model: 恢复实体列表
+        Model -> Model: 恢复关系列表
+        Model -> Model: 恢复节点位置
+        Model --> UI: 模型已更新
+        deactivate Model
+        
+        UI -> UI: 同步到React Flow画布
+        UI -> 用户: 提示"模型已加载"
+        deactivate UI
+    end
+end
+
+note right of UI
+  未来扩展：
+  可以从文件系统加载YAML文件
+  使用fromApiFormat转换
+end note
+
+@enduml
+
+@startuml 校验流程
+title 本体构建器 - 校验流程
+
+actor 用户
+participant "前端UI" as UI
+participant "OntologyModel" as Model
+participant "ontologyValidator" as FrontendValidator
+participant "API Client" as API
+participant "OntologyBuilderController" as Controller
+participant "OntologyBuilderService" as Service
+participant "Validator" as BackendValidator
+
+用户 -> UI: 点击"生成并校验"
+activate UI
+
+UI -> FrontendValidator: validateModel(model)
+activate FrontendValidator
+
+FrontendValidator -> FrontendValidator: validateStructure(model)
+note right: 检查必填字段、格式、唯一性
+
+FrontendValidator -> FrontendValidator: validateSemantics(model)
+note right: 检查实体引用、自环、孤立实体
+
+FrontendValidator --> UI: ValidationError[]
+deactivate FrontendValidator
+
+UI -> UI: 检查是否有错误
+alt 有错误
+    UI -> UI: 设置isValid = false
+    UI -> UI: 显示错误信息
+    UI -> 用户: 显示校验结果
+    deactivate UI
+else 无错误
+    UI -> Model: toApiFormat(model)
+    activate Model
+    Model --> UI: API格式数据
+    deactivate Model
+    
+    UI -> API: POST /validate
+    activate API
+    API -> Controller: validate(schema)
+    activate Controller
+    Controller -> Service: validateAndGenerate(schema)
+    activate Service
+    
+    Service -> BackendValidator: new Validator(schema)
+    activate BackendValidator
+    BackendValidator -> BackendValidator: validateSyntax()
+    note right: 结构校验：必填字段、格式、唯一性
+    BackendValidator -> BackendValidator: validateSemantics()
+    note right: 语义校验：实体引用、基础类型引用
+    BackendValidator -> BackendValidator: validateConstraints()
+    note right: 约束校验：属性约束规则
+    BackendValidator --> Service: 校验结果或异常
+    deactivate BackendValidator
+    
+    Service -> Service: validateBusinessRules(schema)
+    note right: 业务规则校验：\n- 关系自环检查\n- 关系唯一性\n- 实体引用检查
+    
+    Service -> Service: validateModelCompleteness(schema)
+    note right: 完整性校验：\n- 主键检查\n- 属性重复检查\n- 孤立实体检测
+    
+    Service -> Service: generateFormattedYaml(schema)
+    note right: 生成YAML内容
+    
+    Service --> Controller: ValidationResult
+    deactivate Service
+    Controller --> API: 返回校验结果
+    deactivate Controller
+    API --> UI: 返回{valid, errors, yaml}
+    deactivate API
+    
+    UI -> UI: 合并前端和后端错误
+    UI -> UI: 设置isValid状态
+    UI -> UI: 设置yamlOutput
+    UI -> 用户: 显示校验结果和YAML
+    deactivate UI
+end
+
+@enduml
+
+@startuml 命名空间关系
+title 命名空间（Namespace）与模型的关系
+
+package "模型层" {
+    [OntologyModel] as Model
+    [Entity] as Entity
+    [Relation] as Relation
+}
+
+package "存储层" {
+    [YAML文件] as YAML
+    [文件系统] as FS
+}
+
+package "系统层" {
+    [查询引擎] as Query
+    [数据绑定] as Binding
+    [模型管理] as Manager
+}
+
+Model --> YAML : 包含namespace字段
+YAML --> FS : 存储为文件\n./ontology/{filename}.yaml
+
+note right of Model
+  namespace: "ontology.builder"
+  用于模型隔离和标识
+end note
+
+note right of YAML
+  version: "1.0.0"
+  namespace: "ontology.builder"
+  object_types: [...]
+  link_types: [...]
+end note
+
+Query --> Model : 通过namespace\n查找模型
+Binding --> Model : 通过namespace\n绑定数据源
+Manager --> Model : 通过namespace\n管理模型版本
+
+note bottom
+  命名空间的作用：
+  1. 模型隔离：避免实体/关系名称冲突
+  2. 版本管理：同一命名空间的不同版本
+  3. 模型引用：跨模型引用时使用命名空间限定
+  4. 系统集成：与查询引擎、数据绑定等集成
+end note
+
+@enduml
+
+@startuml 数据转换流程
+title 数据模型转换流程
+
+package "前端层" {
+    [OntologyModel] as FrontendModel
+    [Entity] as FrontendEntity
+    [Relation] as FrontendRelation
+}
+
+package "转换层" {
+    [toApiFormat] as ToAPI
+    [fromApiFormat] as FromAPI
+}
+
+package "API层" {
+    [OntologySchema] as APISchema
+    [ObjectType] as APIObjectType
+    [LinkType] as APILinkType
+}
+
+package "存储层" {
+    [YAML文件] as YAML
+}
+
+FrontendModel --> ToAPI : 输入
+FrontendEntity --> ToAPI : 转换为object_types
+FrontendRelation --> ToAPI : 转换为link_types
+
+ToAPI --> APISchema : 输出
+ToAPI --> APIObjectType : 转换实体
+ToAPI --> APILinkType : 转换关系
+
+APISchema --> YAML : 序列化
+APIObjectType --> YAML : 包含在object_types中
+APILinkType --> YAML : 包含在link_types中
+
+YAML --> FromAPI : 反序列化
+FromAPI --> FrontendModel : 输出
+FromAPI --> FrontendEntity : 转换为Entity
+FromAPI --> FrontendRelation : 转换为Relation
+
+note right of ToAPI
+  关键转换：
+  - unique字段 → constraints.unique
+  - type → data_type
+  - 关系类型映射
+end note
+
+note right of FromAPI
+  关键转换：
+  - constraints.unique → unique字段
+  - data_type → type
+  - 关系类型映射
+end note
+
+@enduml
+

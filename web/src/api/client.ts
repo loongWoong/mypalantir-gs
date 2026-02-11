@@ -184,9 +184,20 @@ export interface OntologyValidationResult {
   yaml: string;
 }
 
+export interface OntologySaveResult {
+  success: boolean;
+  filePath?: string;
+  message: string;
+}
+
 export const ontologyBuilderApi = {
   validate: async (payload: OntologyBuilderPayload): Promise<OntologyValidationResult> => {
     const response = await apiClient.post<ApiResponse<OntologyValidationResult>>('/ontology-builder/validate', payload);
+    return response.data.data;
+  },
+  save: async (payload: OntologyBuilderPayload, filename?: string): Promise<OntologySaveResult> => {
+    const params = filename ? `?filename=${encodeURIComponent(filename)}` : '';
+    const response = await apiClient.post<ApiResponse<OntologySaveResult>>(`/ontology-builder/save${params}`, payload);
     return response.data.data;
   },
 };
