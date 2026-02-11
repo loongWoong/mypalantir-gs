@@ -47,8 +47,22 @@ export default function Layout({ children }: LayoutProps) {
   const [workspaceDropdownOpen, setWorkspaceDropdownOpen] = useState(false);
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [currentModel, setCurrentModel] = useState<CurrentModel | null>(null);
+  const [switchingModel, setSwitchingModel] = useState(false);
   
   const { workspaces, selectedWorkspaceId, selectedWorkspace, setSelectedWorkspaceId, refreshWorkspaces } = useWorkspace();
+
+  const loadSchemaData = async () => {
+    try {
+      const [objectTypesData, linkTypesData] = await Promise.all([
+        schemaApi.getObjectTypes(),
+        schemaApi.getLinkTypes(),
+      ]);
+      setObjectTypes(objectTypesData);
+      setLinkTypes(linkTypesData);
+    } catch (error) {
+      console.error('Failed to load schema:', error);
+    }
+  };
 
   useEffect(() => {
     const loadData = async () => {
@@ -71,6 +85,47 @@ export default function Layout({ children }: LayoutProps) {
     };
     loadData();
   }, []);
+
+  const handleModelSwitch = async (modelId: string) => {
+    if (switchingModel || !currentModel || modelId === currentModel.modelId) {
+      return;
+    }
+
+    const selectedModel = models.find(m => m.id === modelId);
+    if (!selectedModel) {
+      return;
+    }
+
+    if (!confirm(`确定要切换到模型 "${selectedModel.displayName}" 吗？\n\n切换后系统将立即重新加载模型数据。`)) {
+      return;
+    }
+
+    setSwitchingModel(true);
+    try {
+      // 调用切换模型API
+      const newModel = await modelApi.switchModel(modelId);
+      setCurrentModel(newModel);
+      
+      // 重新加载schema数据
+      await loadSchemaData();
+      
+      // 显示成功消息
+      alert(`模型已成功切换到 "${selectedModel.displayName}"`);
+    } catch (error: any) {
+      console.error('Failed to switch model:', error);
+      const errorMessage = error?.response?.data?.message || error?.message || '切换模型失败';
+      alert(`切换模型失败: ${errorMessage}`);
+      // 恢复选择框的值
+      if (currentModel) {
+        const selectElement = document.querySelector(`select[value="${currentModel.modelId}"]`) as HTMLSelectElement;
+        if (selectElement) {
+          selectElement.value = currentModel.modelId;
+        }
+      }
+    } finally {
+      setSwitchingModel(false);
+    }
+  };
 
   const isActive = (path: string) => {
     return location.pathname.startsWith(path);
@@ -405,16 +460,11 @@ export default function Layout({ children }: LayoutProps) {
               <div className="relative">
                 <select
                   value={currentModel.modelId}
-                  onChange={(e) => {
-                    const selectedModel = models.find(m => m.id === e.target.value);
-                    if (selectedModel && selectedModel.id !== currentModel.modelId) {
-                      if (confirm(`切换模型需要重启应用。\n\n当前模型: ${currentModel.modelId}\n选择模型: ${selectedModel.displayName}\n\n请在 application.properties 中设置:\nontology.model=${selectedModel.id}\n\n然后重启应用。`)) {
-                        // 可以打开配置文件或显示说明
-                        console.log(`请设置 ontology.model=${selectedModel.id} 并重启应用`);
-                      }
-                    }
-                  }}
-                  className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary bg-white min-w-[140px]"
+                  onChange={(e) => handleModelSwitch(e.target.value)}
+                  disabled={switchingModel}
+                  className={`px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary bg-white min-w-[140px] ${
+                    switchingModel ? 'opacity-50 cursor-not-allowed' : ''
+                  }`}
                 >
                   {models.map((model) => (
                     <option key={model.id} value={model.id}>
@@ -422,6 +472,11 @@ export default function Layout({ children }: LayoutProps) {
                     </option>
                   ))}
                 </select>
+                {switchingModel && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-white bg-opacity-75 rounded-lg">
+                    <ArrowPathIcon className="w-4 h-4 animate-spin text-primary" />
+                  </div>
+                )}
               </div>
             </div>
           ) : (

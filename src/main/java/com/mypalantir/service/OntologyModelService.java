@@ -2,9 +2,11 @@ package com.mypalantir.service;
 
 import org.springframework.stereotype.Service;
 
+import com.mypalantir.meta.Loader;
 import com.mypalantir.meta.ObjectType;
 import com.mypalantir.meta.OntologySchema;
 import com.mypalantir.meta.Parser;
+import com.mypalantir.meta.Validator;
 
 import java.io.File;
 import java.io.IOException;
@@ -18,6 +20,21 @@ import java.util.List;
 @Service
 public class OntologyModelService {
     private final String ontologyDir = "./ontology";
+    private final Loader loader;
+    private String currentModelId;
+    private String currentModelPath;
+    
+    public OntologyModelService(Loader loader) {
+        this.loader = loader;
+        // 初始化当前模型ID和路径
+        this.currentModelPath = loader.getFilePath();
+        // 从路径中提取模型ID
+        if (this.currentModelPath != null) {
+            File file = new File(this.currentModelPath);
+            String fileName = file.getName();
+            this.currentModelId = fileName.replace(".yaml", "");
+        }
+    }
     
     /**
      * 列出所有可用的模型
@@ -51,6 +68,43 @@ public class OntologyModelService {
         Parser parser = new Parser(file.getPath());
         OntologySchema schema = parser.parse();
         return schema.getObjectTypes() != null ? schema.getObjectTypes() : Collections.emptyList();
+    }
+    
+    /**
+     * 切换模型（热更新）
+     * @param modelId 模型ID
+     * @throws IOException 文件读取错误
+     * @throws Validator.ValidationException Schema验证失败
+     */
+    public void switchModel(String modelId) throws IOException, Validator.ValidationException {
+        String fileName = modelId.endsWith(".yaml") ? modelId : modelId + ".yaml";
+        File file = new File(ontologyDir, fileName);
+        if (!file.exists()) {
+            throw new IOException("Model file not found: " + fileName);
+        }
+        
+        // 使用Loader的switchModel方法进行热更新
+        loader.switchModel(file.getAbsolutePath());
+        
+        // 更新当前模型ID和路径
+        this.currentModelId = modelId;
+        this.currentModelPath = file.getAbsolutePath();
+    }
+    
+    /**
+     * 获取当前模型ID
+     * @return 当前模型ID
+     */
+    public String getCurrentModelId() {
+        return currentModelId;
+    }
+    
+    /**
+     * 获取当前模型文件路径
+     * @return 当前模型文件路径
+     */
+    public String getCurrentModelPath() {
+        return currentModelPath;
     }
     
     /**

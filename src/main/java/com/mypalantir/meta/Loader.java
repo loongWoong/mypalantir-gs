@@ -7,7 +7,8 @@ import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class Loader {
-    private final Parser parser;
+    private Parser parser;
+    private String filePath;
     private final String systemSchemaPath;
     private final ReadWriteLock lock = new ReentrantReadWriteLock();
     private OntologySchema schema;
@@ -17,6 +18,7 @@ public class Loader {
     }
 
     public Loader(String filePath, String systemSchemaPath) {
+        this.filePath = filePath;
         this.parser = new Parser(filePath);
         this.systemSchemaPath = systemSchemaPath;
     }
@@ -119,6 +121,31 @@ public class Loader {
 
     public void reload() throws IOException, Validator.ValidationException {
         load();
+    }
+
+    /**
+     * 切换模型文件并重新加载
+     * @param newFilePath 新的模型文件路径
+     * @throws IOException 文件读取错误
+     * @throws Validator.ValidationException Schema验证失败
+     */
+    public void switchModel(String newFilePath) throws IOException, Validator.ValidationException {
+        lock.writeLock().lock();
+        try {
+            this.filePath = newFilePath;
+            this.parser = new Parser(newFilePath);
+            load();
+        } finally {
+            lock.writeLock().unlock();
+        }
+    }
+
+    /**
+     * 获取当前模型文件路径
+     * @return 当前文件路径
+     */
+    public String getFilePath() {
+        return filePath;
     }
 
     public ObjectType getObjectType(String name) throws NotFoundException {

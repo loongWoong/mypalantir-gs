@@ -168,6 +168,11 @@ export const modelApi = {
     const response = await apiClient.get<ApiResponse<CurrentModel>>('/models/current');
     return response.data.data;
   },
+
+  switchModel: async (modelId: string): Promise<CurrentModel> => {
+    const response = await apiClient.post<ApiResponse<CurrentModel>>(`/models/${modelId}/switch`);
+    return response.data.data;
+  },
 };
 
 export interface OntologyBuilderPayload {
