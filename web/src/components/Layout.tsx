@@ -23,7 +23,8 @@ import {
   MapIcon,
   ListBulletIcon,
   CalculatorIcon,
-  ClipboardDocumentCheckIcon
+  ClipboardDocumentCheckIcon,
+  WrenchScrewdriverIcon
 } from '@heroicons/react/24/outline';
 import type { ObjectType, LinkType, ModelInfo, CurrentModel } from '../api/client';
 import { schemaApi, modelApi } from '../api/client';
@@ -283,6 +284,19 @@ export default function Layout({ children }: LayoutProps) {
               Natural Language Query
             </Link>
 
+
+            <Link
+              to="/ontology-builder"
+              className={`flex items-center px-3 py-2 rounded-lg transition-colors duration-200 ${
+                isActive('/ontology-builder')
+                  ? 'bg-blue-50 text-primary font-medium'
+                  : 'text-text hover:bg-gray-100'
+              }`}
+            >
+              <WrenchScrewdriverIcon className="w-5 h-5 mr-3" />
+              Ontology Builder
+            </Link>
+
             <Link
               to="/data-comparison"
               className={`flex items-center px-3 py-2 rounded-lg transition-colors duration-200 ${
@@ -379,6 +393,7 @@ export default function Layout({ children }: LayoutProps) {
               {location.pathname.startsWith('/metrics') && '指标管理'}
               {location.pathname === '/query' && 'Query Builder'}
               {location.pathname === '/natural-language-query' && 'Natural Language Query'}
+              {location.pathname === '/ontology-builder' && 'Ontology Builder'}
             </h2>
           </div>
           
@@ -414,7 +429,7 @@ export default function Layout({ children }: LayoutProps) {
         </header>
 
         {/* Content area */}
-        <main className={`flex-1 ${location.pathname.startsWith('/schema-graph') ? 'overflow-hidden p-0' : 'overflow-y-auto p-8'}`}>{children}</main>
+        <main className={`flex-1 ${(location.pathname.startsWith('/schema-graph') || location.pathname === '/ontology-builder') ? 'overflow-hidden p-0' : 'overflow-y-auto p-8'}`}>{children}</main>
       </div>
 
       {/* 工作空间对话框 */}
