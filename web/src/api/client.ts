@@ -170,6 +170,27 @@ export const modelApi = {
   },
 };
 
+export interface OntologyBuilderPayload {
+  version: string;
+  namespace: string;
+  object_types: Array<Record<string, any>>;
+  link_types: Array<Record<string, any>>;
+  data_sources?: Array<Record<string, any>>;
+}
+
+export interface OntologyValidationResult {
+  valid: boolean;
+  errors: string[];
+  yaml: string;
+}
+
+export const ontologyBuilderApi = {
+  validate: async (payload: OntologyBuilderPayload): Promise<OntologyValidationResult> => {
+    const response = await apiClient.post<ApiResponse<OntologyValidationResult>>('/ontology-builder/validate', payload);
+    return response.data.data;
+  },
+};
+
 // Instance API
 export const instanceApi = {
   create: async (objectType: string, data: Record<string, any>): Promise<string> => {
@@ -519,4 +540,3 @@ export const comparisonApi = {
 };
 
 export default apiClient;
-
