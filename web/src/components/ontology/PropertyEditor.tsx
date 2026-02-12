@@ -132,7 +132,14 @@ export function PropertyEditor({ attributes, onChange }: PropertyEditorProps) {
               </div>
             </div>
             {editingIndex === index && (
-              <div className="mt-2">
+              <div className="mt-2 space-y-1">
+                <input
+                  type="text"
+                  placeholder="显示名称（可选）"
+                  value={attr.display_name || ''}
+                  onChange={(e) => updateAttribute(index, { display_name: e.target.value })}
+                  className="w-full text-xs border rounded px-2 py-1"
+                />
                 <input
                   type="text"
                   placeholder="描述（可选）"
@@ -145,7 +152,7 @@ export function PropertyEditor({ attributes, onChange }: PropertyEditorProps) {
                   placeholder="默认值（可选）"
                   value={attr.default_value || ''}
                   onChange={(e) => updateAttribute(index, { default_value: e.target.value })}
-                  className="w-full text-xs border rounded px-2 py-1 mt-1"
+                  className="w-full text-xs border rounded px-2 py-1"
                 />
               </div>
             )}

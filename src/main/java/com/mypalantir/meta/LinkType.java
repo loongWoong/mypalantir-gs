@@ -52,7 +52,7 @@ public class LinkType {
         this.name = name;
     }
 
-    @JsonIgnore
+    @JsonGetter("display_name")
     public String getDisplayName() {
         return displayName;
     }
@@ -115,7 +115,7 @@ public class LinkType {
         this.properties = properties;
     }
 
-    @JsonIgnore
+    @JsonGetter("property_mappings")
     public Map<String, String> getPropertyMappings() {
         return propertyMappings;
     }

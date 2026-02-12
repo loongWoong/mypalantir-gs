@@ -23,6 +23,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+import com.mypalantir.meta.Parser;
 
 /**
  * 本体可视化建模服务：负责 YML 生成和校验。
@@ -41,6 +44,7 @@ public class OntologyBuilderService {
 
     public ValidationResult validateAndGenerate(OntologySchema schema) {
         List<String> errors = new ArrayList<>();
+        List<String> warnings = new ArrayList<>();
 
         // 第一层：结构校验（使用Validator）
         try {
@@ -53,8 +57,10 @@ public class OntologyBuilderService {
         // 第二层：语义校验（业务规则）
         errors.addAll(validateBusinessRules(schema));
 
-        // 第三层：模型完整性校验
-        errors.addAll(validateModelCompleteness(schema));
+        // 第三层：模型完整性校验（返回错误和警告）
+        ModelCompletenessResult completenessResult = validateModelCompleteness(schema);
+        errors.addAll(completenessResult.getErrors());
+        warnings.addAll(completenessResult.getWarnings());
 
         // 生成YML
         String yaml = "";
@@ -64,7 +70,7 @@ public class OntologyBuilderService {
             errors.add("YAML generation failed: " + e.getMessage());
         }
 
-        return new ValidationResult(errors.isEmpty(), errors, yaml);
+        return new ValidationResult(errors.isEmpty(), errors, warnings, yaml);
     }
 
     /**
@@ -117,12 +123,13 @@ public class OntologyBuilderService {
     /**
      * 校验模型完整性
      */
-    private List<String> validateModelCompleteness(OntologySchema schema) {
+    private ModelCompletenessResult validateModelCompleteness(OntologySchema schema) {
         List<String> errors = new ArrayList<>();
+        List<String> warnings = new ArrayList<>();
 
         if (schema.getObjectTypes() == null || schema.getObjectTypes().isEmpty()) {
             errors.add("模型必须至少包含一个对象类型");
-            return errors;
+            return new ModelCompletenessResult(errors, warnings);
         }
 
         // 检查每个实体是否有主键
@@ -151,8 +158,9 @@ public class OntologyBuilderService {
                 }
             }
 
+            // 主键校验改为警告，不影响校验通过状态
             if (!hasPrimaryKey) {
-                errors.add("object_type '" + ot.getName() + "': should have at least one primary key (required and unique property)");
+                warnings.add("object_type '" + ot.getName() + "': should have at least one primary key (required and unique property)");
             }
         }
 
@@ -168,13 +176,13 @@ public class OntologyBuilderService {
                 for (ObjectType ot : schema.getObjectTypes()) {
                     if (!connectedEntityNames.contains(ot.getName()) && schema.getObjectTypes().size() > 1) {
                         // 只作为警告，不是错误
-                        // errors.add("object_type '" + ot.getName() + "': is isolated (no relations)");
+                        // warnings.add("object_type '" + ot.getName() + "': is isolated (no relations)");
                     }
                 }
             }
         }
 
-        return errors;
+        return new ModelCompletenessResult(errors, warnings);
     }
 
     /**
@@ -225,18 +233,90 @@ public class OntologyBuilderService {
         return filePath.toString();
     }
 
+    /**
+     * 列出ontology文件夹中的所有YAML文件
+     * @return 文件名列表
+     * @throws IOException 文件操作异常
+     */
+    public List<String> listOntologyFiles() throws IOException {
+        Path ontologyDir = Paths.get("ontology");
+        if (!Files.exists(ontologyDir)) {
+            return new ArrayList<>();
+        }
+
+        try (Stream<Path> paths = Files.list(ontologyDir)) {
+            return paths
+                .filter(Files::isRegularFile)
+                .filter(path -> {
+                    String fileName = path.getFileName().toString().toLowerCase();
+                    return fileName.endsWith(".yaml") || fileName.endsWith(".yml");
+                })
+                .map(path -> path.getFileName().toString())
+                .sorted()
+                .collect(Collectors.toList());
+        }
+    }
+
+    /**
+     * 从ontology文件夹加载指定的YAML文件
+     * @param filename 文件名（可以包含或不包含扩展名）
+     * @return 解析后的OntologySchema
+     * @throws IOException 文件操作异常
+     */
+    public OntologySchema loadFromOntologyFolder(String filename) throws IOException {
+        // 确保文件名以.yaml或.yml结尾
+        if (!filename.endsWith(".yaml") && !filename.endsWith(".yml")) {
+            filename = filename + ".yaml";
+        }
+
+        // 构建文件路径：./ontology/filename.yaml
+        Path ontologyDir = Paths.get("ontology");
+        Path filePath = ontologyDir.resolve(filename);
+
+        if (!Files.exists(filePath)) {
+            throw new IOException("文件不存在: " + filename);
+        }
+
+        // 使用Parser解析文件
+        Parser parser = new Parser(filePath.toString());
+        return parser.parse();
+    }
+
     private String safe(String value) {
         return value == null ? "" : value;
+    }
+
+    /**
+     * 模型完整性校验结果
+     */
+    private static class ModelCompletenessResult {
+        private final List<String> errors;
+        private final List<String> warnings;
+
+        public ModelCompletenessResult(List<String> errors, List<String> warnings) {
+            this.errors = errors;
+            this.warnings = warnings;
+        }
+
+        public List<String> getErrors() {
+            return errors;
+        }
+
+        public List<String> getWarnings() {
+            return warnings;
+        }
     }
 
     public static class ValidationResult {
         private boolean valid;
         private List<String> errors;
+        private List<String> warnings;
         private String yaml;
 
-        public ValidationResult(boolean valid, List<String> errors, String yaml) {
+        public ValidationResult(boolean valid, List<String> errors, List<String> warnings, String yaml) {
             this.valid = valid;
             this.errors = errors;
+            this.warnings = warnings;
             this.yaml = yaml;
         }
 
@@ -254,6 +334,14 @@ public class OntologyBuilderService {
 
         public void setErrors(List<String> errors) {
             this.errors = errors;
+        }
+
+        public List<String> getWarnings() {
+            return warnings;
+        }
+
+        public void setWarnings(List<String> warnings) {
+            this.warnings = warnings;
         }
 
         public String getYaml() {

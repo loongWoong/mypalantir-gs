@@ -29,6 +29,7 @@ export interface Entity {
 
 export interface Attribute {
   name: string;
+  display_name?: string;
   type: string;
   required: boolean;
   unique?: boolean;
@@ -49,6 +50,7 @@ export interface Relation {
   type: '1-1' | '1-N' | 'N-1' | 'N-N';
   direction: 'directed' | 'undirected';
   properties?: Attribute[];
+  property_mappings?: Record<string, string>;
   metadata?: Record<string, any>;
   data_source?: any;
   url?: string;
@@ -72,7 +74,7 @@ export function toApiFormat(model: OntologyModel): any {
         if (attr.unique !== undefined) {
           constraints.unique = attr.unique;
         }
-        return {
+        const property: any = {
           name: attr.name,
           data_type: attr.type,
           required: attr.required,
@@ -80,29 +82,53 @@ export function toApiFormat(model: OntologyModel): any {
           default_value: attr.default_value,
           constraints: Object.keys(constraints).length > 0 ? constraints : null,
         };
+        // 只有当display_name存在时才添加
+        if (attr.display_name !== undefined && attr.display_name !== null && attr.display_name !== '') {
+          property.display_name = attr.display_name;
+        }
+        return property;
       }),
       data_source: entity.data_source,
       url: entity.url,
     })),
-    link_types: model.relations.map((relation) => ({
-      name: relation.name,
-      display_name: relation.display_name,
-      description: relation.description,
-      source_type: relation.source_type,
-      target_type: relation.target_type,
-      cardinality: mapRelationTypeToCardinality(relation.type),
-      direction: relation.direction,
-      properties: relation.properties?.map((prop) => ({
-        name: prop.name,
-        data_type: prop.type,
-        required: prop.required,
-        description: prop.description,
-        default_value: prop.default_value,
-        constraints: prop.constraints,
-      })),
-      data_source: relation.data_source,
-      url: relation.url,
-    })),
+    link_types: model.relations.map((relation) => {
+      const linkType: any = {
+        name: relation.name,
+        display_name: relation.display_name,
+        description: relation.description,
+        source_type: relation.source_type,
+        target_type: relation.target_type,
+        cardinality: mapRelationTypeToCardinality(relation.type),
+        direction: relation.direction,
+        properties: relation.properties?.map((prop) => {
+          const property: any = {
+            name: prop.name,
+            data_type: prop.type,
+            required: prop.required,
+            description: prop.description,
+            default_value: prop.default_value,
+            constraints: prop.constraints,
+          };
+          // 只有当display_name存在时才添加
+          if (prop.display_name !== undefined && prop.display_name !== null && prop.display_name !== '') {
+            property.display_name = prop.display_name;
+          }
+          return property;
+        }),
+        data_source: relation.data_source,
+        url: relation.url,
+      };
+      // 只有当property_mappings存在时才添加
+      if (relation.property_mappings !== undefined && relation.property_mappings !== null) {
+        // 如果property_mappings是空对象，设置为null；否则保留
+        if (Object.keys(relation.property_mappings).length > 0) {
+          linkType.property_mappings = relation.property_mappings;
+        } else {
+          linkType.property_mappings = null;
+        }
+      }
+      return linkType;
+    }),
     data_sources: [],
   };
 }
@@ -131,6 +157,7 @@ export function fromApiFormat(apiData: any): OntologyModel {
       }
       return {
         name: prop.name,
+        display_name: prop.display_name,
         type: prop.data_type,
         required: prop.required || false,
         unique: unique,
@@ -156,12 +183,14 @@ export function fromApiFormat(apiData: any): OntologyModel {
     direction: lt.direction || 'directed',
     properties: (lt.properties || []).map((prop: any) => ({
       name: prop.name,
+      display_name: prop.display_name,
       type: prop.data_type,
       required: prop.required || false,
       description: prop.description,
       default_value: prop.default_value,
       constraints: prop.constraints,
     })),
+    property_mappings: lt.property_mappings || undefined,
     data_source: lt.data_source,
     url: lt.url,
   }));

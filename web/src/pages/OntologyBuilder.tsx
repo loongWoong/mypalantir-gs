@@ -22,12 +22,15 @@ import {
   DocumentArrowDownIcon,
   DocumentArrowUpIcon,
   FolderArrowDownIcon,
+  FolderOpenIcon,
+  XMarkIcon,
 } from '@heroicons/react/24/outline';
 import { ontologyBuilderApi } from '../api/client';
-import { type OntologyModel, type Entity, type Relation, createDefaultEntity, createDefaultRelation, toApiFormat } from '../models/OntologyModel';
+import { type OntologyModel, type Entity, type Relation, createDefaultEntity, createDefaultRelation, toApiFormat, fromApiFormat } from '../models/OntologyModel';
 import { validateModel, type ValidationError } from '../utils/ontologyValidator';
 import { EntityNode } from '../components/ontology/EntityNode';
 import { PropertyEditor } from '../components/ontology/PropertyEditor';
+import { PropertyMappingsEditor } from '../components/ontology/PropertyMappingsEditor';
 
 const nodeTypes = {
   entity: EntityNode,
@@ -51,6 +54,9 @@ export default function OntologyBuilder() {
   const [validationErrors, setValidationErrors] = useState<ValidationError[]>([]);
   const [isValid, setIsValid] = useState<boolean | null>(null);
   const [filename, setFilename] = useState('');
+  const [showFileDialog, setShowFileDialog] = useState(false);
+  const [fileList, setFileList] = useState<string[]>([]);
+  const [loadingFiles, setLoadingFiles] = useState(false);
 
   // 当模型名称改变时，自动更新文件名（如果文件名为空）
   React.useEffect(() => {
@@ -244,12 +250,29 @@ export default function OntologyBuilder() {
       const result = await ontologyBuilderApi.validate(apiPayload);
       setIsValid(result.valid);
       setYamlOutput(result.yaml);
+      
+      const backendValidationErrors: ValidationError[] = [];
+      
+      // 添加错误
       if (result.errors && result.errors.length > 0) {
         const backendErrors: ValidationError[] = result.errors.map((msg) => ({
           level: 'error',
           message: msg,
         }));
-        setValidationErrors([...frontendErrors, ...backendErrors]);
+        backendValidationErrors.push(...backendErrors);
+      }
+      
+      // 添加警告
+      if (result.warnings && result.warnings.length > 0) {
+        const backendWarnings: ValidationError[] = result.warnings.map((msg) => ({
+          level: 'warning',
+          message: msg,
+        }));
+        backendValidationErrors.push(...backendWarnings);
+      }
+      
+      if (backendValidationErrors.length > 0) {
+        setValidationErrors([...frontendErrors, ...backendValidationErrors]);
       }
     } catch (error: any) {
       setIsValid(false);
@@ -349,6 +372,60 @@ export default function OntologyBuilder() {
     }
   };
 
+  // 打开文件选择对话框
+  const openFileDialog = async () => {
+    setShowFileDialog(true);
+    setLoadingFiles(true);
+    try {
+      const files = await ontologyBuilderApi.listFiles();
+      setFileList(files);
+    } catch (error: any) {
+      alert('获取文件列表失败: ' + (error.message || '未知错误'));
+      setFileList([]);
+    } finally {
+      setLoadingFiles(false);
+    }
+  };
+
+  // 从ontology文件夹加载文件
+  const loadFileFromOntology = async (file: string) => {
+    try {
+      setLoadingFiles(true);
+      const apiData = await ontologyBuilderApi.loadFile(file);
+      const loadedModel = fromApiFormat(apiData);
+      
+      // 为实体添加位置信息（如果不存在）
+      const entitiesWithPosition = loadedModel.entities.map((entity, index) => ({
+        ...entity,
+        position: entity.position || {
+          x: (index % 4) * 200 + 100,
+          y: Math.floor(index / 4) * 200 + 100,
+        },
+      }));
+      
+      setModel({
+        ...loadedModel,
+        entities: entitiesWithPosition,
+      });
+      
+      // 设置文件名为加载的文件名（去掉扩展名）
+      const nameWithoutExt = file.replace(/\.(yaml|yml)$/i, '');
+      setFilename(nameWithoutExt);
+      
+      // 清空之前的校验结果
+      setYamlOutput('');
+      setValidationErrors([]);
+      setIsValid(null);
+      
+      setShowFileDialog(false);
+      alert(`✅ 文件 "${file}" 已成功加载`);
+    } catch (error: any) {
+      alert('加载文件失败: ' + (error.message || '未知错误'));
+    } finally {
+      setLoadingFiles(false);
+    }
+  };
+
   // 获取当前选中的实体
   const selectedEntity = useMemo(() => {
     if (!selectedNode) return null;
@@ -399,7 +476,14 @@ export default function OntologyBuilder() {
             className="px-3 py-1.5 rounded-md bg-gray-100 text-gray-700 text-sm hover:bg-gray-200 flex items-center gap-1"
           >
             <DocumentArrowUpIcon className="w-4 h-4" />
-            加载
+            加载本地
+          </button>
+          <button
+            onClick={openFileDialog}
+            className="px-3 py-1.5 rounded-md bg-gray-100 text-gray-700 text-sm hover:bg-gray-200 flex items-center gap-1"
+          >
+            <FolderOpenIcon className="w-4 h-4" />
+            加载文件
           </button>
           <button
             onClick={validateAndGenerate}
@@ -619,6 +703,16 @@ export default function OntologyBuilder() {
                 />
               </div>
 
+              {/* 属性映射编辑器 */}
+              <div>
+                <PropertyMappingsEditor
+                  sourceEntity={model.entities.find((e) => e.name === selectedRelation.source_type) || null}
+                  targetEntity={model.entities.find((e) => e.name === selectedRelation.target_type) || null}
+                  propertyMappings={selectedRelation.property_mappings}
+                  onChange={(propertyMappings) => updateRelation(selectedRelation.id, { property_mappings: propertyMappings })}
+                />
+              </div>
+
               {selectedRelation.properties && (
                 <div>
                   <PropertyEditor
@@ -719,6 +813,55 @@ export default function OntologyBuilder() {
               />
             </div>
           )}
+        </div>
+      )}
+
+      {/* 文件选择对话框 */}
+      {showFileDialog && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900">选择要加载的文件</h3>
+              <button
+                onClick={() => setShowFileDialog(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <XMarkIcon className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4 max-h-96 overflow-y-auto">
+              {loadingFiles ? (
+                <div className="text-center py-8 text-gray-500">加载中...</div>
+              ) : fileList.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <p>ontology 文件夹中没有找到 YAML 文件</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {fileList.map((file) => (
+                    <button
+                      key={file}
+                      onClick={() => loadFileFromOntology(file)}
+                      className="w-full text-left px-4 py-3 rounded-md border border-gray-200 hover:bg-blue-50 hover:border-blue-300 transition-colors"
+                    >
+                      <div className="flex items-center gap-2">
+                        <DocumentArrowUpIcon className="w-5 h-5 text-gray-400" />
+                        <span className="text-sm font-medium text-gray-900">{file}</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="p-4 border-t border-gray-200 flex justify-end">
+              <button
+                onClick={() => setShowFileDialog(false)}
+                className="px-4 py-2 rounded-md bg-gray-100 text-gray-700 text-sm hover:bg-gray-200"
+              >
+                取消
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

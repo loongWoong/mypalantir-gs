@@ -387,15 +387,15 @@ link_types:
     property_mappings:
       atomic_metric_id: id
   
-  - name: composite_depends_on
-    display_name: 复合指标依赖
-    description: "复合指标依赖的基础指标（派生指标或复合指标）"
-    source_type: MetricDefinition
-    target_type: MetricDefinition
-    cardinality: many-to-many
-    direction: directed
-    property_mappings:
-      base_metric_ids: id
+  # - name: composite_depends_on
+  #   display_name: 复合指标依赖
+  #   description: "复合指标依赖的基础指标（派生指标或复合指标）"
+  #   source_type: MetricDefinition
+  #   target_type: MetricDefinition
+  #   cardinality: many-to-many
+  #   direction: directed
+  #   property_mappings:
+  #     base_metric_ids: id
 
   - name: atomic_metric_belongs_to_workspace
     display_name: 原子指标归属工作空间

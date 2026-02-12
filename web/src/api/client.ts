@@ -186,6 +186,7 @@ export interface OntologyBuilderPayload {
 export interface OntologyValidationResult {
   valid: boolean;
   errors: string[];
+  warnings?: string[];
   yaml: string;
 }
 
@@ -203,6 +204,16 @@ export const ontologyBuilderApi = {
   save: async (payload: OntologyBuilderPayload, filename?: string): Promise<OntologySaveResult> => {
     const params = filename ? `?filename=${encodeURIComponent(filename)}` : '';
     const response = await apiClient.post<ApiResponse<OntologySaveResult>>(`/ontology-builder/save${params}`, payload);
+    return response.data.data;
+  },
+  listFiles: async (): Promise<string[]> => {
+    const response = await apiClient.get<ApiResponse<string[]>>('/ontology-builder/files');
+    return response.data.data;
+  },
+  loadFile: async (filename: string): Promise<OntologyBuilderPayload> => {
+    const response = await apiClient.get<ApiResponse<OntologyBuilderPayload>>(
+      `/ontology-builder/load?filename=${encodeURIComponent(filename)}`
+    );
     return response.data.data;
   },
 };

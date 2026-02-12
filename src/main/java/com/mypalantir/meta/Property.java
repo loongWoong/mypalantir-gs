@@ -1,5 +1,6 @@
 package com.mypalantir.meta;
 
+import com.fasterxml.jackson.annotation.JsonGetter;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.Map;
@@ -13,6 +14,9 @@ public class Property {
 
     @JsonProperty("required")
     private boolean required;
+
+    @JsonProperty("display_name")
+    private String displayName;
 
     @JsonProperty("description")
     private String description;
@@ -48,6 +52,15 @@ public class Property {
 
     public void setRequired(boolean required) {
         this.required = required;
+    }
+
+    @JsonGetter("display_name")
+    public String getDisplayName() {
+        return displayName;
+    }
+
+    public void setDisplayName(String displayName) {
+        this.displayName = displayName;
     }
 
     @JsonIgnore
