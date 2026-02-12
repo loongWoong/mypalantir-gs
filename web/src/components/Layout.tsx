@@ -267,6 +267,18 @@ export default function Layout({ children }: LayoutProps) {
 
         <div className="flex-1 overflow-y-auto">
           <nav className="p-2 space-y-1">
+          <Link
+              to="/ontology-builder"
+              className={`flex items-center px-3 py-2 rounded-lg transition-colors duration-200 ${
+                isActive('/ontology-builder')
+                  ? 'bg-blue-50 text-primary font-medium'
+                  : 'text-text hover:bg-gray-100'
+              }`}
+            >
+              <WrenchScrewdriverIcon className="w-5 h-5 mr-3" />
+              本体构建工具
+            </Link>
+            
             <Link
               to="/schema"
               className={`flex items-center px-3 py-2 rounded-lg transition-colors duration-200 ${
@@ -340,17 +352,7 @@ export default function Layout({ children }: LayoutProps) {
             </Link>
 
 
-            <Link
-              to="/ontology-builder"
-              className={`flex items-center px-3 py-2 rounded-lg transition-colors duration-200 ${
-                isActive('/ontology-builder')
-                  ? 'bg-blue-50 text-primary font-medium'
-                  : 'text-text hover:bg-gray-100'
-              }`}
-            >
-              <WrenchScrewdriverIcon className="w-5 h-5 mr-3" />
-              Ontology Builder
-            </Link>
+            
 
             <Link
               to="/data-comparison"

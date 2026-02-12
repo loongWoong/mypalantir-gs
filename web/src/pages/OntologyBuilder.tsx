@@ -775,14 +775,14 @@ export default function OntologyBuilder() {
             className="px-3 py-1.5 rounded-md bg-gray-100 text-gray-700 text-sm hover:bg-gray-200 flex items-center gap-1"
           >
             <DocumentArrowDownIcon className="w-4 h-4" />
-            保存
+            暂存
           </button>
           <button
             onClick={loadModel}
             className="px-3 py-1.5 rounded-md bg-gray-100 text-gray-700 text-sm hover:bg-gray-200 flex items-center gap-1"
           >
             <DocumentArrowUpIcon className="w-4 h-4" />
-            加载本地
+            加载暂存
           </button>
           <button
             onClick={openFileDialog}

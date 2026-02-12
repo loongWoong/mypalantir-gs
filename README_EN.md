@@ -319,6 +319,72 @@ Provides deep integration with external ETL systems, supporting automatic ETL mo
 - **Batch Building Support**: Supports batch building of ETL models for multiple object types
 - **Intelligent Mapping**: Automatically handles field mapping, primary key mapping, data type conversion, etc.
 
+### 5. Ontology Builder
+
+Provides visual ontology modeling capabilities, supporting the creation of entities and relationships through drag-and-drop and connection, automatically generating and validating YAML-format Ontology model files.
+
+**Key Features:**
+- **Visual Modeling**: Create entity nodes by dragging and create relationships by connecting
+- **Property Editing**: Edit detailed properties of entities and relationships in the right panel
+- **Automatic YAML Generation**: Real-time generation of YAML-format model files that comply with specifications
+- **Automatic Validation**: Dual validation mechanism (frontend and backend) to ensure model standardization and completeness
+- **Workspace Integration**: Automatically associates with the current workspace for unified model file management
+- **Version Management**: Supports semantic versioning (MAJOR.MINOR.PATCH) with automatic version increment
+- **Stash Function**: Supports stashing and loading stash for temporary saving of work progress
+- **File Loading**: Supports loading existing model files from the file system for editing
+
+## Feature Introduction
+
+### Ontology Builder
+
+The Ontology Builder provides visual ontology modeling capabilities, supporting the creation of entities and relationships through drag-and-drop and connection, automatically generating and validating YAML-format Ontology model files.
+
+![Ontology Builder](docs/images/本体构建工具.png)
+
+**Core Features:**
+- **Visual Modeling**: Create entity nodes by dragging and create relationships by connecting lines
+- **Property Editing**: Edit detailed properties of entities and relationships in the right panel
+- **Automatic YAML Generation**: Real-time generation of YAML-format model files that comply with specifications
+- **Automatic Validation**: Dual validation mechanism (frontend and backend) to ensure model standardization and completeness
+- **Workspace Integration**: Automatically associates with the current workspace for unified model file management
+- **Version Management**: Supports semantic versioning (MAJOR.MINOR.PATCH) with automatic version increment
+- **Stash Function**: Supports stashing and loading stash for temporary saving of work progress
+- **File Loading**: Supports loading existing model files from the file system for editing
+
+**Save Configuration:**
+
+![Ontology Builder - Version Storage](docs/images/本体构建工具-版本存储.png)
+
+The save configuration panel provides complete version management functionality:
+- **Filename Configuration**: Enter the base filename (without version number), the system automatically appends the version number
+- **Version Number Management**: Display current version number, support PATCH, MINOR, MAJOR three version increment types
+- **Automatic Version Calculation**: Automatically calculate the next version number based on the current version and increment type
+- **Namespace Configuration**: Automatically generate namespace based on workspace, supports customization
+- **Full Filename Preview**: Real-time preview of the final saved filename (e.g., `car-1.1.3.yaml`)
+- **Commit Message**: Optional input of commit message to record version change content
+
+**Version History Management:**
+
+![Ontology Builder - Version History](docs/images/本体构建工具-版本历史.png)
+
+The version history feature provides complete version tracking and management capabilities:
+- **Version Timeline**: Display all historical versions in timeline format
+- **Version Details**: Display version number, creation time, change content, and other information for each version
+- **Version Comparison**: Support comparing differences between any two versions, viewing change details
+- **Version Rollback**: Support rolling back to a specified historical version
+- **File Browser**: Support browsing and selecting model files, viewing their version history
+- **Change Statistics**: Automatically count change items for each version (such as object type changes, relationship type changes, etc.)
+
+**Usage Workflow:**
+1. Select or create a workspace (optional, but recommended to create a workspace first)
+2. Click the "Add Entity" button to create entity nodes
+3. Drag node connection lines to create relationships
+4. Edit detailed information of entities and relationships in the right property panel
+5. Click the "Generate and Validate" button for validation
+6. Configure filename and version information in the "Save Configuration" tab
+7. Click "Import to System" to save the model
+8. View and manage historical versions in the "Version History" tab
+
 ## Query Examples
 
 ### Basic Query
