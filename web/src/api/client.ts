@@ -193,7 +193,52 @@ export interface OntologyValidationResult {
 export interface OntologySaveResult {
   success: boolean;
   filePath?: string;
+  version?: string;
   message: string;
+}
+
+export interface OntologyVersion {
+  version: string;
+  namespace: string;
+  filename: string;
+  file_path: string;
+  previous_version?: string;
+  commit_message?: string;
+  author?: string;
+  timestamp: number;
+  workspace_id?: string;
+  workspace_name?: string;
+  changes?: string[];
+}
+
+export interface VersionDiffResult {
+  objectTypeDiffs: ObjectTypeDiff[];
+  linkTypeDiffs: LinkTypeDiff[];
+  metadataChanges: string[];
+}
+
+export interface ObjectTypeDiff {
+  name: string;
+  type: 'ADDED' | 'MODIFIED' | 'DELETED';
+  oldValue?: any;
+  newValue?: any;
+  changes: string[];
+  propertyDiffs: PropertyDiff[];
+}
+
+export interface PropertyDiff {
+  name: string;
+  type: 'ADDED' | 'MODIFIED' | 'DELETED';
+  oldValue?: any;
+  newValue?: any;
+}
+
+export interface LinkTypeDiff {
+  name: string;
+  type: 'ADDED' | 'MODIFIED' | 'DELETED';
+  oldValue?: any;
+  newValue?: any;
+  changes: string[];
 }
 
 export const ontologyBuilderApi = {
@@ -201,9 +246,19 @@ export const ontologyBuilderApi = {
     const response = await apiClient.post<ApiResponse<OntologyValidationResult>>('/ontology-builder/validate', payload);
     return response.data.data;
   },
-  save: async (payload: OntologyBuilderPayload, filename?: string): Promise<OntologySaveResult> => {
-    const params = filename ? `?filename=${encodeURIComponent(filename)}` : '';
-    const response = await apiClient.post<ApiResponse<OntologySaveResult>>(`/ontology-builder/save${params}`, payload);
+  save: async (
+    payload: OntologyBuilderPayload, 
+    filename?: string, 
+    workspaceId?: string, 
+    commitMessage?: string
+  ): Promise<OntologySaveResult> => {
+    const params = new URLSearchParams();
+    if (filename) params.append('filename', filename);
+    if (workspaceId) params.append('workspaceId', workspaceId);
+    if (commitMessage) params.append('commitMessage', commitMessage);
+    const queryString = params.toString();
+    const url = `/ontology-builder/save${queryString ? '?' + queryString : ''}`;
+    const response = await apiClient.post<ApiResponse<OntologySaveResult>>(url, payload);
     return response.data.data;
   },
   listFiles: async (): Promise<string[]> => {
@@ -213,6 +268,31 @@ export const ontologyBuilderApi = {
   loadFile: async (filename: string): Promise<OntologyBuilderPayload> => {
     const response = await apiClient.get<ApiResponse<OntologyBuilderPayload>>(
       `/ontology-builder/load?filename=${encodeURIComponent(filename)}`
+    );
+    return response.data.data;
+  },
+  getVersionHistory: async (filename: string): Promise<OntologyVersion[]> => {
+    const response = await apiClient.get<ApiResponse<OntologyVersion[]>>(
+      `/ontology-builder/versions/${encodeURIComponent(filename)}/history`
+    );
+    return response.data.data;
+  },
+  getVersion: async (filename: string, version: string): Promise<OntologyBuilderPayload> => {
+    const response = await apiClient.get<ApiResponse<OntologyBuilderPayload>>(
+      `/ontology-builder/versions/${encodeURIComponent(filename)}/${encodeURIComponent(version)}`
+    );
+    return response.data.data;
+  },
+  compareVersions: async (filename: string, version1: string, version2: string): Promise<VersionDiffResult> => {
+    const response = await apiClient.post<ApiResponse<VersionDiffResult>>(
+      `/ontology-builder/versions/${encodeURIComponent(filename)}/compare`,
+      { version1, version2 }
+    );
+    return response.data.data;
+  },
+  rollback: async (filename: string, version: string): Promise<OntologySaveResult> => {
+    const response = await apiClient.post<ApiResponse<OntologySaveResult>>(
+      `/ontology-builder/versions/${encodeURIComponent(filename)}/rollback?version=${encodeURIComponent(version)}`
     );
     return response.data.data;
   },

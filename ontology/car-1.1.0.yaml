@@ -1,0 +1,122 @@
+version: 1.1.0
+namespace: ontology.gs
+data_sources: []
+object_types:
+  - name: car
+    display_name: 车辆
+    description: ""
+    base_type: null
+    properties:
+      - name: id
+        data_type: string
+        required: true
+        display_name: null
+        description: 主键
+        default_value: null
+        constraints:
+          unique: true
+      - name: name
+        data_type: string
+        required: false
+        display_name: null
+        description: ""
+        default_value: null
+        constraints: null
+      - name: carNum
+        data_type: string
+        required: false
+        display_name: null
+        description: 车牌号
+        default_value: null
+        constraints: null
+    data_source: null
+    url: null
+  - name: person
+    display_name: 人员
+    description: ""
+    base_type: null
+    properties:
+      - name: id
+        data_type: string
+        required: true
+        display_name: null
+        description: 主键
+        default_value: null
+        constraints:
+          unique: true
+      - name: name
+        data_type: string
+        required: false
+        display_name: null
+        description: ""
+        default_value: null
+        constraints: null
+      - name: age
+        data_type: string
+        required: false
+        display_name: 年龄
+        description: ""
+        default_value: null
+        constraints: null
+    data_source: null
+    url: null
+  - name: etlCard
+    display_name: etc卡
+    description: ""
+    base_type: null
+    properties:
+      - name: id
+        data_type: string
+        required: true
+        display_name: null
+        description: 主键
+        default_value: null
+        constraints:
+          unique: true
+      - name: type
+        data_type: int
+        required: false
+        display_name: null
+        description: ""
+        default_value: null
+        constraints: null
+    data_source: null
+    url: null
+link_types:
+  - name: to
+    display_name: 产权归属
+    description: ""
+    source_type: car
+    target_type: person
+    cardinality: many-to-one
+    direction: directed
+    properties: []
+    property_mappings: null
+    transformation_mappings: null
+    data_source: null
+    url: null
+  - name: have
+    display_name: 拥有
+    description: ""
+    source_type: person
+    target_type: etlCard
+    cardinality: one-to-many
+    direction: directed
+    properties: []
+    property_mappings: null
+    transformation_mappings: null
+    data_source: null
+    url: null
+  - name: bangding
+    display_name: 绑定
+    description: ""
+    source_type: car
+    target_type: etlCard
+    cardinality: one-to-one
+    direction: directed
+    properties: []
+    property_mappings:
+      id: id
+    transformation_mappings: null
+    data_source: null
+    url: null

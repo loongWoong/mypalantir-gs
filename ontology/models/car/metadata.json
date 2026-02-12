@@ -1,0 +1,51 @@
+{
+  "versions" : [ {
+    "version" : "1.1.0",
+    "namespace" : "ontology.gs",
+    "filename" : "car",
+    "file_path" : "ontology\\models\\car\\v1_1_0.yaml",
+    "previous_version" : "1.0.1",
+    "commit_message" : null,
+    "author" : null,
+    "timestamp" : 1770874317560,
+    "workspace_id" : "0d1a5c47-2c2e-44a3-94a9-9158e91793b8",
+    "workspace_name" : null,
+    "changes" : [ "关系类型变更: 1 项", "版本: 1.0.1 → 1.1.0", "版本: 1.0.1 → 1.1.0" ]
+  }, {
+    "version" : "1.0.1",
+    "namespace" : "ontology.gs",
+    "filename" : "car",
+    "file_path" : "ontology\\models\\car\\v1_0_1.yaml",
+    "previous_version" : "1.1.0",
+    "commit_message" : "回滚到版本 1.0.1",
+    "author" : null,
+    "timestamp" : 1770874389758,
+    "workspace_id" : null,
+    "workspace_name" : null,
+    "changes" : [ "关系类型变更: 1 项", "版本: 1.1.0 → 1.0.1", "版本: 1.1.0 → 1.0.1" ]
+  }, {
+    "version" : "1.1.1",
+    "namespace" : "ontology.gs",
+    "filename" : "car",
+    "file_path" : "ontology\\models\\car\\v1_1_1.yaml",
+    "previous_version" : "1.0.1",
+    "commit_message" : null,
+    "author" : null,
+    "timestamp" : 1770874409101,
+    "workspace_id" : "0d1a5c47-2c2e-44a3-94a9-9158e91793b8",
+    "workspace_name" : null,
+    "changes" : [ "关系类型变更: 1 项", "版本: 1.0.1 → 1.1.1", "版本: 1.0.1 → 1.1.1" ]
+  }, {
+    "version" : "1.1.2",
+    "namespace" : "ontology.gs",
+    "filename" : "car",
+    "file_path" : "ontology\\models\\car\\v1_1_2.yaml",
+    "previous_version" : "1.1.1",
+    "commit_message" : null,
+    "author" : null,
+    "timestamp" : 1770874918362,
+    "workspace_id" : "0d1a5c47-2c2e-44a3-94a9-9158e91793b8",
+    "workspace_name" : null,
+    "changes" : [ "关系类型变更: 1 项", "版本: 1.1.1 → 1.1.2" ]
+  } ]
+}
