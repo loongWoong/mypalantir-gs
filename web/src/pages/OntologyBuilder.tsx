@@ -86,6 +86,11 @@ export default function OntologyBuilder() {
   const [loadingRollback, setLoadingRollback] = useState(false);
   const { selectedWorkspaceId, selectedWorkspace } = useWorkspace();
 
+  const getApiErrorMessage = useCallback((error: any, fallback = '未知错误'): string => {
+    return error?.response?.data?.message || error?.response?.data?.data?.message || error?.message || fallback;
+  }, []);
+
+
   // 解析版本号
   const parseVersion = useCallback((versionStr: string): { major: number; minor: number; patch: number } => {
     const parts = versionStr.split('.');
@@ -450,7 +455,7 @@ export default function OntologyBuilder() {
       setIsValid(false);
       setValidationErrors([
         ...frontendErrors,
-        { level: 'error', message: `后端校验失败: ${error.message}` },
+        { level: 'error', message: `后端校验失败: ${getApiErrorMessage(error)}` },
       ]);
       setActiveTab('validation');
     }
@@ -483,8 +488,8 @@ export default function OntologyBuilder() {
     }
 
     // 验证基础文件名格式
-    if (!/^[a-zA-Z0-9_-]+$/.test(trimmedBaseFilename)) {
-      alert('文件名只能包含字母、数字、下划线和连字符');
+    if (!/^[a-zA-Z0-9._-]+$/.test(trimmedBaseFilename)) {
+      alert('文件名只能包含字母、数字、点、下划线和连字符');
       return;
     }
 
@@ -542,7 +547,7 @@ export default function OntologyBuilder() {
       }
     } catch (error: any) {
       // 检查是否是文件重复错误
-      const errorMessage = error.response?.data?.message || error.response?.data?.data?.message || error.message || '未知错误';
+      const errorMessage = getApiErrorMessage(error);
       if (errorMessage.includes('已存在') || errorMessage.includes('exists')) {
         alert(`❌ 文件名重复：${trimmedFilename}.yaml 已存在，请修改文件名后重试`);
       } else {
@@ -551,22 +556,11 @@ export default function OntologyBuilder() {
     }
   };
 
-  // 从文件名中提取基础文件名（移除版本号和扩展名）
-  const extractBaseFilename = (filename: string): string => {
-    if (!filename.trim()) return '';
-    // 移除扩展名
-    let base = filename.trim().replace(/\.(yaml|yml)$/i, '');
-    // 移除版本号（格式：-数字.数字.数字）
-    base = base.replace(/-\d+\.\d+\.\d+$/, '');
-    return base;
-  };
 
-  // 规范化文件名用于版本历史查询（只移除扩展名，保留版本号）
-  const normalizeFilenameForHistory = (filename: string): string => {
-    if (!filename.trim()) return '';
-    // 只移除扩展名，保留版本号（因为版本目录是基于完整文件名创建的）
-    return filename.trim().replace(/\.(yaml|yml)$/i, '');
-  };
+  const normalizeFilenameForHistory = useCallback((filename: string): string => {
+    const nameWithoutExt = filename.trim().replace(/\.(yaml|yml)$/i, '');
+    return nameWithoutExt;
+  }, []);
 
   // 加载版本历史
   const loadVersionHistory = async (file: string) => {
@@ -589,7 +583,7 @@ export default function OntologyBuilder() {
     } catch (error: any) {
       console.error('加载版本历史失败:', error);
       setVersionHistory([]);
-      const errorMessage = error?.response?.data?.message || error?.response?.data?.data?.message || error.message || '未知错误';
+      const errorMessage = getApiErrorMessage(error);
       alert('加载版本历史失败: ' + errorMessage);
     } finally {
       setLoadingHistory(false);
@@ -653,7 +647,7 @@ export default function OntologyBuilder() {
       const files = await ontologyBuilderApi.listFiles();
       setFileList(files);
     } catch (error: any) {
-      alert('获取文件列表失败: ' + (error.message || '未知错误'));
+      alert('获取文件列表失败: ' + getApiErrorMessage(error));
       setFileList([]);
     } finally {
       setLoadingFiles(false);
@@ -724,7 +718,7 @@ export default function OntologyBuilder() {
       // 自动关闭文件选择对话框
       setShowFileDialog(false);
     } catch (error: any) {
-      alert('加载文件失败: ' + (error.message || '未知错误'));
+      alert('加载文件失败: ' + getApiErrorMessage(error));
     } finally {
       setLoadingFiles(false);
     }
@@ -1585,7 +1579,7 @@ export default function OntologyBuilder() {
                                         setActiveTab('validation');
                                         alert(`已加载版本 ${version.version}`);
                                       } catch (error: any) {
-                                        alert('加载版本失败: ' + (error.message || '未知错误'));
+                                        alert('加载版本失败: ' + getApiErrorMessage(error));
                                       }
                                     }}
                                     className="px-3 py-1.5 rounded-md bg-gray-100 text-gray-700 text-sm hover:bg-gray-200 flex items-center gap-1"
@@ -1906,7 +1900,7 @@ export default function OntologyBuilder() {
                         );
                         setCompareResult(result);
                       } catch (error: any) {
-                        alert('版本对比失败: ' + (error.message || '未知错误'));
+                        alert('版本对比失败: ' + getApiErrorMessage(error));
                       } finally {
                         setLoadingCompare(false);
                       }
@@ -2058,7 +2052,7 @@ export default function OntologyBuilder() {
                       alert('回滚失败: ' + (result.message || '未知错误'));
                     }
                   } catch (error: any) {
-                    alert('回滚失败: ' + (error.message || '未知错误'));
+                    alert('回滚失败: ' + getApiErrorMessage(error));
                   } finally {
                     setLoadingRollback(false);
                   }
