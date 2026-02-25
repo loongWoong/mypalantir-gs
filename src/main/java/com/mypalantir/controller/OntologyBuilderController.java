@@ -52,6 +52,9 @@ public class OntologyBuilderController {
             payload.put("version", schema.getVersion());
             payload.put("message", "文件已成功保存到ontology文件夹");
             return ResponseEntity.ok(ApiResponse.success(payload));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error(400, e.getMessage()));
         } catch (Exception e) {
             Map<String, Object> payload = new java.util.HashMap<>();
             payload.put("success", false);
@@ -84,6 +87,9 @@ public class OntologyBuilderController {
         try {
             OntologySchema schema = ontologyBuilderService.loadFromOntologyFolder(filename);
             return ResponseEntity.ok(ApiResponse.success(schema));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error(400, e.getMessage()));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(ApiResponse.error(500, "加载文件失败: " + e.getMessage()));
@@ -101,6 +107,9 @@ public class OntologyBuilderController {
             String decodedFilename = java.net.URLDecoder.decode(filename, "UTF-8");
             List<com.mypalantir.meta.OntologyVersion> history = ontologyBuilderService.getVersionHistory(decodedFilename);
             return ResponseEntity.ok(ApiResponse.success(history));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error(400, e.getMessage()));
         } catch (Exception e) {
             org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(OntologyBuilderController.class);
             logger.error("获取版本历史失败，文件名: {}, 错误: {}", filename, e.getMessage(), e);
@@ -119,6 +128,9 @@ public class OntologyBuilderController {
         try {
             OntologySchema schema = ontologyBuilderService.getVersion(filename, version);
             return ResponseEntity.ok(ApiResponse.success(schema));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error(400, e.getMessage()));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(ApiResponse.error(500, "获取版本失败: " + e.getMessage()));
@@ -142,6 +154,9 @@ public class OntologyBuilderController {
             com.mypalantir.service.VersionComparator.DiffResult diff = 
                 ontologyBuilderService.compareVersions(filename, version1, version2);
             return ResponseEntity.ok(ApiResponse.success(diff));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error(400, e.getMessage()));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(ApiResponse.error(500, "版本对比失败: " + e.getMessage()));
@@ -163,6 +178,9 @@ public class OntologyBuilderController {
             payload.put("version", version);
             payload.put("message", "已回滚到版本 " + version);
             return ResponseEntity.ok(ApiResponse.success(payload));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error(400, e.getMessage()));
         } catch (Exception e) {
             Map<String, Object> payload = new java.util.HashMap<>();
             payload.put("success", false);

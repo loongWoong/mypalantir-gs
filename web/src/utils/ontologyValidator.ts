@@ -3,7 +3,7 @@
  * 包含结构校验和语义校验
  */
 
-import type { OntologyModel, Entity, Attribute } from '../models/OntologyModel';
+import type { OntologyModel, Entity } from '../models/OntologyModel';
 
 export interface ValidationError {
   level: 'error' | 'warning';

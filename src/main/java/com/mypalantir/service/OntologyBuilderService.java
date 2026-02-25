@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import com.mypalantir.meta.Parser;
@@ -38,6 +39,7 @@ import org.slf4j.LoggerFactory;
 @Service
 public class OntologyBuilderService {
     private static final Logger logger = LoggerFactory.getLogger(OntologyBuilderService.class);
+    private static final Pattern SAFE_FILENAME_PATTERN = Pattern.compile("^[a-zA-Z0-9._-]+$");
     private final ObjectMapper yamlMapper;
 
     public OntologyBuilderService() {
@@ -208,6 +210,8 @@ public class OntologyBuilderService {
      * @throws IOException 文件操作异常
      */
     public String saveToOntologyFolder(OntologySchema schema, String filename, String workspaceId, String commitMessage) throws IOException {
+        String normalizedFilename = normalizeFilename(filename);
+
         // 先校验
         ValidationResult validation = validateAndGenerate(schema);
         if (!validation.isValid()) {
@@ -215,16 +219,16 @@ public class OntologyBuilderService {
         }
 
         // 确保文件名以.yaml结尾
-        String baseFilename = filename;
-        if (!filename.endsWith(".yaml") && !filename.endsWith(".yml")) {
-            baseFilename = filename + ".yaml";
+        String baseFilename = normalizedFilename;
+        if (!normalizedFilename.endsWith(".yaml") && !normalizedFilename.endsWith(".yml")) {
+            baseFilename = normalizedFilename + ".yaml";
         }
 
         // 构建目录结构
         // 使用基础文件名（不含版本号）作为版本目录，确保所有版本保存在同一目录下
         Path ontologyDir = Paths.get("ontology");
         Path modelsDir = ontologyDir.resolve("models");
-        String baseName = extractBaseFilename(filename);
+        String baseName = extractBaseFilename(normalizedFilename);
         Path versionDir = modelsDir.resolve(baseName);
         
         if (!Files.exists(versionDir)) {
@@ -363,17 +367,19 @@ public class OntologyBuilderService {
      * @throws IOException 文件操作异常
      */
     public OntologySchema loadFromOntologyFolder(String filename) throws IOException {
+        String normalizedFilename = normalizeFilename(filename);
+
         // 确保文件名以.yaml或.yml结尾
-        if (!filename.endsWith(".yaml") && !filename.endsWith(".yml")) {
-            filename = filename + ".yaml";
+        if (!normalizedFilename.endsWith(".yaml") && !normalizedFilename.endsWith(".yml")) {
+            normalizedFilename = normalizedFilename + ".yaml";
         }
 
         // 构建文件路径：./ontology/filename.yaml
         Path ontologyDir = Paths.get("ontology");
-        Path filePath = ontologyDir.resolve(filename);
+        Path filePath = ontologyDir.resolve(normalizedFilename);
 
         if (!Files.exists(filePath)) {
-            throw new IOException("文件不存在: " + filename);
+            throw new IOException("文件不存在: " + normalizedFilename);
         }
 
         // 使用Parser解析文件
@@ -385,6 +391,7 @@ public class OntologyBuilderService {
      * 获取版本历史列表
      */
     public List<OntologyVersion> getVersionHistory(String filename) throws IOException {
+        filename = normalizeFilename(filename);
         logger.debug("开始查询版本历史，文件名: {}", filename);
         
         // 规范化文件名（移除扩展名）
@@ -441,6 +448,7 @@ public class OntologyBuilderService {
      * 获取指定版本
      */
     public OntologySchema getVersion(String filename, String version) throws IOException {
+        filename = normalizeFilename(filename);
         // 提取基础文件名（移除版本号和扩展名）
         String baseName = extractBaseFilename(filename);
         Path versionDir = getVersionDir(baseName);
@@ -510,8 +518,27 @@ public class OntologyBuilderService {
      * 回滚到指定版本
      */
     public String rollbackToVersion(String filename, String version) throws IOException {
+        filename = normalizeFilename(filename);
         OntologySchema schema = getVersion(filename, version);
         return saveToOntologyFolder(schema, filename, null, "回滚到版本 " + version);
+    }
+
+
+    private String normalizeFilename(String filename) {
+        if (filename == null || filename.trim().isEmpty()) {
+            throw new IllegalArgumentException("文件名不能为空");
+        }
+
+        String normalized = filename.trim();
+        if (normalized.contains("/") || normalized.contains("\\") || normalized.contains("..")) {
+            throw new IllegalArgumentException("文件名格式非法：不允许包含路径信息");
+        }
+
+        if (!SAFE_FILENAME_PATTERN.matcher(normalized).matches()) {
+            throw new IllegalArgumentException("文件名格式非法：仅支持字母、数字、点、下划线和连字符");
+        }
+
+        return normalized;
     }
 
     /**
