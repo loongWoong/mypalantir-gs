@@ -82,7 +82,7 @@ export function PropertyEditor({ attributes, onChange }: PropertyEditorProps) {
                   onFocus={() => setEditingIndex(index)}
                 />
               </div>
-              <div className="col-span-2">
+              <div className="col-span-3">
                 <select
                   value={attr.type}
                   onChange={(e) => updateAttribute(index, { type: e.target.value })}
@@ -104,7 +104,7 @@ export function PropertyEditor({ attributes, onChange }: PropertyEditorProps) {
                   className="w-4 h-4"
                   title="必填字段"
                 />
-                <label className="text-xs text-gray-600 cursor-pointer" onClick={() => updateAttribute(index, { required: !attr.required })}>必填</label>
+                <label className="text-xs text cursor-pointer" onClick={() => updateAttribute(index, { required: !attr.required })}>必填</label>
               </div>
               <div className="col-span-2 flex items-center gap-1">
                 <input
@@ -114,11 +114,11 @@ export function PropertyEditor({ attributes, onChange }: PropertyEditorProps) {
                   className="w-4 h-4"
                   title="唯一字段（与必填组合可设置为主键）"
                 />
-                <label className="text-xs text-gray-600 cursor-pointer" onClick={() => updateAttribute(index, { unique: !attr.unique })}>唯一</label>
+                <label className="text-xs text cursor-pointer" onClick={() => updateAttribute(index, { unique: !attr.unique })}>唯一</label>
               </div>
-              <div className="col-span-2 flex items-center gap-1">
+              <div className="col-span-1 flex items-center gap-1">
                 {attr.required && attr.unique && (
-                  <span className="text-xs text-green-600 font-medium" title="主键：必填且唯一">🔑 主键</span>
+                  <span className="text-xs text-green-600 font-medium" title="主键：必填且唯一">🔑</span>
                 )}
               </div>
               <div className="col-span-1">
