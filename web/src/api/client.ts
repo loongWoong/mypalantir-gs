@@ -22,11 +22,22 @@ export interface ObjectType {
 
 export interface Property {
   name: string;
+  display_name?: string;
   data_type: string;
   required: boolean;
   description: string;
   default_value: any;
   constraints: Record<string, any> | null;
+  derived?: boolean;
+  expr?: string;
+}
+
+export interface Rule {
+  name: string;
+  display_name?: string;
+  description: string;
+  language: string;
+  expr: string;
 }
 
 export interface LinkType {
@@ -133,6 +144,24 @@ export const schemaApi = {
     const response = await apiClient.post<ApiResponse<{ success: boolean; message: string; metadata?: Record<string, string> }>>(
       `/schema/data-sources/${id}/test`
     );
+    return response.data.data;
+  },
+};
+
+// Rules API
+export const rulesApi = {
+  getRules: async (): Promise<Rule[]> => {
+    const response = await apiClient.get<ApiResponse<Rule[]>>('/schema/rules');
+    return response.data.data;
+  },
+
+  getRule: async (name: string): Promise<Rule> => {
+    const response = await apiClient.get<ApiResponse<Rule>>(`/schema/rules/${name}`);
+    return response.data.data;
+  },
+
+  getRulesForObjectType: async (objectTypeName: string): Promise<Rule[]> => {
+    const response = await apiClient.get<ApiResponse<Rule[]>>(`/schema/object-types/${objectTypeName}/rules`);
     return response.data.data;
   },
 };

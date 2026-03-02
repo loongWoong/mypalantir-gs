@@ -5,6 +5,7 @@ import com.mypalantir.meta.LinkType;
 import com.mypalantir.meta.Loader;
 import com.mypalantir.meta.ObjectType;
 import com.mypalantir.meta.Property;
+import com.mypalantir.meta.Rule;
 import com.mypalantir.service.DataSourceTestService;
 import com.mypalantir.service.SchemaService;
 import org.springframework.http.HttpStatus;
@@ -122,6 +123,29 @@ public class SchemaController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(ApiResponse.error(500, "Test failed: " + e.getMessage()));
         }
+    }
+
+    @GetMapping("/rules")
+    public ResponseEntity<ApiResponse<List<Rule>>> listRules() {
+        List<Rule> rules = schemaService.listRules();
+        return ResponseEntity.ok(ApiResponse.success(rules));
+    }
+
+    @GetMapping("/rules/{name}")
+    public ResponseEntity<ApiResponse<Rule>> getRule(@PathVariable String name) {
+        try {
+            Rule rule = schemaService.getRule(name);
+            return ResponseEntity.ok(ApiResponse.success(rule));
+        } catch (Loader.NotFoundException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(ApiResponse.error(404, e.getMessage()));
+        }
+    }
+
+    @GetMapping("/object-types/{name}/rules")
+    public ResponseEntity<ApiResponse<List<Rule>>> getObjectTypeRules(@PathVariable String name) {
+        List<Rule> rules = schemaService.getRulesForObjectType(name);
+        return ResponseEntity.ok(ApiResponse.success(rules));
     }
 }
 

@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link as RouterLink, useNavigate } from 'react-router-dom';
-import type { Instance, ObjectType, QueryRequest } from '../api/client';
-import { schemaApi, queryApi } from '../api/client';
-import { ArrowLeftIcon, PencilIcon, TrashIcon } from '@heroicons/react/24/outline';
+import type { Instance, ObjectType, QueryRequest, Rule } from '../api/client';
+import { schemaApi, queryApi, rulesApi } from '../api/client';
+import { ArrowLeftIcon, PencilIcon, TrashIcon, ShieldCheckIcon } from '@heroicons/react/24/outline';
 import InstanceForm from '../components/InstanceForm';
 
 export default function InstanceDetail() {
@@ -12,6 +12,7 @@ export default function InstanceDetail() {
   const [objectTypeDef, setObjectTypeDef] = useState<ObjectType | null>(null);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [rules, setRules] = useState<Rule[]>([]);
 
   useEffect(() => {
     if (objectType && id) {
@@ -61,6 +62,10 @@ export default function InstanceDetail() {
         ...instanceResult.rows[0],
       };
       setInstance(instanceData);
+
+      // 加载关联规则
+      const rulesData = await rulesApi.getRulesForObjectType(objectType);
+      setRules(rulesData);
 
     } catch (error) {
       console.error('Failed to load data:', error);
@@ -135,13 +140,15 @@ export default function InstanceDetail() {
         />
       )}
 
-      {/* 属性面板 */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+      {/* 物理属性 */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Properties</h2>
         <dl className="space-y-4">
-          {objectTypeDef.properties.map((prop) => (
+          {objectTypeDef.properties.filter(p => !p.derived).map((prop) => (
             <div key={prop.name}>
-              <dt className="text-sm font-medium text-gray-500">{prop.name}</dt>
+              <dt className="text-sm font-medium text-gray-500">
+                {prop.display_name || prop.name}
+              </dt>
               <dd className="mt-1 text-sm text-gray-900">
                 {instance[prop.name] !== null && instance[prop.name] !== undefined
                   ? typeof instance[prop.name] === 'object'
@@ -157,6 +164,65 @@ export default function InstanceDetail() {
           ))}
         </dl>
       </div>
+
+      {/* 衍生属性 */}
+      {objectTypeDef.properties.some(p => p.derived) && (
+        <div className="bg-white rounded-lg shadow-sm border border-purple-200 p-6 mb-6">
+          <h2 className="text-lg font-semibold text-purple-900 mb-4 flex items-center">
+            <span className="text-xs px-2 py-1 bg-purple-100 text-purple-700 rounded-full mr-2">Derived</span>
+            Derived Properties
+          </h2>
+          <dl className="space-y-4">
+            {objectTypeDef.properties.filter(p => p.derived).map((prop) => (
+              <div key={prop.name}>
+                <dt className="text-sm font-medium text-gray-500 flex items-center justify-between">
+                  <span>{prop.display_name || prop.name}</span>
+                  <span className="text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full">
+                    {prop.data_type}
+                  </span>
+                </dt>
+                <dd className="mt-1 text-sm text-gray-900">
+                  {instance[prop.name] !== null && instance[prop.name] !== undefined
+                    ? String(instance[prop.name])
+                    : <span className="text-gray-400 italic">Not computed</span>}
+                </dd>
+                {prop.expr && (
+                  <div className="mt-1 p-2 bg-purple-50 rounded text-xs text-purple-800">
+                    <code>{prop.expr}</code>
+                  </div>
+                )}
+              </div>
+            ))}
+          </dl>
+        </div>
+      )}
+
+      {/* 规则推导 */}
+      {rules.length > 0 && (
+        <div className="bg-white rounded-lg shadow-sm border border-indigo-200 p-6">
+          <h2 className="text-lg font-semibold text-indigo-900 mb-4 flex items-center">
+            <ShieldCheckIcon className="w-5 h-5 mr-2" />
+            Rule Inference
+          </h2>
+          <div className="space-y-3">
+            {rules.map((rule) => (
+              <div key={rule.name} className="p-3 bg-indigo-50 rounded-lg border border-indigo-200">
+                <div className="flex items-center justify-between">
+                  <span className="font-medium text-gray-900">{rule.display_name || rule.name}</span>
+                  <span className="text-xs px-2 py-1 bg-indigo-100 text-indigo-700 rounded-full">
+                    {rule.language}
+                  </span>
+                </div>
+                <p className="text-sm text-gray-600 mt-1">{rule.description}</p>
+                <div className="mt-2 flex items-center text-sm">
+                  <span className="text-gray-500">Result:</span>
+                  <span className="ml-2 text-gray-400 italic">Pending</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

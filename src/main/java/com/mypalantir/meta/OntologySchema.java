@@ -20,6 +20,9 @@ public class OntologySchema {
     @JsonProperty("link_types")
     private List<LinkType> linkTypes;
 
+    @JsonProperty("rules")
+    private List<Rule> rules;
+
     @JsonIgnore
     public String getVersion() {
         return version;
@@ -63,6 +66,15 @@ public class OntologySchema {
 
     public void setDataSources(List<DataSourceConfig> dataSources) {
         this.dataSources = dataSources;
+    }
+
+    @JsonIgnore
+    public List<Rule> getRules() {
+        return rules;
+    }
+
+    public void setRules(List<Rule> rules) {
+        this.rules = rules;
     }
 
     /**

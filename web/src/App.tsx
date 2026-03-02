@@ -8,6 +8,7 @@ import SchemaGraphView from './pages/SchemaGraphView';
 import DataSourceManagement from './pages/DataSourceManagement';
 import QueryBuilder from './pages/QueryBuilder';
 import NaturalLanguageQuery from './pages/NaturalLanguageQuery';
+import RulesView from './pages/RulesView';
 
 function App() {
   return (
@@ -23,6 +24,7 @@ function App() {
           <Route path="/data-sources" element={<DataSourceManagement />} />
           <Route path="/query" element={<QueryBuilder />} />
           <Route path="/natural-language-query" element={<NaturalLanguageQuery />} />
+          <Route path="/rules" element={<RulesView />} />
         </Routes>
       </Layout>
     </BrowserRouter>

@@ -5,6 +5,7 @@ import com.mypalantir.meta.LinkType;
 import com.mypalantir.meta.Loader;
 import com.mypalantir.meta.ObjectType;
 import com.mypalantir.meta.Property;
+import com.mypalantir.meta.Rule;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -52,6 +53,18 @@ public class SchemaService {
 
     public DataSourceConfig getDataSourceById(String id) throws Loader.NotFoundException {
         return loader.getDataSourceById(id);
+    }
+
+    public List<Rule> listRules() {
+        return loader.listRules();
+    }
+
+    public Rule getRule(String name) throws Loader.NotFoundException {
+        return loader.getRule(name);
+    }
+
+    public List<Rule> getRulesForObjectType(String objectTypeName) {
+        return loader.getRulesForObjectType(objectTypeName);
     }
 }
 

@@ -8,6 +8,9 @@ public class Property {
     @JsonProperty("name")
     private String name;
 
+    @JsonProperty("display_name")
+    private String displayName;
+
     @JsonProperty("data_type")
     private String dataType;
 
@@ -22,6 +25,12 @@ public class Property {
 
     @JsonProperty("constraints")
     private Map<String, Object> constraints;
+
+    @JsonProperty("derived")
+    private boolean derived;
+
+    @JsonProperty("expr")
+    private String expr;
 
     @JsonIgnore
     public String getName() {
@@ -75,6 +84,33 @@ public class Property {
 
     public void setConstraints(Map<String, Object> constraints) {
         this.constraints = constraints;
+    }
+
+    @JsonIgnore
+    public String getDisplayName() {
+        return displayName;
+    }
+
+    public void setDisplayName(String displayName) {
+        this.displayName = displayName;
+    }
+
+    @JsonIgnore
+    public boolean isDerived() {
+        return derived;
+    }
+
+    public void setDerived(boolean derived) {
+        this.derived = derived;
+    }
+
+    @JsonIgnore
+    public String getExpr() {
+        return expr;
+    }
+
+    public void setExpr(String expr) {
+        this.expr = expr;
     }
 }
 

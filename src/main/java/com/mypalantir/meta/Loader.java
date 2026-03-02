@@ -128,6 +128,39 @@ public class Loader {
         return dataSource;
     }
 
+    public List<Rule> listRules() {
+        OntologySchema currentSchema = getSchema();
+        if (currentSchema == null) {
+            return List.of();
+        }
+        return currentSchema.getRules() != null ? List.copyOf(currentSchema.getRules()) : List.of();
+    }
+
+    public Rule getRule(String name) throws NotFoundException {
+        OntologySchema currentSchema = getSchema();
+        if (currentSchema == null || currentSchema.getRules() == null) {
+            throw new NotFoundException("schema not loaded");
+        }
+
+        for (Rule r : currentSchema.getRules()) {
+            if (name.equals(r.getName())) {
+                return r;
+            }
+        }
+
+        throw new NotFoundException("rule '" + name + "' not found");
+    }
+
+    public List<Rule> getRulesForObjectType(String objectTypeName) {
+        OntologySchema currentSchema = getSchema();
+        if (currentSchema == null || currentSchema.getRules() == null) {
+            return List.of();
+        }
+        return currentSchema.getRules().stream()
+            .filter(r -> r.getExpr() != null && r.getExpr().contains(objectTypeName + "("))
+            .toList();
+    }
+
     public static class NotFoundException extends Exception {
         public NotFoundException(String message) {
             super(message);

@@ -883,6 +883,70 @@ object_types:
         required: false
         description: "出口车道编号"
 
+      # ---- 衍生属性（derived properties，由 CEL 表达式计算） ----
+      - name: path_detail_count
+        display_name: 路径明细数量
+        data_type: int
+        derived: true
+        expr: "size(links.passage_has_details)"
+        description: "该通行路径关联的路径明细记录数"
+
+      - name: split_detail_count
+        display_name: 拆分明细数量
+        data_type: int
+        derived: true
+        expr: "size(links.passage_has_split_details)"
+        description: "该通行路径关联的拆分明细记录数"
+
+      - name: detail_count_matched
+        display_name: 明细数量是否一致
+        data_type: boolean
+        derived: true
+        expr: >
+          size(links.passage_has_details)
+          == size(links.passage_has_split_details)
+        description: "路径明细数量与拆分明细数量是否一致"
+
+      - name: interval_set_matched
+        display_name: 收费单元是否对应
+        data_type: boolean
+        derived: true
+        expr: >
+          links.passage_has_details
+            .map(d, d.identify_point_id).sort()
+          == links.passage_has_split_details
+            .map(s, s.interval_id).sort()
+        description: "路径明细的标识点与拆分明细的收费单元是否一一对应"
+
+      - name: path_fee_total
+        display_name: 路径明细费用合计
+        data_type: float
+        derived: true
+        expr: >
+          links.passage_has_details
+            .map(d, double(d.fee)).sum()
+        description: "路径明细中各收费单元费用的合计"
+
+      - name: split_fee_total
+        display_name: 拆分明细费用合计
+        data_type: float
+        derived: true
+        expr: >
+          links.passage_has_split_details
+            .map(s, s.toll_interval_fee).sum()
+        description: "拆分明细中各区间通行费的合计"
+
+      - name: fee_matched
+        display_name: 费用是否一致
+        data_type: boolean
+        derived: true
+        expr: >
+          links.passage_has_details
+            .map(d, double(d.fee)).sum()
+          == links.passage_has_split_details
+            .map(s, s.toll_interval_fee).sum()
+        description: "路径明细费用合计与拆分明细通行费合计是否一致"
+
   # 保留原有的PathDetail和SplitDetail等（简化版）
   - name: PathDetail
     display_name: 车辆通行路径明细
@@ -1357,3 +1421,91 @@ link_types:
       link_mode: foreign_key
 
 
+# ============================================
+# 规则定义（Rules）
+# 衍生属性由 CEL 求值，SWRL 基于衍生属性做推理推导
+# ============================================
+
+rules:
+  # ------------------------------------------
+  # 通行路径完整性校验
+  # ------------------------------------------
+
+  # 规则1：明细数量一致 + 收费单元对应 + 费用一致 → 正常
+  - name: passage_integrity_normal
+    display_name: 通行路径完整性正常
+    description: "路径明细与拆分明细在数量、收费单元、费用三个维度均一致，判定为正常"
+    language: swrl
+    expr: >
+      Passage(?p) ∧ detail_count_matched(?p, true)
+        ∧ interval_set_matched(?p, true)
+        ∧ fee_matched(?p, true)
+        → check_status(?p, "正常")
+
+  # 规则2：明细数量不一致 → 不正常
+  - name: passage_count_mismatch
+    display_name: 通行路径明细数量不一致
+    description: "路径明细数量与拆分明细数量不一致，判定为不正常"
+    language: swrl
+    expr: >
+      Passage(?p) ∧ detail_count_matched(?p, false)
+        → check_status(?p, "不正常")
+
+  # 规则3：数量一致但收费单元不对应 → 不正常
+  - name: passage_interval_mismatch
+    display_name: 通行路径收费单元不对应
+    description: "明细数量一致但收费单元无法一一对应，判定为不正常"
+    language: swrl
+    expr: >
+      Passage(?p) ∧ detail_count_matched(?p, true)
+        ∧ interval_set_matched(?p, false)
+        → check_status(?p, "不正常")
+
+  # 规则4：数量和单元都对应但费用不一致 → 费用异常
+  - name: passage_fee_mismatch
+    display_name: 通行路径费用不一致
+    description: "明细数量和收费单元均对应，但费用合计不一致，判定为费用异常"
+    language: swrl
+    expr: >
+      Passage(?p) ∧ detail_count_matched(?p, true)
+        ∧ interval_set_matched(?p, true)
+        ∧ fee_matched(?p, false)
+        → check_status(?p, "费用异常")
+
+  # ------------------------------------------
+  # 链式推导：从通行路径异常上推到车辆
+  # ------------------------------------------
+
+  # 规则5：通行路径不正常 → 关联车辆标记存在异常通行
+  - name: vehicle_has_abnormal_passage
+    display_name: 车辆存在异常通行
+    description: "如果车辆关联的某条通行路径状态为不正常，则标记该车辆存在异常通行"
+    language: swrl
+    expr: >
+      Passage(?p) ∧ check_status(?p, "不正常")
+        ∧ entry_involves_vehicle(?p, ?v)
+        → has_abnormal_passage(?v, true)
+
+  # 规则6：通行路径费用异常 → 关联车辆标记存在费用异常
+  - name: vehicle_has_fee_abnormal_passage
+    display_name: 车辆存在费用异常通行
+    description: "如果车辆关联的某条通行路径状态为费用异常，则标记该车辆存在费用异常"
+    language: swrl
+    expr: >
+      Passage(?p) ∧ check_status(?p, "费用异常")
+        ∧ entry_involves_vehicle(?p, ?v)
+        → has_fee_abnormal_passage(?v, true)
+
+  # ------------------------------------------
+  # 链式推导：从车辆异常上推到收费站
+  # ------------------------------------------
+
+  # 规则7：收费站有异常通行记录 → 标记收费站需关注
+  - name: station_has_abnormal_traffic
+    display_name: 收费站存在异常通行
+    description: "如果某收费站的入口交易关联到不正常的通行路径，则标记该站需关注"
+    language: swrl
+    expr: >
+      Passage(?p) ∧ check_status(?p, "不正常")
+        ∧ entry_at_station(?p, ?s)
+        → has_abnormal_traffic(?s, true)
