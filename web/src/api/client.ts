@@ -489,12 +489,20 @@ export const databaseApi = {
 
 // Mapping API
 export const mappingApi = {
-  create: async (objectType: string, tableId: string, columnPropertyMappings: Record<string, string>, primaryKeyColumn?: string): Promise<string> => {
+  create: async (objectType: string, tableId: string, columnPropertyMappings: Record<string, string>, primaryKeyColumns?: string | string[]): Promise<string> => {
+    const primaryKeyColumnsArray = Array.isArray(primaryKeyColumns) ? primaryKeyColumns : (primaryKeyColumns ? [primaryKeyColumns] : null);
+    const primaryKeyColumnSingle = Array.isArray(primaryKeyColumns) ? (primaryKeyColumns.length > 0 ? primaryKeyColumns[0] : null) : primaryKeyColumns;
+    console.log('[mappingApi.create] primaryKeyColumns input:', primaryKeyColumns);
+    console.log('[mappingApi.create] primary_key_columns to send:', primaryKeyColumnsArray);
+    console.log('[mappingApi.create] primary_key_column to send:', primaryKeyColumnSingle);
     const response = await apiClient.post<ApiResponse<{ id: string }>>('/mappings', {
       object_type: objectType,
       table_id: tableId,
       column_property_mappings: columnPropertyMappings,
-      primary_key_column: primaryKeyColumn,
+      // 兼容旧格式（单个字符串）和新格式（数组）
+      primary_key_columns: primaryKeyColumnsArray,
+      // 保留旧字段以兼容后端
+      primary_key_column: primaryKeyColumnSingle,
     });
     return response.data.data.id;
   },
@@ -514,10 +522,18 @@ export const mappingApi = {
     return response.data.data;
   },
 
-  update: async (mappingId: string, columnPropertyMappings: Record<string, string>, primaryKeyColumn?: string): Promise<void> => {
+  update: async (mappingId: string, columnPropertyMappings: Record<string, string>, primaryKeyColumns?: string | string[]): Promise<void> => {
+    const primaryKeyColumnsArray = Array.isArray(primaryKeyColumns) ? primaryKeyColumns : (primaryKeyColumns ? [primaryKeyColumns] : null);
+    const primaryKeyColumnSingle = Array.isArray(primaryKeyColumns) ? (primaryKeyColumns.length > 0 ? primaryKeyColumns[0] : null) : primaryKeyColumns;
+    console.log('[mappingApi.update] primaryKeyColumns input:', primaryKeyColumns);
+    console.log('[mappingApi.update] primary_key_columns to send:', primaryKeyColumnsArray);
+    console.log('[mappingApi.update] primary_key_column to send:', primaryKeyColumnSingle);
     await apiClient.put(`/mappings/${mappingId}`, {
       column_property_mappings: columnPropertyMappings,
-      primary_key_column: primaryKeyColumn,
+      // 兼容旧格式（单个字符串）和新格式（数组）
+      primary_key_columns: primaryKeyColumnsArray,
+      // 保留旧字段以兼容后端
+      primary_key_column: primaryKeyColumnSingle,
     });
   },
 

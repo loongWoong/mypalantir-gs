@@ -207,10 +207,15 @@ export default function DataComparison() {
                       });
                   }
                   
+                  // 支持新格式（数组）和旧格式（单个字符串）
+                  const primaryKeyColumn = Array.isArray(mapping.primary_key_columns) && mapping.primary_key_columns.length > 0
+                      ? mapping.primary_key_columns[0]
+                      : mapping.primary_key_column;
+                  
                   const newDataSource: DataSourceMapping = {
                       connection_id: table.database_id,
                       table: table.originalName,
-                      id_column: mapping.primary_key_column,
+                      id_column: primaryKeyColumn,
                       field_mapping: field_mapping
                   };
                   

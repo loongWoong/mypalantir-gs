@@ -82,12 +82,29 @@ public class InstanceController {
     public ResponseEntity<ApiResponse<Void>> deleteInstance(
             @PathVariable String objectType,
             @PathVariable String id) {
+        logger.info("[InstanceController] ========== DELETE INSTANCE REQUEST ==========");
+        logger.info("[InstanceController] Delete request: objectType={}, id={}", objectType, id);
         try {
             instanceService.deleteInstance(objectType, id);
+            logger.info("[InstanceController] Successfully deleted instance {} of type {}", id, objectType);
             return ResponseEntity.ok(ApiResponse.success(null));
         } catch (IOException e) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(ApiResponse.error(404, e.getMessage()));
+            logger.error("[InstanceController] IOException deleting instance {} of type {}: {}", id, objectType, e.getMessage(), e);
+            // 根据错误消息判断是实例不存在还是其他错误
+            String errorMessage = e.getMessage();
+            if (errorMessage != null && errorMessage.contains("not found")) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(ApiResponse.error(404, "实例不存在: " + errorMessage));
+            } else {
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.error(500, "删除实例失败: " + errorMessage));
+            }
+        } catch (Exception e) {
+            logger.error("[InstanceController] Unexpected error deleting instance {} of type {}: {}", id, objectType, e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(ApiResponse.error(500, "删除实例失败: " + e.getMessage()));
+        } finally {
+            logger.info("[InstanceController] ========== DELETE INSTANCE REQUEST END ==========");
         }
     }
 

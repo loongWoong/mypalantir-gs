@@ -514,9 +514,18 @@ public class OntologyRelToSqlConverter extends RelToSqlConverter {
             Map<String, Object> table = instanceStorage.getInstance("table", tableId);
             String tableName = (String) table.get("name");
             String databaseId = (String) table.get("database_id");
+            
+            // 支持新格式（数组）和旧格式（单个字符串）
+            @SuppressWarnings("unchecked")
+            List<String> primaryKeyColumns = (List<String>) mappingData.get("primary_key_columns");
             String primaryKeyColumn = (String) mappingData.get("primary_key_column");
             
-            System.out.println("[getDataSourceMappingFromMapping] table_name: " + tableName + ", database_id: " + databaseId + ", primary_key_column: " + primaryKeyColumn);
+            // 如果新格式存在，优先使用第一个主键列；否则使用旧格式
+            if (primaryKeyColumns != null && !primaryKeyColumns.isEmpty()) {
+                primaryKeyColumn = primaryKeyColumns.get(0);
+            }
+            
+            System.out.println("[getDataSourceMappingFromMapping] table_name: " + tableName + ", database_id: " + databaseId + ", primary_key_column: " + primaryKeyColumn + ", primary_key_columns: " + primaryKeyColumns);
             
             // 获取数据库类型（用于 SQL 方言适配）
             String databaseType = null;

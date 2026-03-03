@@ -195,6 +195,11 @@ object_types:
         data_type: string
         required: false
         description: "用于生成实例ID的主键列名"
+      - name: primary_key_columns
+        display_name: 主键列列表
+        data_type: string
+        required: false
+        description: "用于生成实例ID的主键列名"
 
   - name: AtomicMetric
     display_name: 原子指标

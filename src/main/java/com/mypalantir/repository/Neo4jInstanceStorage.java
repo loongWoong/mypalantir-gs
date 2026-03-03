@@ -230,31 +230,164 @@ public class Neo4jInstanceStorage implements IInstanceStorage {
         verifyAndRetryConnection();
 
         try (Session session = neo4jDriver.session()) {
-            String label = normalizeLabel(objectType);
+            String expectedLabel = normalizeLabel(objectType);
+            logger.info("[Neo4jInstanceStorage] Attempting to delete instance {} of type {} (expected label: {})", id, objectType, expectedLabel);
             
-            // 先检查节点是否存在
-            String checkCypher = "MATCH (n:" + label + " {id: $id}) RETURN n.id AS id";
-            var checkResult = session.run(checkCypher, Values.parameters("id", id));
-            if (!checkResult.hasNext()) {
-                throw new IOException("instance not found");
+            // 先通过 ID 查找节点（不指定标签），获取实际标签
+            String findCypher = "MATCH (n {id: $id}) RETURN n, labels(n) AS labels";
+            var findResult = session.run(findCypher, Values.parameters("id", id));
+            
+            if (!findResult.hasNext()) {
+                logger.warn("[Neo4jInstanceStorage] Instance with id {} not found in Neo4j (no node with this id exists)", id);
+                throw new IOException("实例不存在 (instance not found: " + objectType + "/" + id + ")");
             }
             
-            // 删除节点及其所有关系
-            String deleteCypher = "MATCH (n:" + label + " {id: $id}) DETACH DELETE n";
-            var deleteResult = session.run(deleteCypher, Values.parameters("id", id));
+            var record = findResult.next();
+            var labels = record.get("labels").asList();
+            String actualLabel = labels.isEmpty() ? null : labels.get(0).toString();
             
-            // 检查删除是否成功
-            long nodesDeleted = deleteResult.consume().counters().nodesDeleted();
-            if (nodesDeleted == 0) {
-                throw new IOException("instance not found");
+            logger.info("[Neo4jInstanceStorage] Found node with id {}: actual label={}, expected label={}, all labels={}", 
+                id, actualLabel, expectedLabel, labels);
+            
+            // 如果实际标签与预期标签不一致，记录警告但继续删除
+            if (actualLabel != null && !actualLabel.equals(expectedLabel)) {
+                logger.warn("[Neo4jInstanceStorage] Label mismatch for instance {}: expected={}, actual={}, will use actual label for deletion", 
+                    id, expectedLabel, actualLabel);
             }
             
-            logger.debug("Deleted instance {} of type {} from Neo4j", id, objectType);
+            // 优先尝试使用实际标签删除，如果失败则尝试预期标签，最后尝试仅通过 ID 删除
+            boolean deleted = false;
+            long nodesDeleted = 0;
+            long relationshipsDeleted = 0;
+            
+            // 策略1: 使用实际标签删除（如果存在）
+            if (actualLabel != null && !actualLabel.isEmpty()) {
+                try {
+                    String deleteCypher = "MATCH (n:" + actualLabel + " {id: $id}) DETACH DELETE n";
+                    logger.debug("[Neo4jInstanceStorage] Attempting delete with actual label: {}", deleteCypher);
+                    var deleteResult = session.run(deleteCypher, Values.parameters("id", id));
+                    var summary = deleteResult.consume();
+                    nodesDeleted = summary.counters().nodesDeleted();
+                    relationshipsDeleted = summary.counters().relationshipsDeleted();
+                    
+                    if (nodesDeleted > 0) {
+                        deleted = true;
+                        logger.info("[Neo4jInstanceStorage] Successfully deleted instance {} using actual label {} (deleted {} nodes and {} relationships)", 
+                            id, actualLabel, nodesDeleted, relationshipsDeleted);
+                    }
+                } catch (Exception e) {
+                    logger.warn("[Neo4jInstanceStorage] Failed to delete with actual label {}: {}", actualLabel, e.getMessage());
+                }
+            }
+            
+            // 策略2: 如果使用实际标签删除失败，尝试使用预期标签删除
+            if (!deleted && actualLabel != null && !actualLabel.equals(expectedLabel)) {
+                try {
+                    String deleteCypher = "MATCH (n:" + expectedLabel + " {id: $id}) DETACH DELETE n";
+                    logger.debug("[Neo4jInstanceStorage] Attempting delete with expected label: {}", deleteCypher);
+                    var deleteResult = session.run(deleteCypher, Values.parameters("id", id));
+                    var summary = deleteResult.consume();
+                    nodesDeleted = summary.counters().nodesDeleted();
+                    relationshipsDeleted = summary.counters().relationshipsDeleted();
+                    
+                    if (nodesDeleted > 0) {
+                        deleted = true;
+                        logger.info("[Neo4jInstanceStorage] Successfully deleted instance {} using expected label {} (deleted {} nodes and {} relationships)", 
+                            id, expectedLabel, nodesDeleted, relationshipsDeleted);
+                    }
+                } catch (Exception e) {
+                    logger.warn("[Neo4jInstanceStorage] Failed to delete with expected label {}: {}", expectedLabel, e.getMessage());
+                }
+            }
+            
+            // 策略3: 如果都失败，尝试仅通过 ID 删除（不指定标签）
+            if (!deleted) {
+                logger.warn("[Neo4jInstanceStorage] Label-based deletion failed, trying to delete by ID only");
+                
+                // 先检查节点是否还存在
+                String checkCypher = "MATCH (n {id: $id}) RETURN n.id AS id, labels(n) AS labels, properties(n) AS props";
+                var checkResult = session.run(checkCypher, Values.parameters("id", id));
+                var checkRecords = checkResult.list();
+                
+                if (checkRecords.isEmpty()) {
+                    logger.warn("[Neo4jInstanceStorage] Node with id {} not found when attempting ID-only deletion", id);
+                } else {
+                    logger.info("[Neo4jInstanceStorage] Found {} node(s) with id {} when attempting ID-only deletion", checkRecords.size(), id);
+                    for (var checkRecord : checkRecords) {
+                        logger.info("[Neo4jInstanceStorage] Node details: id={}, labels={}, props keys={}", 
+                            checkRecord.get("id"), 
+                            checkRecord.get("labels"),
+                            checkRecord.get("props").asMap().keySet());
+                    }
+                }
+                
+                // 尝试删除所有匹配的节点
+                String deleteByIdCypher = "MATCH (n {id: $id}) DETACH DELETE n";
+                logger.info("[Neo4jInstanceStorage] Executing ID-only delete query: {}", deleteByIdCypher);
+                var deleteByIdResult = session.run(deleteByIdCypher, Values.parameters("id", id));
+                var deleteByIdSummary = deleteByIdResult.consume();
+                nodesDeleted = deleteByIdSummary.counters().nodesDeleted();
+                relationshipsDeleted = deleteByIdSummary.counters().relationshipsDeleted();
+                
+                logger.info("[Neo4jInstanceStorage] ID-only delete result: nodesDeleted={}, relationshipsDeleted={}", 
+                    nodesDeleted, relationshipsDeleted);
+                
+                if (nodesDeleted > 0) {
+                    deleted = true;
+                    logger.info("[Neo4jInstanceStorage] Successfully deleted instance {} by ID only (deleted {} nodes and {} relationships)", 
+                        id, nodesDeleted, relationshipsDeleted);
+                } else {
+                    // 如果还是失败，尝试更激进的删除策略：删除所有具有相同ID的节点，无论标签
+                    logger.warn("[Neo4jInstanceStorage] ID-only deletion returned 0 nodes, trying aggressive deletion");
+                    
+                    // 策略4: 尝试删除所有可能的节点（包括通过其他属性匹配）
+                    // 首先尝试通过 table_id 或其他属性查找
+                    String aggressiveCypher = "MATCH (n) WHERE n.id = $id OR n.table_id = $id OR toString(n.id) = $id OR toString(n.table_id) = $id DETACH DELETE n RETURN count(n) AS deleted";
+                    try {
+                        var aggressiveResult = session.run(aggressiveCypher, Values.parameters("id", id));
+                        var aggressiveRecords = aggressiveResult.list();
+                        if (!aggressiveRecords.isEmpty()) {
+                            long aggressiveDeleted = aggressiveRecords.get(0).get("deleted").asLong();
+                            if (aggressiveDeleted > 0) {
+                                deleted = true;
+                                nodesDeleted = aggressiveDeleted;
+                                logger.info("[Neo4jInstanceStorage] Successfully deleted {} nodes using aggressive deletion strategy", aggressiveDeleted);
+                            }
+                        }
+                    } catch (Exception e) {
+                        logger.warn("[Neo4jInstanceStorage] Aggressive deletion failed: {}", e.getMessage());
+                    }
+                }
+            }
+            
+            // 如果所有策略都失败，抛出异常
+            if (!deleted || nodesDeleted == 0) {
+                // 最后尝试：直接查询并显示所有相关信息
+                logger.error("[Neo4jInstanceStorage] All deletion strategies failed for instance {} of type {}", id, objectType);
+                try {
+                    String finalCheckCypher = "MATCH (n) WHERE n.id = $id OR n.table_id = $id RETURN n, labels(n) AS labels LIMIT 10";
+                    var finalCheckResult = session.run(finalCheckCypher, Values.parameters("id", id));
+                    var finalRecords = finalCheckResult.list();
+                    logger.error("[Neo4jInstanceStorage] Final check found {} node(s) with id or table_id matching {}", finalRecords.size(), id);
+                    for (var finalRecord : finalRecords) {
+                        var node = finalRecord.get("n").asNode();
+                        logger.error("[Neo4jInstanceStorage] Node: id={}, labels={}, all properties={}", 
+                            node.get("id"), finalRecord.get("labels"), node.asMap().keySet());
+                    }
+                } catch (Exception e) {
+                    logger.error("[Neo4jInstanceStorage] Final check failed: {}", e.getMessage());
+                }
+                throw new IOException("实例不存在或删除失败 (instance not found or deletion failed: " + objectType + "/" + id + ")");
+            }
+            
+            logger.info("[Neo4jInstanceStorage] Final delete result: nodesDeleted={}, relationshipsDeleted={}", nodesDeleted, relationshipsDeleted);
         } catch (IOException e) {
+            logger.error("[Neo4jInstanceStorage] IOException deleting instance {} of type {}: {}", id, objectType, e.getMessage());
             throw e;
         } catch (Exception e) {
-            logger.error("Failed to delete instance from Neo4j: {}", e.getMessage(), e);
-            throw new IOException("Failed to delete instance: " + e.getMessage(), e);
+            logger.error("[Neo4jInstanceStorage] Unexpected error deleting instance {} of type {} from Neo4j: {}", 
+                id, objectType, e.getMessage(), e);
+            throw new IOException("删除实例失败: " + e.getMessage() + " (Failed to delete instance: " + objectType + "/" + id + ")", e);
         }
     }
 

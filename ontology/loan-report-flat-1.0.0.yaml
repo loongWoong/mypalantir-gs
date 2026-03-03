@@ -1,0 +1,1035 @@
+version: 1.0.0
+namespace: ontology.gs
+data_sources: []
+object_types:
+- name: loanReportBaseData
+  display_name: 报表基础数据
+  description: 包含所有报表基础数据查询字段的单一对象模型
+  base_type: null
+  properties:
+  - name: statDate
+    data_type: string
+    required: false
+    display_name: 报表期次
+    description: 报表所对应的统计日期，如年月日等
+    default_value: null
+    constraints: null
+  - name: bsType
+    data_type: string
+    required: false
+    display_name: 业务分类
+    description: 贷款业务的分类维度，例如：流动资金贷款、固定资产贷款等
+    default_value: null
+    constraints: null
+  - name: loanId
+    data_type: string
+    required: true
+    display_name: 债项编号
+    description: 每笔贷款在系统中的唯一标识编号
+    default_value: null
+    constraints:
+      unique: true
+  - name: intOrgCd
+    data_type: string
+    required: false
+    display_name: 债项所属原始机构号
+    description: 贷款最初归属的机构编号
+    default_value: null
+    constraints: null
+  - name: intOrgName
+    data_type: string
+    required: false
+    display_name: 债项所属原始机构名称
+    description: 贷款最初归属的机构名称
+    default_value: null
+    constraints: null
+  - name: bookCd
+    data_type: string
+    required: false
+    display_name: 债项所属一级机构号
+    description: 贷款所属的一级管理机构编号
+    default_value: null
+    constraints: null
+  - name: bookDesc
+    data_type: string
+    required: false
+    display_name: 债项所属一级机构名称
+    description: 贷款所属的一级管理机构名称
+    default_value: null
+    constraints: null
+  - name: branchNoLv2
+    data_type: string
+    required: false
+    display_name: 债项所属二级机构号
+    description: 贷款所属的二级分支机构编号
+    default_value: null
+    constraints: null
+  - name: branchNmLv2
+    data_type: string
+    required: false
+    display_name: 债项所属二级机构名称
+    description: 贷款所属的二级分支机构名称
+    default_value: null
+    constraints: null
+  - name: branchNoLv3
+    data_type: string
+    required: false
+    display_name: 债项所属三级机构号
+    description: 贷款所属的三级分支机构编号
+    default_value: null
+    constraints: null
+  - name: branchNmLv3
+    data_type: string
+    required: false
+    display_name: 债项所属三级机构名称
+    description: 贷款所属的三级分支机构名称
+    default_value: null
+    constraints: null
+  - name: branchNoLv4
+    data_type: string
+    required: false
+    display_name: 债项所属四级机构号
+    description: 贷款所属的四级分支机构编号
+    default_value: null
+    constraints: null
+  - name: branchNmLv4
+    data_type: string
+    required: false
+    display_name: 债项所属四级机构名称
+    description: 贷款所属的四级分支机构名称
+    default_value: null
+    constraints: null
+  - name: statOrgCd
+    data_type: string
+    required: false
+    display_name: 债项所属一级机构号-统计用
+    description: 统计口径下使用的贷款所属一级机构编号
+    default_value: null
+    constraints: null
+  - name: statOrgName
+    data_type: string
+    required: false
+    display_name: 债项所属一级机构名称-统计用
+    description: 统计口径下使用的贷款所属一级机构名称
+    default_value: null
+    constraints: null
+  - name: bankNo
+    data_type: string
+    required: false
+    display_name: 银行号
+    description: 所属银行的编号
+    default_value: null
+    constraints: null
+  - name: prinApcCd
+    data_type: string
+    required: false
+    display_name: 核算码
+    description: 贷款核算科目编码
+    default_value: null
+    constraints: null
+  - name: apcname
+    data_type: string
+    required: false
+    display_name: 核算码名称
+    description: 对应核算码的中文名称
+    default_value: null
+    constraints: null
+  - name: curCd
+    data_type: string
+    required: false
+    display_name: 原币币种
+    description: 贷款金额的原始币种代码
+    default_value: null
+    constraints: null
+  - name: accountCur
+    data_type: string
+    required: false
+    display_name: 记账币种
+    description: 贷款记录中使用的记账币种
+    default_value: null
+    constraints: null
+  - name: accountExchRate
+    data_type: double
+    required: false
+    display_name: 原币折记账币汇率
+    description: 将原币金额转换为记账币时使用的汇率
+    default_value: null
+    constraints: null
+  - name: acctormbExchRate
+    data_type: double
+    required: false
+    display_name: 记账币折人民币汇率
+    description: 将记账币金额转换为人民币时使用的汇率
+    default_value: null
+    constraints: null
+  - name: exchRate
+    data_type: double
+    required: false
+    display_name: 原币折人民币汇率
+    description: 将原币金额转换为人民币时使用的汇率
+    default_value: null
+    constraints: null
+  - name: loanPrinBal
+    data_type: double
+    required: false
+    display_name: 贷款余额-原币
+    description: 当前贷款未偿还本金余额，以原始币种表示
+    default_value: null
+    constraints: null
+  - name: loanPrinBalAcc
+    data_type: double
+    required: false
+    display_name: 贷款余额-记账币
+    description: 当前贷款未偿还本金余额，以记账币种表示
+    default_value: null
+    constraints: null
+  - name: loanPrinBalBillAdjust
+    data_type: double
+    required: false
+    display_name: 贷款余额-人民币
+    description: 当前贷款未偿还本金余额，以人民币表示
+    default_value: null
+    constraints: null
+  - name: loanPrinBalUsd
+    data_type: double
+    required: false
+    display_name: 贷款余额-美元
+    description: 当前贷款未偿还本金余额，以美元表示
+    default_value: null
+    constraints: null
+  - name: loanPrinBalRmb
+    data_type: double
+    required: false
+    display_name: 贷款余额-估值调整后-人民币
+    description: 贷款余额经估值调整后，以人民币表示
+    default_value: null
+    constraints: null
+  - name: intBal
+    data_type: double
+    required: false
+    display_name: 应收利息-人民币
+    description: 当前应收取但尚未收到的利息金额，以人民币计
+    default_value: null
+    constraints: null
+  - name: intabInt
+    data_type: double
+    required: false
+    display_name: 表内利息-原币
+    description: 表内产生的利息金额，以原始币种表示
+    default_value: null
+    constraints: null
+  - name: extabInt
+    data_type: double
+    required: false
+    display_name: 表外利息-原币
+    description: 表外产生的利息金额，以原始币种表示
+    default_value: null
+    constraints: null
+  - name: prodCd
+    data_type: string
+    required: false
+    display_name: 产品编号
+    description: 贷款产品的唯一标识编号
+    default_value: null
+    constraints: null
+  - name: ctDescUser
+    data_type: string
+    required: false
+    display_name: 产品名称
+    description: 贷款对应的产品名称
+    default_value: null
+    constraints: null
+  - name: subProdCd
+    data_type: string
+    required: false
+    display_name: 子产品编号
+    description: 子产品的唯一标识编号
+    default_value: null
+    constraints: null
+  - name: agreeCd
+    data_type: string
+    required: false
+    display_name: 合同号
+    description: 签订的贷款合同编号
+    default_value: null
+    constraints: null
+  - name: loancntdcno
+    data_type: string
+    required: false
+    display_name: 授信文书合同号
+    description: 授信相关文件中的合同编号
+    default_value: null
+    constraints: null
+  - name: sourceBsnno
+    data_type: string
+    required: false
+    display_name: 原系统业务编号
+    description: 来源于原有系统的业务编号
+    default_value: null
+    constraints: null
+  - name: effDate
+    data_type: string
+    required: false
+    display_name: 起息日
+    description: 贷款开始计算利息的日期
+    default_value: null
+    constraints: null
+  - name: expDate
+    data_type: string
+    required: false
+    display_name: 到期日
+    description: 贷款合同规定的到期还款日期
+    default_value: null
+    constraints: null
+  - name: riskType
+    data_type: string
+    required: false
+    display_name: 五级分类-调整前
+    description: 贷款按照五级分类标准划分的等级（调整前）
+    default_value: null
+    constraints: null
+  - name: riskTypeSup
+    data_type: string
+    required: false
+    display_name: 五级分类-监管调整后
+    description: 监管要求下调整后的五级分类结果
+    default_value: null
+    constraints: null
+  - name: riskTypeAdt
+    data_type: string
+    required: false
+    display_name: 五级分类-审计调整后
+    description: 审计过程中调整后的五级分类结果
+    default_value: null
+    constraints: null
+  - name: riskTypeCode
+    data_type: string
+    required: false
+    display_name: 十三级分类
+    description: 更细致的贷款风险分类体系，共十三个级别
+    default_value: null
+    constraints: null
+  - name: ovdeFlag
+    data_type: string
+    required: false
+    display_name: 逾期标识
+    description: 标识该笔贷款是否处于逾期状态
+    default_value: null
+    constraints: null
+  - name: ovdePrin
+    data_type: double
+    required: false
+    display_name: 逾期金额-人民币
+    description: 贷款已逾期部分的本金金额，以人民币计
+    default_value: null
+    constraints: null
+  - name: ovduDays
+    data_type: int
+    required: false
+    display_name: 逾期天数
+    description: 自贷款到期日至当前的实际逾期天数
+    default_value: null
+    constraints: null
+  - name: overdues
+    data_type: string
+    required: false
+    display_name: 逾期次数
+    description: 贷款发生逾期行为的累计次数
+    default_value: null
+    constraints: null
+  - name: overdueStartDt
+    data_type: string
+    required: false
+    display_name: 逾期开始日期
+    description: 首次出现逾期行为的具体日期
+    default_value: null
+    constraints: null
+  - name: loanExtnNum
+    data_type: int
+    required: false
+    display_name: 展期次数
+    description: 贷款展期操作发生的次数
+    default_value: null
+    constraints: null
+  - name: regroupFlag
+    data_type: string
+    required: false
+    display_name: 重组标识
+    description: 是否存在债务重组情况的标记
+    default_value: null
+    constraints: null
+  - name: regroupFlagSup
+    data_type: string
+    required: false
+    display_name: 重组标识-监管调整后
+    description: 监管口径下对重组标识的认定
+    default_value: null
+    constraints: null
+  - name: fstputdt
+    data_type: string
+    required: false
+    display_name: 贷款首次发放日期
+    description: 贷款第一次发放的日期
+    default_value: null
+    constraints: null
+  - name: loanMaturity
+    data_type: int
+    required: false
+    display_name: 贷款期限-月
+    description: 贷款总期限，单位为月
+    default_value: null
+    constraints: null
+  - name: nextDueDate
+    data_type: string
+    required: false
+    display_name: 下一还款日
+    description: 下一次计划还款的日期
+    default_value: null
+    constraints: null
+  - name: redueDays
+    data_type: int
+    required: false
+    display_name: 剩余到期天数
+    description: 距离贷款到期日剩余的天数
+    default_value: null
+    constraints: null
+  - name: fstputLoanBal
+    data_type: double
+    required: false
+    display_name: 首次放款金额-原币
+    description: 贷款首次发放时的本金金额，以原始币种表示
+    default_value: null
+    constraints: null
+  - name: dueAmt
+    data_type: double
+    required: false
+    display_name: 下期还款金额-人民币
+    description: 下一期应还的贷款总额，以人民币计
+    default_value: null
+    constraints: null
+  - name: loanRepay
+    data_type: double
+    required: false
+    display_name: 下一还本金额-人民币
+    description: 下一期应归还的本金金额，以人民币计
+    default_value: null
+    constraints: null
+  - name: loanDirCd
+    data_type: string
+    required: false
+    display_name: 投向行业
+    description: 贷款资金用于哪个行业的代码
+    default_value: null
+    constraints: null
+  - name: loanDirName
+    data_type: string
+    required: false
+    display_name: 投向行业名称
+    description: 贷款资金用于哪个行业的名称
+    default_value: null
+    constraints: null
+  - name: loanDir1
+    data_type: string
+    required: false
+    display_name: 一级投向行业
+    description: 贷款投向行业的一级分类
+    default_value: null
+    constraints: null
+  - name: loanDir2
+    data_type: string
+    required: false
+    display_name: 二级投向行业
+    description: 贷款投向行业的二级分类
+    default_value: null
+    constraints: null
+  - name: loanDir3
+    data_type: string
+    required: false
+    display_name: 三级投向行业
+    description: 贷款投向行业的三级分类
+    default_value: null
+    constraints: null
+  - name: drtfield
+    data_type: string
+    required: false
+    display_name: 投向领域
+    description: 贷款资金投向的具体领域
+    default_value: null
+    constraints: null
+  - name: straEmerIndu
+    data_type: string
+    required: false
+    display_name: 战略新兴产业类型
+    description: 贷款投向的战略性新兴产业类别
+    default_value: null
+    constraints: null
+  - name: loanUse
+    data_type: string
+    required: false
+    display_name: 贷款实际用途
+    description: 实际用于何种目的的资金用途说明
+    default_value: null
+    constraints: null
+  - name: pd
+    data_type: double
+    required: false
+    display_name: 违约概率
+    description: 预测该笔贷款在未来一段时间内的违约可能性
+    default_value: null
+    constraints: null
+  - name: effectRate
+    data_type: double
+    required: false
+    display_name: 贷款执行利率
+    description: 贷款实际执行的年化利率
+    default_value: null
+    constraints: null
+  - name: mainLoanType
+    data_type: string
+    required: false
+    display_name: 主贷款方式
+    description: 主要贷款类型的分类，如信用贷款、抵押贷款等
+    default_value: null
+    constraints: null
+  - name: collateralAmtG1102
+    data_type: double
+    required: false
+    display_name: G1102抵押品价值-人民币
+    description: G1102标准下的抵押物评估价值，以人民币计
+    default_value: null
+    constraints: null
+  - name: pledgeAmtG1102
+    data_type: double
+    required: false
+    display_name: G1102质押品价值-人民币
+    description: G1102标准下的质押物评估价值，以人民币计
+    default_value: null
+    constraints: null
+  - name: guarantee
+    data_type: double
+    required: false
+    display_name: 担保金额-人民币
+    description: 提供担保的金额，以人民币计
+    default_value: null
+    constraints: null
+  - name: guaranteeAmt
+    data_type: double
+    required: false
+    display_name: 保证金-人民币
+    description: 客户缴纳的保证金金额，以人民币计
+    default_value: null
+    constraints: null
+  - name: cash
+    data_type: double
+    required: false
+    display_name: 银行存单抵质押价值-人民币
+    description: 使用银行存单作为抵质押品的价值，以人民币计
+    default_value: null
+    constraints: null
+  - name: bond
+    data_type: double
+    required: false
+    display_name: 国债单抵质押价值-人民币
+    description: 使用国债单作为抵质押品的价值，以人民币计
+    default_value: null
+    constraints: null
+  - name: commonProvisionAmtInt
+    data_type: double
+    required: false
+    display_name: 准备金-原币
+    description: 表内计提的一般准备金金额，以原始币种表示
+    default_value: null
+    constraints: null
+  - name: commonProvisionAmt
+    data_type: double
+    required: false
+    display_name: 准备金-人民币
+    description: 表内计提的一般准备金金额，以人民币计
+    default_value: null
+    constraints: null
+  - name: billValuation
+    data_type: double
+    required: false
+    display_name: 票据贴现/转贴现估值
+    description: 票据贴现或转贴现业务的估值金额
+    default_value: null
+    constraints: null
+  - name: lendingType
+    data_type: string
+    required: false
+    display_name: 授信类型代码
+    description: 授信业务类型的编码标识
+    default_value: null
+    constraints: null
+  - name: statusCd
+    data_type: string
+    required: false
+    display_name: 授信类型名称
+    description: 授信业务类型的中文名称
+    default_value: null
+    constraints: null
+  - name: loantype
+    data_type: string
+    required: false
+    display_name: 贷款种类
+    description: 贷款的分类方式，如短期贷款、长期贷款等
+    default_value: null
+    constraints: null
+  - name: lntypeName
+    data_type: string
+    required: false
+    display_name: 借款种类名称
+    description: 借款类型的中文名称
+    default_value: null
+    constraints: null
+  - name: prodType1
+    data_type: string
+    required: false
+    display_name: 源系统产品编码
+    description: 来自源系统的贷款产品编码
+    default_value: null
+    constraints: null
+  - name: sourceSys
+    data_type: string
+    required: false
+    display_name: 来源系统
+    description: 数据来源于哪个业务系统
+    default_value: null
+    constraints: null
+  - name: advDate
+    data_type: string
+    required: false
+    display_name: 最近贷款放款日
+    description: 最近一次贷款发放的日期
+    default_value: null
+    constraints: null
+  - name: associateOldLoan
+    data_type: string
+    required: false
+    display_name: 借新还旧业务-旧账号
+    description: 在“借新还旧”交易中涉及的旧贷款账户编号
+    default_value: null
+    constraints: null
+  - name: regroupDate
+    data_type: string
+    required: false
+    display_name: 债务重组时间
+    description: 发生债务重组的具体时间点
+    default_value: null
+    constraints: null
+  - name: normalDateSup
+    data_type: string
+    required: false
+    display_name: 分类上调时间-监管调整后
+    description: 监管口径下贷款分类被上调的时间
+    default_value: null
+    constraints: null
+  - name: normalDateAdt
+    data_type: string
+    required: false
+    display_name: 分类上调时间-审计调整后
+    description: 审计口径下贷款分类被上调的时间
+    default_value: null
+    constraints: null
+  - name: nperformDateSup
+    data_type: string
+    required: false
+    display_name: 分类下调时间-监管调整后
+    description: 监管口径下贷款分类被下调的时间
+    default_value: null
+    constraints: null
+  - name: nperformDateAdt
+    data_type: string
+    required: false
+    display_name: 分类下调时间-审计调整后
+    description: 审计口径下贷款分类被下调的时间
+    default_value: null
+    constraints: null
+  - name: isObservationSup
+    data_type: string
+    required: false
+    display_name: 是否超过观察期-监管调整后
+    description: 是否超出监管规定的观察期
+    default_value: null
+    constraints: null
+  - name: isObservationAdt
+    data_type: string
+    required: false
+    display_name: 是否超过观察期-审计调整后
+    description: 是否超出审计规定的观察期
+    default_value: null
+    constraints: null
+  - name: busNo
+    data_type: string
+    required: false
+    display_name: 所属条线部门
+    description: 贷款业务所属的条线或部门编号
+    default_value: null
+    constraints: null
+  - name: flOverseasLoan
+    data_type: string
+    required: false
+    display_name: 对境外贷款标识
+    description: 标识该笔贷款是否为对境外客户的贷款
+    default_value: null
+    constraints: null
+  - name: freeTradeZone
+    data_type: string
+    required: false
+    display_name: 自由贸易区标识
+    description: 标识该笔贷款是否涉及自由贸易区项目
+    default_value: null
+    constraints: null
+  - name: srsBankNo
+    data_type: string
+    required: false
+    display_name: 财报银行号
+    description: 用于财务报告的银行编号
+    default_value: null
+    constraints: null
+  - name: custCd
+    data_type: string
+    required: false
+    display_name: 客户号
+    description: 客户在系统中的唯一识别号码
+    default_value: null
+    constraints: null
+  - name: custName
+    data_type: string
+    required: false
+    display_name: 客户名称
+    description: 客户的全称或简称
+    default_value: null
+    constraints: null
+  - name: orgstrCode
+    data_type: string
+    required: false
+    display_name: 组织机构代码
+    description: 客户的组织机构统一代码
+    default_value: null
+    constraints: null
+  - name: socialCreditCode
+    data_type: string
+    required: false
+    display_name: 统一社会信用代码
+    description: 客户的统一社会信用代码
+    default_value: null
+    constraints: null
+  - name: corpProp
+    data_type: string
+    required: false
+    display_name: 企业性质
+    description: 客户的企业性质分类，如国有、民营等
+    default_value: null
+    constraints: null
+  - name: custType
+    data_type: string
+    required: false
+    display_name: 客户类型
+    description: 客户的分类类型，如个人客户、企业客户等
+    default_value: null
+    constraints: null
+  - name: custSubtype
+    data_type: string
+    required: false
+    display_name: 客户子类型
+    description: 客户更细粒度的分类，如小微企业、大型企业等
+    default_value: null
+    constraints: null
+  - name: custScale
+    data_type: string
+    required: false
+    display_name: 企业规模-工信部标准
+    description: 根据工信部标准对企业规模的划分
+    default_value: null
+    constraints: null
+  - name: corpSizeInName
+    data_type: string
+    required: false
+    display_name: 企业规模-新模式
+    description: 新模式下的企业规模分类
+    default_value: null
+    constraints: null
+  - name: indusCd
+    data_type: string
+    required: false
+    display_name: 客户行业分类
+    description: 客户所属行业的分类代码
+    default_value: null
+    constraints: null
+  - name: indusName
+    data_type: string
+    required: false
+    display_name: 客户行业名称
+    description: 客户所属行业的中文名称
+    default_value: null
+    constraints: null
+  - name: cusOrgCd
+    data_type: string
+    required: false
+    display_name: 客户所属机构号
+    description: 客户所属的机构编号
+    default_value: null
+    constraints: null
+  - name: custOrgName
+    data_type: string
+    required: false
+    display_name: 客户所属机构名称
+    description: 客户所属的机构名称
+    default_value: null
+    constraints: null
+  - name: motherCode
+    data_type: string
+    required: false
+    display_name: 客户所属集团客户号
+    description: 客户所属集团的编号
+    default_value: null
+    constraints: null
+  - name: motherName
+    data_type: string
+    required: false
+    display_name: 客户所属集团名称
+    description: 客户所属集团的名称
+    default_value: null
+    constraints: null
+  - name: ecnmCodeName
+    data_type: string
+    required: false
+    display_name: 客户经济成分
+    description: 客户所属的经济成分，如国有、集体、私营等
+    default_value: null
+    constraints: null
+  - name: rgstAddr
+    data_type: string
+    required: false
+    display_name: 客户注册地
+    description: 客户注册所在地的行政区域信息
+    default_value: null
+    constraints: null
+  - name: riskCountry
+    data_type: string
+    required: false
+    display_name: 风险所在国别
+    description: 贷款风险所在国家或地区的代码
+    default_value: null
+    constraints: null
+  - name: manageCountry
+    data_type: string
+    required: false
+    display_name: 经营所在国家
+    description: 客户经营活动所在的国家或地区
+    default_value: null
+    constraints: null
+  - name: family
+    data_type: string
+    required: false
+    display_name: 行政区划代码
+    description: 客户所在行政区划的代码
+    default_value: null
+    constraints: null
+  - name: nationalityCode
+    data_type: string
+    required: false
+    display_name: 客户国籍
+    description: 客户的国籍代码
+    default_value: null
+    constraints: null
+  - name: cclevel
+    data_type: string
+    required: false
+    display_name: 客户内部信用评级
+    description: 内部系统对客户信用等级的评定
+    default_value: null
+    constraints: null
+  - name: resDate
+    data_type: string
+    required: false
+    display_name: 评级有效期
+    description: 客户信用评级的有效截止日期
+    default_value: null
+    constraints: null
+  - name: custCdRwa
+    data_type: string
+    required: false
+    display_name: 风险计量用客户号
+    description: 用于风险计量模型中的客户编号
+    default_value: null
+    constraints: null
+  - name: custNameRwa
+    data_type: string
+    required: false
+    display_name: 风险计量用客户名
+    description: 用于风险计量模型中的客户名称
+    default_value: null
+    constraints: null
+  - name: indusNameRwa
+    data_type: string
+    required: false
+    display_name: 风险计量用客户行业
+    description: 用于风险计量模型中的客户所属行业
+    default_value: null
+    constraints: null
+  - name: cclevelRwa
+    data_type: string
+    required: false
+    display_name: 风险计量用客户评级
+    description: 用于风险计量模型中的客户信用评级
+    default_value: null
+    constraints: null
+  - name: maxAmt
+    data_type: double
+    required: false
+    display_name: 授信批复额度-原币
+    description: 授信审批通过的最大可使用额度，以原始币种表示
+    default_value: null
+    constraints: null
+  - name: maxAmtRmb
+    data_type: double
+    required: false
+    display_name: 授信批复额度-人民币
+    description: 授信审批通过的最大可使用额度，以人民币计
+    default_value: null
+    constraints: null
+  - name: loanResBal
+    data_type: double
+    required: false
+    display_name: 剩余可用额度-原币
+    description: 当前尚未使用的授信额度，以原始币种表示
+    default_value: null
+    constraints: null
+  - name: loanResBalRmb
+    data_type: double
+    required: false
+    display_name: 剩余可用额度-人民币
+    description: 当前尚未使用的授信额度，以人民币计
+    default_value: null
+    constraints: null
+  - name: custOrgcdInt
+    data_type: string
+    required: false
+    display_name: 风险计量客户所属集团号
+    description: 风险计量模型中客户所属集团的编号
+    default_value: null
+    constraints: null
+  - name: custOrgnameInt
+    data_type: string
+    required: false
+    display_name: 风险计量客户所属集团名称
+    description: 风险计量模型中客户所属集团的名称
+    default_value: null
+    constraints: null
+  - name: collateralAmt
+    data_type: double
+    required: false
+    display_name: 抵押品价值-人民币
+    description: 抵押物的评估价值，以人民币计
+    default_value: null
+    constraints: null
+  - name: pledgeAmt
+    data_type: double
+    required: false
+    display_name: 质押品价值-人民币
+    description: 质押物的评估价值，以人民币计
+    default_value: null
+    constraints: null
+  - name: regroupNum
+    data_type: int
+    required: false
+    display_name: 重组次数
+    description: 债务重组操作发生的总次数
+    default_value: null
+    constraints: null
+  - name: regroupPeriod
+    data_type: string
+    required: false
+    display_name: 重组日期
+    description: 债务重组生效的日期
+    default_value: null
+    constraints: null
+  - name: nonRegroupDate
+    data_type: string
+    required: false
+    display_name: 不再认定为重组贷款的补录月份
+    description: 不再将该笔贷款视为重组贷款的补录时间
+    default_value: null
+    constraints: null
+  - name: lyLoanId
+    data_type: string
+    required: false
+    display_name: 本季度初债项编号
+    description: 上一季度末的债项编号
+    default_value: null
+    constraints: null
+  - name: buyRedisFlg
+    data_type: string
+    required: false
+    display_name: 是否买断式贴现
+    description: 标识该票据是否为买断式贴现
+    default_value: null
+    constraints: null
+  - name: buyOthBillFlg
+    data_type: string
+    required: false
+    display_name: 是否买断其他票据类资产
+    description: 标识是否买断了其他票据类资产
+    default_value: null
+    constraints: null
+  - name: muRegroupFlag
+    data_type: string
+    required: false
+    display_name: 是否多次重组
+    description: 标识该笔贷款是否经历了多次重组
+    default_value: null
+    constraints: null
+  - name: nonRegroupFlag
+    data_type: string
+    required: false
+    display_name: 是否不再认定为重组贷款
+    description: 标识该笔贷款是否已不再属于重组贷款范畴
+    default_value: null
+    constraints: null
+  - name: regroupMon
+    data_type: string
+    required: false
+    display_name: 重组贷款的补录月份
+    description: 补录该笔贷款为重组贷款的月份
+    default_value: null
+    constraints: null
+  - name: regroupManagetype
+    data_type: string
+    required: false
+    display_name: 重组管理类别
+    description: 重组贷款的管理模式分类
+    default_value: null
+    constraints: null
+  - name: loantypeName
+    data_type: string
+    required: false
+    display_name: 贷款种类名称
+    description: 贷款种类的中文名称
+    default_value: null
+    constraints: null
+  - name: roadinvestarea
+    data_type: string
+    required: false
+    display_name: 一带一路投向地区
+    description: 贷款投向“一带一路”倡议相关地区的标识
+    default_value: null
+    constraints: null
+  - name: loanPrin
+    data_type: double
+    required: false
+    display_name: 贷款发放本金
+    description: 贷款实际发放的本金金额
+    default_value: null
+    constraints: null
+  - name: cntrflFltp
+    data_type: string
+    required: false
+    display_name: 额度类型
+    description: 授信额度的类型分类，如短期流贷,中长期流贷、债券交易额度等
+    default_value: null
+    constraints: null
+  data_source: null
+  url: null
+link_types: []

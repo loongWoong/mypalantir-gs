@@ -440,13 +440,15 @@ export default function InstanceList() {
 
   const handleDelete = async (id: string) => {
     if (!objectType) return;
-    if (!confirm('Are you sure you want to delete this instance?')) return;
+    if (!confirm('确定要删除此实例吗？此操作不可撤销。')) return;
     try {
       await instanceApi.delete(objectType, id);
+      showToast('实例删除成功', 'success');
       loadData();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to delete instance:', error);
-      alert('Failed to delete instance');
+      const errorMessage = error.response?.data?.message || error.message || '删除实例失败';
+      showToast(errorMessage, 'error');
     }
   };
 
@@ -1591,7 +1593,13 @@ export default function InstanceList() {
                   const mappingCount = mapping.column_property_mappings 
                     ? Object.keys(mapping.column_property_mappings).length 
                     : 0;
-                  const primaryKey = mapping.primary_key_column ? ` (主键: ${mapping.primary_key_column})` : '';
+                  // 支持新格式（数组）和旧格式（单个字符串）
+                  const primaryKeyDisplay = Array.isArray(mapping.primary_key_columns) && mapping.primary_key_columns.length > 0
+                      ? ` (主键: ${mapping.primary_key_columns.join(', ')})`
+                      : mapping.primary_key_column
+                      ? ` (主键: ${mapping.primary_key_column})`
+                      : '';
+                  const primaryKey = primaryKeyDisplay;
                   return (
                     <option key={mapping.id} value={mapping.id}>
                       {tableName} - {mappingCount} 个字段映射{primaryKey}

@@ -295,7 +295,36 @@ public class MappedDataService {
         
         // 10. 抽取数据
         // 如果源数据库和目标数据库不同，需要分别查询和插入
+        // 支持新格式（数组）和旧格式（单个字符串）
+        @SuppressWarnings("unchecked")
+        List<String> primaryKeyColumns = (List<String>) mapping.get("primary_key_columns");
         String primaryKeyColumn = (String) mapping.get("primary_key_column");
+        
+        // 如果新格式不存在，使用旧格式
+        if (primaryKeyColumns == null || primaryKeyColumns.isEmpty()) {
+            if (primaryKeyColumn != null && !primaryKeyColumn.isEmpty()) {
+                primaryKeyColumns = java.util.Arrays.asList(primaryKeyColumn);
+            }
+        } else {
+            // 如果新格式存在，也设置旧格式以兼容旧代码
+            if (primaryKeyColumn == null || primaryKeyColumn.isEmpty()) {
+                primaryKeyColumn = primaryKeyColumns.get(0);
+            }
+        }
+        
+        // 记录主键配置信息
+        logger.info("[MappedDataService] Data extraction for objectType={}, primaryKeyColumns={}, primaryKeyColumn={}", 
+            objectType, primaryKeyColumns, primaryKeyColumn);
+        
+        // 警告：如果只使用 V_STAT_DATE 作为主键，可能不是唯一标识符
+        if (primaryKeyColumns != null && primaryKeyColumns.size() == 1 && 
+            "V_STAT_DATE".equalsIgnoreCase(primaryKeyColumns.get(0))) {
+            logger.warn("[MappedDataService] WARNING: Using V_STAT_DATE as single primary key may cause data loss! " +
+                "V_STAT_DATE (报表期次) is not a unique identifier. " +
+                "Consider using composite primary keys (e.g., [V_LOAN_ID, V_STAT_DATE] for loan, " +
+                "[V_CUST_CD, V_STAT_DATE] for customer, etc.)");
+        }
+        
         int rowsInserted;
         
         // 判断是否需要跨数据库抽取
@@ -306,10 +335,10 @@ public class MappedDataService {
         if (isCrossDatabase) {
             // 跨数据库抽取：先从源数据库查询，再插入到目标数据库（默认数据库）
             rowsInserted = extractDataCrossDatabase(sourceTableName, targetTableName, 
-                sourceDatabaseId, targetDatabaseId, columnPropertyMappings, primaryKeyColumn);
+                sourceDatabaseId, targetDatabaseId, columnPropertyMappings, primaryKeyColumns, primaryKeyColumn);
         } else {
             // 同数据库抽取：使用INSERT INTO ... SELECT ... FROM
-            String extractSql = buildExtractSql(sourceTableName, targetTableName, columnPropertyMappings, primaryKeyColumn);
+            String extractSql = buildExtractSql(sourceTableName, targetTableName, columnPropertyMappings, primaryKeyColumns, primaryKeyColumn);
             rowsInserted = databaseMetadataService.executeUpdate(extractSql, targetDatabaseId);
         }
         
@@ -498,13 +527,14 @@ public class MappedDataService {
     /**
      * 跨数据库数据抽取
      * 先从源数据库查询数据，再插入到目标数据库
+     * 支持组合主键：如果配置了多个主键列，使用下划线连接它们的值作为ID
      */
     private int extractDataCrossDatabase(String sourceTableName, String targetTableName,
                                          String sourceDatabaseId, String targetDatabaseId,
                                          Map<String, String> columnPropertyMappings,
-                                         String primaryKeyColumn) throws SQLException, IOException {
-        // 1. 从源数据库查询数据
-        String selectSql = buildSelectSql(sourceTableName, columnPropertyMappings);
+                                         List<String> primaryKeyColumns, String primaryKeyColumn) throws SQLException, IOException {
+        // 1. 从源数据库查询数据（确保包含所有主键列）
+        String selectSql = buildSelectSql(sourceTableName, columnPropertyMappings, primaryKeyColumns);
         List<Map<String, Object>> sourceRows = databaseMetadataService.executeQuery(selectSql, sourceDatabaseId);
         
         if (sourceRows.isEmpty()) {
@@ -529,7 +559,7 @@ public class MappedDataService {
         try (PreparedStatement pstmt = targetConn.prepareStatement(insertSql)) {
             for (Map<String, Object> row : sourceRows) {
                 // 设置参数
-                setInsertParameters(pstmt, row, columnPropertyMappings, primaryKeyColumn, targetColumns);
+                setInsertParameters(pstmt, row, columnPropertyMappings, primaryKeyColumns, primaryKeyColumn, targetColumns);
                 
                 try {
                     pstmt.executeUpdate();
@@ -539,7 +569,7 @@ public class MappedDataService {
                     if (e.getErrorCode() == 1062) { // MySQL duplicate key error
                         String updateSql = buildInsertOrUpdateSql(targetTableName, targetColumns);
                         try (PreparedStatement updateStmt = targetConn.prepareStatement(updateSql)) {
-                            setInsertParameters(updateStmt, row, columnPropertyMappings, primaryKeyColumn, targetColumns);
+                            setInsertParameters(updateStmt, row, columnPropertyMappings, primaryKeyColumns, primaryKeyColumn, targetColumns);
                             updateStmt.executeUpdate();
                             rowsInserted++;
                         }
@@ -559,16 +589,29 @@ public class MappedDataService {
 
     /**
      * 构建SELECT SQL（用于跨数据库查询）
+     * 确保包含所有主键列，即使它们不在映射关系中
      */
-    private String buildSelectSql(String sourceTableName, Map<String, String> columnPropertyMappings) {
+    private String buildSelectSql(String sourceTableName, Map<String, String> columnPropertyMappings, 
+                                  List<String> primaryKeyColumns) {
         StringBuilder sql = new StringBuilder("SELECT ");
         
-        List<String> selectColumns = new ArrayList<>();
+        // 收集需要查询的列
+        Set<String> selectColumnsSet = new HashSet<>();
+        
+        // 添加映射的列
         for (String sourceColumn : columnPropertyMappings.keySet()) {
-            selectColumns.add("`" + sourceColumn + "`");
+            selectColumnsSet.add(sourceColumn);
         }
         
-        sql.append(String.join(", ", selectColumns));
+        // 添加主键列（如果不在映射关系中）
+        if (primaryKeyColumns != null) {
+            for (String pkCol : primaryKeyColumns) {
+                selectColumnsSet.add(pkCol);
+            }
+        }
+        
+        List<String> selectColumns = new ArrayList<>(selectColumnsSet);
+        sql.append(String.join(", ", selectColumns.stream().map(c -> "`" + c + "`").toArray(String[]::new)));
         sql.append(" FROM `").append(sourceTableName).append("`");
         
         return sql.toString();
@@ -602,10 +645,11 @@ public class MappedDataService {
 
     /**
      * 设置INSERT参数
+     * 支持组合主键：如果配置了多个主键列，使用下划线连接它们的值作为ID
      */
     private void setInsertParameters(PreparedStatement pstmt, Map<String, Object> row,
                                     Map<String, String> columnPropertyMappings,
-                                    String primaryKeyColumn,
+                                    List<String> primaryKeyColumns, String primaryKeyColumn,
                                     List<String> targetColumns) throws SQLException {
         int paramIndex = 1;
         
@@ -614,6 +658,7 @@ public class MappedDataService {
             
             if ("id".equals(targetColumn)) {
                 // 查找id值
+                // 优先级1：查找映射到id的源列
                 String idSourceColumn = null;
                 for (Map.Entry<String, String> entry : columnPropertyMappings.entrySet()) {
                     if ("id".equals(entry.getValue())) {
@@ -621,15 +666,48 @@ public class MappedDataService {
                         break;
                     }
                 }
-                if (idSourceColumn == null && primaryKeyColumn != null) {
-                    idSourceColumn = primaryKeyColumn;
-                }
-                if (idSourceColumn == null && !columnPropertyMappings.isEmpty()) {
-                    idSourceColumn = columnPropertyMappings.keySet().iterator().next();
+                
+                // 优先级2：使用组合主键列（多个主键列用下划线连接）
+                if (idSourceColumn == null && primaryKeyColumns != null && !primaryKeyColumns.isEmpty()) {
+                    if (primaryKeyColumns.size() == 1) {
+                        // 单个主键列
+                        idSourceColumn = primaryKeyColumns.get(0);
+                        if (row.containsKey(idSourceColumn)) {
+                            value = row.get(idSourceColumn);
+                        }
+                    } else {
+                        // 多个主键列：使用下划线连接它们的值
+                        List<String> idParts = new ArrayList<>();
+                        boolean allKeysPresent = true;
+                        for (String pkCol : primaryKeyColumns) {
+                            if (row.containsKey(pkCol) && row.get(pkCol) != null) {
+                                idParts.add(String.valueOf(row.get(pkCol)));
+                            } else {
+                                allKeysPresent = false;
+                                break;
+                            }
+                        }
+                        if (allKeysPresent && !idParts.isEmpty()) {
+                            value = idParts.size() == 1 ? idParts.get(0) : String.join("_", idParts);
+                        }
+                    }
                 }
                 
-                if (idSourceColumn != null && row.containsKey(idSourceColumn)) {
+                // 优先级3：使用单个主键列（兼容旧格式）
+                if (value == null && idSourceColumn == null && primaryKeyColumn != null && !primaryKeyColumn.isEmpty()) {
+                    idSourceColumn = primaryKeyColumn;
+                }
+                
+                if (value == null && idSourceColumn != null && row.containsKey(idSourceColumn)) {
                     value = row.get(idSourceColumn);
+                }
+                
+                // 优先级4：使用第一个映射列
+                if (value == null && !columnPropertyMappings.isEmpty()) {
+                    idSourceColumn = columnPropertyMappings.keySet().iterator().next();
+                    if (row.containsKey(idSourceColumn)) {
+                        value = row.get(idSourceColumn);
+                    }
                 }
             } else {
                 // 查找对应的源列
@@ -648,10 +726,11 @@ public class MappedDataService {
     /**
      * 构建数据抽取SQL（同数据库）
      * 使用INSERT INTO ... SELECT ... FROM，支持数据去重
+     * 支持组合主键：如果配置了多个主键列，使用CONCAT连接它们的值作为ID
      */
     private String buildExtractSql(String sourceTableName, String targetTableName, 
                                    Map<String, String> columnPropertyMappings,
-                                   String primaryKeyColumn) {
+                                   List<String> primaryKeyColumns, String primaryKeyColumn) {
         StringBuilder sql = new StringBuilder("INSERT INTO `").append(targetTableName).append("` (");
         
         // 添加目标列
@@ -673,34 +752,60 @@ public class MappedDataService {
         
         // id字段：优先级
         // 1. 映射到id的源列
-        // 2. 主键列（primary_key_column）
-        // 3. 第一个映射列
-        // 4. UUID()
-        String idSourceColumn = null;
+        // 2. 主键列（primary_key_columns，支持组合主键）
+        // 3. 单个主键列（primary_key_column，兼容旧格式）
+        // 4. 第一个映射列
+        // 5. UUID()
+        String idSourceExpression = null;
         
         // 优先级1：查找映射到id的源列
         for (Map.Entry<String, String> entry : columnPropertyMappings.entrySet()) {
             if ("id".equals(entry.getValue())) {
-                idSourceColumn = entry.getKey();
+                idSourceExpression = "`" + entry.getKey() + "`";
                 break;
             }
         }
         
-        // 优先级2：使用主键列
-        if (idSourceColumn == null && primaryKeyColumn != null && !primaryKeyColumn.isEmpty()) {
-            idSourceColumn = primaryKeyColumn;
+        // 优先级2：使用组合主键列（多个主键列用下划线连接）
+        if (idSourceExpression == null && primaryKeyColumns != null && !primaryKeyColumns.isEmpty()) {
+            if (primaryKeyColumns.size() == 1) {
+                // 单个主键列
+                idSourceExpression = "`" + primaryKeyColumns.get(0) + "`";
+            } else {
+                // 多个主键列：使用CONCAT连接（MySQL语法）
+                // CONCAT(expr1, '_', expr2, '_', expr3) 格式
+                List<String> concatParts = new ArrayList<>();
+                for (String pkCol : primaryKeyColumns) {
+                    concatParts.add("COALESCE(`" + pkCol + "`, '')");
+                }
+                // 构建 CONCAT(expr1, '_', expr2, '_', expr3) 格式
+                StringBuilder concatBuilder = new StringBuilder("CONCAT(");
+                for (int i = 0; i < concatParts.size(); i++) {
+                    if (i > 0) {
+                        concatBuilder.append(", '_', ");
+                    }
+                    concatBuilder.append(concatParts.get(i));
+                }
+                concatBuilder.append(")");
+                idSourceExpression = concatBuilder.toString();
+            }
         }
         
-        // 优先级3：使用第一个映射列
-        if (idSourceColumn == null && !columnPropertyMappings.isEmpty()) {
-            idSourceColumn = columnPropertyMappings.keySet().iterator().next();
+        // 优先级3：使用单个主键列（兼容旧格式）
+        if (idSourceExpression == null && primaryKeyColumn != null && !primaryKeyColumn.isEmpty()) {
+            idSourceExpression = "`" + primaryKeyColumn + "`";
+        }
+        
+        // 优先级4：使用第一个映射列
+        if (idSourceExpression == null && !columnPropertyMappings.isEmpty()) {
+            idSourceExpression = "`" + columnPropertyMappings.keySet().iterator().next() + "`";
         }
         
         // 构建id字段的SELECT
-        if (idSourceColumn != null) {
-            selectColumns.add("`" + idSourceColumn + "` AS `id`");
+        if (idSourceExpression != null) {
+            selectColumns.add(idSourceExpression + " AS `id`");
         } else {
-            // 优先级4：使用UUID
+            // 优先级5：使用UUID
             selectColumns.add("UUID() AS `id`");
         }
         
@@ -718,6 +823,9 @@ public class MappedDataService {
         
         // 添加ON DUPLICATE KEY UPDATE来处理重复数据（如果主键冲突）
         sql.append(" ON DUPLICATE KEY UPDATE `updated_at` = CURRENT_TIMESTAMP");
+        
+        logger.info("[MappedDataService] Built extract SQL with primary key columns: {}, id expression: {}", 
+            primaryKeyColumns, idSourceExpression);
         
         return sql.toString();
     }
@@ -789,7 +897,17 @@ public class MappedDataService {
         List<Map<String, Object>> dbRows = databaseMetadataService.executeQuery(sql.toString(), databaseId);
         
         // 转换为实例并保存
+        // 支持新格式（数组）和旧格式（单个字符串）
+        @SuppressWarnings("unchecked")
+        List<String> primaryKeyColumns = (List<String>) mapping.get("primary_key_columns");
         String primaryKeyColumn = (String) mapping.get("primary_key_column");
+        
+        // 如果新格式不存在，使用旧格式
+        if (primaryKeyColumns == null || primaryKeyColumns.isEmpty()) {
+            if (primaryKeyColumn != null && !primaryKeyColumn.isEmpty()) {
+                primaryKeyColumns = java.util.Arrays.asList(primaryKeyColumn);
+            }
+        }
         
         for (Map<String, Object> row : dbRows) {
             Map<String, Object> instanceData = new HashMap<>();
@@ -804,8 +922,28 @@ public class MappedDataService {
             }
             
             // 如果指定了主键列，使用它作为ID，否则创建新实例
-            if (primaryKeyColumn != null && row.containsKey(primaryKeyColumn)) {
-                String instanceId = String.valueOf(row.get(primaryKeyColumn));
+            String instanceId = null;
+            if (primaryKeyColumns != null && !primaryKeyColumns.isEmpty()) {
+                // 支持多个主键列：组合它们的值
+                List<String> idParts = new ArrayList<>();
+                boolean allKeysPresent = true;
+                for (String pkCol : primaryKeyColumns) {
+                    if (row.containsKey(pkCol)) {
+                        idParts.add(String.valueOf(row.get(pkCol)));
+                    } else {
+                        allKeysPresent = false;
+                        break;
+                    }
+                }
+                if (allKeysPresent && !idParts.isEmpty()) {
+                    instanceId = idParts.size() == 1 ? idParts.get(0) : String.join("_", idParts);
+                }
+            } else if (primaryKeyColumn != null && row.containsKey(primaryKeyColumn)) {
+                // 兼容旧格式：单个主键列
+                instanceId = String.valueOf(row.get(primaryKeyColumn));
+            }
+            
+            if (instanceId != null) {
                 try {
                     // 尝试更新现有实例
                     Map<String, Object> existing = instanceStorage.getInstance(objectType, instanceId);

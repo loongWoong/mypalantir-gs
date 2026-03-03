@@ -295,22 +295,28 @@ public class RelationalInstanceStorage implements IInstanceStorage {
         logger.info("[RelationalInstanceStorage] Got connection to default database for sync table query");
         
         try {
-            // 动态获取主键列名
-            String primaryKeyColumn = getPrimaryKeyColumnFromTable(null, tableName);
-            if (primaryKeyColumn == null || primaryKeyColumn.isEmpty()) {
-                // 如果无法从表结构获取主键，尝试从 mapping 配置获取
-                primaryKeyColumn = getPrimaryKeyColumn(objectTypeDef);
+            // 动态获取主键列名（支持多个主键列）
+            List<String> primaryKeyColumns = getPrimaryKeyColumns(objectTypeDef);
+            String primaryKeyColumn = null; // 用于 WHERE 子句（单个主键列时）
+            
+            if (primaryKeyColumns == null || primaryKeyColumns.isEmpty()) {
+                // 如果无法从 mapping 配置获取主键，尝试从表结构获取
+                primaryKeyColumn = getPrimaryKeyColumnFromTable(null, tableName);
                 if (primaryKeyColumn == null || primaryKeyColumn.isEmpty()) {
                     // 最后回退到默认的 'id'
                     primaryKeyColumn = "id";
+                    primaryKeyColumns = java.util.Arrays.asList("id");
                     logger.warn("[RelationalInstanceStorage] Could not determine primary key column for table {}, using default 'id'", tableName);
                 } else {
-                    logger.info("[RelationalInstanceStorage] Using primary key column from mapping: {}", primaryKeyColumn);
+                    primaryKeyColumns = java.util.Arrays.asList(primaryKeyColumn);
+                    logger.info("[RelationalInstanceStorage] Using primary key column from table metadata: {}", primaryKeyColumn);
                 }
             } else {
-                logger.info("[RelationalInstanceStorage] Using primary key column from table metadata: {}", primaryKeyColumn);
+                primaryKeyColumn = primaryKeyColumns.get(0); // 用于 WHERE 子句
+                logger.info("[RelationalInstanceStorage] Using primary key columns from mapping: {}", primaryKeyColumns);
             }
             
+            // 构建 WHERE 子句（目前只支持单个主键列的查询）
             String sql = "SELECT * FROM `" + tableName + "` WHERE `" + primaryKeyColumn + "` = ?";
             logger.info("[RelationalInstanceStorage] Executing SQL: {} with parameter id = {}", sql, id);
             
@@ -339,11 +345,11 @@ public class RelationalInstanceStorage implements IInstanceStorage {
                         // 如果 ID 不存在或为空，优先通过 mapping 设置的主键作为 ID
                         Object idValue = instance.get("id");
                         if (idValue == null || (idValue instanceof String && ((String) idValue).trim().isEmpty())) {
-                            String idFromPrimaryKey = getIdFromPrimaryKey(instance, primaryKeyColumn, columnToPropertyMap);
+                            String idFromPrimaryKey = getIdFromPrimaryKey(instance, primaryKeyColumns, columnToPropertyMap);
                             if (idFromPrimaryKey != null && !idFromPrimaryKey.trim().isEmpty()) {
                                 instance.put("id", idFromPrimaryKey);
-                                logger.info("[RelationalInstanceStorage] ID not found in instance data, using primary key column '{}' value as ID: {}", 
-                                    primaryKeyColumn, idFromPrimaryKey);
+                                logger.info("[RelationalInstanceStorage] ID not found in instance data, using primary key columns '{}' value as ID: {}", 
+                                    primaryKeyColumns, idFromPrimaryKey);
                             } else {
                                 // 如果主键列也无法获取ID，使用查询参数中的id
                                 instance.put("id", id);
@@ -489,8 +495,8 @@ public class RelationalInstanceStorage implements IInstanceStorage {
                     // 构建列名到属性名的映射
                     Map<String, String> columnToPropertyMap = buildColumnToPropertyMap(objectTypeDef, tableName);
                     
-                    // 获取主键列名（用于在 ID 不存在时获取 ID）
-                    String primaryKeyColumn = getPrimaryKeyColumn(objectTypeDef);
+                    // 获取主键列名列表（用于在 ID 不存在时获取 ID）
+                    List<String> primaryKeyColumns = getPrimaryKeyColumns(objectTypeDef);
                     
                     int rowCount = 0;
                     while (rs.next()) {
@@ -507,11 +513,13 @@ public class RelationalInstanceStorage implements IInstanceStorage {
                         // 如果 ID 不存在或为空，通过主键映射获取 ID
                         Object idValue = instance.get("id");
                         if (idValue == null || (idValue instanceof String && ((String) idValue).trim().isEmpty())) {
-                            String idFromPrimaryKey = getIdFromPrimaryKey(instance, primaryKeyColumn, columnToPropertyMap);
-                            if (idFromPrimaryKey != null && !idFromPrimaryKey.trim().isEmpty()) {
-                                instance.put("id", idFromPrimaryKey);
-                                logger.debug("[RelationalInstanceStorage] ID not found, using primary key column '{}' value as ID: {}", 
-                                    primaryKeyColumn, idFromPrimaryKey);
+                            if (primaryKeyColumns != null && !primaryKeyColumns.isEmpty()) {
+                                String idFromPrimaryKey = getIdFromPrimaryKey(instance, primaryKeyColumns, columnToPropertyMap);
+                                if (idFromPrimaryKey != null && !idFromPrimaryKey.trim().isEmpty()) {
+                                    instance.put("id", idFromPrimaryKey);
+                                    logger.debug("[RelationalInstanceStorage] ID not found, using primary key columns '{}' value as ID: {}", 
+                                        primaryKeyColumns, idFromPrimaryKey);
+                                }
                             }
                         }
                         
@@ -602,8 +610,8 @@ public class RelationalInstanceStorage implements IInstanceStorage {
                     // 构建列名到属性名的映射
                     Map<String, String> columnToPropertyMap = buildColumnToPropertyMap(objectTypeDef, tableName);
                     
-                    // 获取主键列名（用于在 ID 不存在时获取 ID）
-                    String primaryKeyColumn = getPrimaryKeyColumn(objectTypeDef);
+                    // 获取主键列名列表（用于在 ID 不存在时获取 ID）
+                    List<String> primaryKeyColumns = getPrimaryKeyColumns(objectTypeDef);
                     
                     int rowCount = 0;
                     while (rs.next()) {
@@ -620,11 +628,13 @@ public class RelationalInstanceStorage implements IInstanceStorage {
                         // 如果 ID 不存在或为空，通过主键映射获取 ID
                         Object idValue = instance.get("id");
                         if (idValue == null || (idValue instanceof String && ((String) idValue).trim().isEmpty())) {
-                            String idFromPrimaryKey = getIdFromPrimaryKey(instance, primaryKeyColumn, columnToPropertyMap);
-                            if (idFromPrimaryKey != null && !idFromPrimaryKey.trim().isEmpty()) {
-                                instance.put("id", idFromPrimaryKey);
-                                logger.debug("[RelationalInstanceStorage] ID not found, using primary key column '{}' value as ID: {}", 
-                                    primaryKeyColumn, idFromPrimaryKey);
+                            if (primaryKeyColumns != null && !primaryKeyColumns.isEmpty()) {
+                                String idFromPrimaryKey = getIdFromPrimaryKey(instance, primaryKeyColumns, columnToPropertyMap);
+                                if (idFromPrimaryKey != null && !idFromPrimaryKey.trim().isEmpty()) {
+                                    instance.put("id", idFromPrimaryKey);
+                                    logger.debug("[RelationalInstanceStorage] ID not found, using primary key columns '{}' value as ID: {}", 
+                                        primaryKeyColumns, idFromPrimaryKey);
+                                }
                             }
                         }
                         
@@ -722,11 +732,25 @@ public class RelationalInstanceStorage implements IInstanceStorage {
     }
 
     /**
-     * 获取主键列名（从 mapping 配置中）
+     * 获取主键列名（从 mapping 配置中，兼容旧格式）
      * @param objectTypeDef 对象类型定义
      * @return 主键列名，如果不存在则返回 null
      */
     private String getPrimaryKeyColumn(ObjectType objectTypeDef) {
+        List<String> primaryKeyColumns = getPrimaryKeyColumns(objectTypeDef);
+        if (primaryKeyColumns != null && !primaryKeyColumns.isEmpty()) {
+            return primaryKeyColumns.get(0); // 返回第一个主键列以兼容旧代码
+        }
+        return null;
+    }
+    
+    /**
+     * 获取主键列名列表（从 mapping 配置中）
+     * @param objectTypeDef 对象类型定义
+     * @return 主键列名列表，如果不存在则返回 null
+     */
+    @SuppressWarnings("unchecked")
+    private List<String> getPrimaryKeyColumns(ObjectType objectTypeDef) {
         if (objectTypeDef == null) {
             return null;
         }
@@ -738,23 +762,79 @@ public class RelationalInstanceStorage implements IInstanceStorage {
             if (mappings != null && !mappings.isEmpty()) {
                 // 使用第一个映射关系（通常一个对象类型只有一个映射）
                 Map<String, Object> mapping = mappings.get(0);
-                String primaryKeyColumn = (String) mapping.get("primary_key_column");
                 
+                // 优先使用新格式：primary_key_columns 数组
+                List<String> primaryKeyColumns = (List<String>) mapping.get("primary_key_columns");
+                if (primaryKeyColumns != null && !primaryKeyColumns.isEmpty()) {
+                    logger.debug("[RelationalInstanceStorage] Found primary_key_columns: {} for objectType {}", 
+                        primaryKeyColumns, objectTypeDef.getName());
+                    return primaryKeyColumns;
+                }
+                
+                // 兼容旧格式：primary_key_column 单个字符串
+                String primaryKeyColumn = (String) mapping.get("primary_key_column");
                 if (primaryKeyColumn != null && !primaryKeyColumn.isEmpty()) {
-                    logger.debug("[RelationalInstanceStorage] Found primary_key_column: {} for objectType {}", 
+                    logger.debug("[RelationalInstanceStorage] Found primary_key_column (legacy): {} for objectType {}", 
                         primaryKeyColumn, objectTypeDef.getName());
-                    return primaryKeyColumn;
+                    return java.util.Arrays.asList(primaryKeyColumn);
                 }
             }
         } catch (Exception e) {
-            logger.warn("[RelationalInstanceStorage] Failed to get primary key column: {}", e.getMessage());
+            logger.warn("[RelationalInstanceStorage] Failed to get primary key columns: {}", e.getMessage());
         }
         
         return null;
     }
 
     /**
-     * 从主键列获取 ID 值
+     * 从主键列获取 ID 值（支持单个或多个主键列）
+     * @param instance 实例数据
+     * @param primaryKeyColumns 主键列名列表
+     * @param columnToPropertyMap 列名到属性名的映射
+     * @return ID 值（多个主键列时用下划线连接），如果不存在则返回 null
+     */
+    private String getIdFromPrimaryKey(Map<String, Object> instance, List<String> primaryKeyColumns, 
+                                       Map<String, String> columnToPropertyMap) {
+        if (primaryKeyColumns == null || primaryKeyColumns.isEmpty()) {
+            return null;
+        }
+        
+        List<String> idParts = new ArrayList<>();
+        
+        for (String primaryKeyColumn : primaryKeyColumns) {
+            // 查找主键列对应的属性名
+            String propertyName = columnToPropertyMap.get(primaryKeyColumn.toLowerCase());
+            if (propertyName == null) {
+                propertyName = columnToPropertyMap.get(primaryKeyColumn.toUpperCase());
+            }
+            if (propertyName == null) {
+                propertyName = columnToPropertyMap.get(primaryKeyColumn);
+            }
+            // 如果映射中没有找到，直接使用主键列名作为属性名
+            if (propertyName == null) {
+                propertyName = primaryKeyColumn;
+            }
+            
+            // 从实例中获取主键值
+            Object primaryKeyValue = instance.get(propertyName);
+            if (primaryKeyValue != null) {
+                idParts.add(String.valueOf(primaryKeyValue));
+            } else {
+                // 如果任何一个主键列的值缺失，返回 null
+                return null;
+            }
+        }
+        
+        // 如果有多个主键列，用下划线连接它们的值
+        if (idParts.size() == 1) {
+            return idParts.get(0);
+        } else {
+            return String.join("_", idParts);
+        }
+    }
+    
+    /**
+     * 从单个主键列获取 ID 值（兼容旧代码）
      * @param instance 实例数据
      * @param primaryKeyColumn 主键列名
      * @param columnToPropertyMap 列名到属性名的映射
@@ -765,27 +845,7 @@ public class RelationalInstanceStorage implements IInstanceStorage {
         if (primaryKeyColumn == null || primaryKeyColumn.isEmpty()) {
             return null;
         }
-        
-        // 查找主键列对应的属性名
-        String propertyName = columnToPropertyMap.get(primaryKeyColumn.toLowerCase());
-        if (propertyName == null) {
-            propertyName = columnToPropertyMap.get(primaryKeyColumn.toUpperCase());
-        }
-        if (propertyName == null) {
-            propertyName = columnToPropertyMap.get(primaryKeyColumn);
-        }
-        // 如果映射中没有找到，直接使用主键列名作为属性名
-        if (propertyName == null) {
-            propertyName = primaryKeyColumn;
-        }
-        
-        // 从实例中获取主键值
-        Object primaryKeyValue = instance.get(propertyName);
-        if (primaryKeyValue != null) {
-            return String.valueOf(primaryKeyValue);
-        }
-        
-        return null;
+        return getIdFromPrimaryKey(instance, java.util.Arrays.asList(primaryKeyColumn), columnToPropertyMap);
     }
 
     /**
@@ -853,6 +913,7 @@ public class RelationalInstanceStorage implements IInstanceStorage {
 
     /**
      * 通过列名查找属性名（大小写不敏感）
+     * 支持单字母前缀去除的匹配（如 V_STAT_DATE -> statDate）
      */
     private String findPropertyNameByColumnName(ObjectType objectTypeDef, String columnName) {
         if (objectTypeDef == null || columnName == null) {
@@ -874,9 +935,35 @@ public class RelationalInstanceStorage implements IInstanceStorage {
                     columnName.equalsIgnoreCase(convertCamelToSnake(propName))) {
                     return propName;
                 }
+                // 支持单字母前缀去除的匹配（如 V_STAT_DATE -> statDate）
+                String columnWithoutPrefix = removeSingleLetterPrefix(columnName);
+                if (columnWithoutPrefix != null) {
+                    String camelColumnWithoutPrefix = convertSnakeToCamel(columnWithoutPrefix);
+                    if (propName.equalsIgnoreCase(camelColumnWithoutPrefix)) {
+                        return propName;
+                    }
+                }
             }
         }
         
+        return null;
+    }
+    
+    /**
+     * 提取单字母前缀后的部分（如 V_STAT_DATE -> STAT_DATE）
+     * @param str 输入字符串
+     * @return 去除单字母前缀后的部分，如果没有单字母前缀则返回 null
+     */
+    private String removeSingleLetterPrefix(String str) {
+        if (str == null || str.length() < 3) {
+            return null;
+        }
+        // 匹配单字母+下划线的模式（如 V_, N_, D_ 等）
+        if (str.length() >= 3 && 
+            Character.isUpperCase(str.charAt(0)) && 
+            str.charAt(1) == '_') {
+            return str.substring(2); // 返回下划线后面的部分
+        }
         return null;
     }
 

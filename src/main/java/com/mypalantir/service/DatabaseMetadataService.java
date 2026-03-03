@@ -199,7 +199,7 @@ public class DatabaseMetadataService {
             password = database.get("password").toString();
         }
 
-        String url = String.format("jdbc:mysql://%s:%d/%s?useSSL=false&serverTimezone=UTC&characterEncoding=utf8",
+        String url = String.format("jdbc:mysql://%s:%d/%s?useSSL=false&serverTimezone=UTC&characterEncoding=utf8&allowPublicKeyRetrieval=true",
                 host, port, dbName);
         
         return new org.springframework.jdbc.datasource.DriverManagerDataSource(url, username, password);

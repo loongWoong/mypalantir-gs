@@ -20,7 +20,7 @@ export default function DataMapping() {
   const [selectedTable, setSelectedTable] = useState<string | null>(null);
   const [columns, setColumns] = useState<Column[]>([]);
   const [mappings, setMappings] = useState<Record<string, string>>({});
-  const [primaryKeyColumn, setPrimaryKeyColumn] = useState<string>('');
+  const [primaryKeyColumns, setPrimaryKeyColumns] = useState<string[]>([]);
   const [databaseId, setDatabaseId] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -64,9 +64,21 @@ export default function DataMapping() {
     return str.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`).replace(/^_/, '');
   };
 
-  // 工具函数：将下划线命名转换为驼峰命名
+  // 工具函数：将下划线命名转换为驼峰命名（支持大写字母开头的下划线命名）
   const snakeToCamel = (str: string): string => {
-    return str.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+    // 先转为小写，然后转换
+    const lower = str.toLowerCase();
+    return lower.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+  };
+
+  // 工具函数：提取单字母前缀后的部分（如 V_STAT_DATE -> STAT_DATE）
+  const removeSingleLetterPrefix = (str: string): string | null => {
+    // 匹配单字母+下划线的模式（如 V_, N_, D_ 等）
+    const match = str.match(/^([A-Z])_(.+)$/);
+    if (match) {
+      return match[2]; // 返回下划线后面的部分
+    }
+    return null;
   };
 
   // 工具函数：标准化名称用于匹配（统一转为小写）
@@ -74,7 +86,7 @@ export default function DataMapping() {
     return name.toLowerCase();
   };
 
-  // 工具函数：判断两个名称是否匹配（支持完全匹配、驼峰/下划线互转）
+  // 工具函数：判断两个名称是否匹配（支持完全匹配、驼峰/下划线互转、单字母前缀去除）
   const isNameMatch = (name1: string, name2: string): boolean => {
     const n1 = normalizeName(name1);
     const n2 = normalizeName(name2);
@@ -82,6 +94,48 @@ export default function DataMapping() {
     // 完全匹配（忽略大小写）
     if (n1 === n2) {
       return true;
+    }
+    
+    // 优先处理单字母前缀去除的匹配（如 V_STAT_DATE -> statDate）
+    // 这是最常见的场景，应该优先检查
+    const name1WithoutPrefix = removeSingleLetterPrefix(name1);
+    const name2WithoutPrefix = removeSingleLetterPrefix(name2);
+    
+    if (name1WithoutPrefix) {
+      // 将去除前缀后的部分转为驼峰，然后标准化
+      const camel1WithoutPrefix = normalizeName(snakeToCamel(name1WithoutPrefix));
+      // 直接与 name2 的标准化值比较
+      if (camel1WithoutPrefix === n2) {
+        return true;
+      }
+      // 也与 name2 转驼峰后的标准化值比较（处理 name2 也是下划线格式的情况）
+      const camel2 = normalizeName(snakeToCamel(name2));
+      if (camel1WithoutPrefix === camel2) {
+        return true;
+      }
+    }
+    
+    if (name2WithoutPrefix) {
+      // 将去除前缀后的部分转为驼峰，然后标准化
+      const camel2WithoutPrefix = normalizeName(snakeToCamel(name2WithoutPrefix));
+      // 直接与 name1 的标准化值比较
+      if (camel2WithoutPrefix === n1) {
+        return true;
+      }
+      // 也与 name1 转驼峰后的标准化值比较
+      const camel1 = normalizeName(snakeToCamel(name1));
+      if (camel2WithoutPrefix === camel1) {
+        return true;
+      }
+    }
+    
+    // 如果两者都有单字母前缀，比较去除前缀后的部分
+    if (name1WithoutPrefix && name2WithoutPrefix) {
+      const camel1WithoutPrefix = normalizeName(snakeToCamel(name1WithoutPrefix));
+      const camel2WithoutPrefix = normalizeName(snakeToCamel(name2WithoutPrefix));
+      if (camel1WithoutPrefix === camel2WithoutPrefix) {
+        return true;
+      }
     }
     
     // 驼峰转下划线后匹配
@@ -112,7 +166,7 @@ export default function DataMapping() {
         is_primary_key: col.is_primary_key || false,
       })));
       
-      // 自动匹配：尝试根据名称匹配列和属性（支持完全匹配、驼峰/下划线互转）
+      // 自动匹配：尝试根据名称匹配列和属性（支持完全匹配、驼峰/下划线互转、单字母前缀去除）
       if (objectTypeDef) {
         const autoMappings: Record<string, string> = {};
         columnsData.forEach((col: any) => {
@@ -121,14 +175,15 @@ export default function DataMapping() {
           );
           if (matchingProp) {
             autoMappings[col.name] = matchingProp.name;
+            console.log(`[Auto Mapping] Matched column "${col.name}" to property "${matchingProp.name}"`);
           }
         });
         setMappings(autoMappings);
         
         // 设置主键列
-        const pkColumn = columnsData.find((col: any) => col.is_primary_key);
-        if (pkColumn) {
-          setPrimaryKeyColumn(pkColumn.name);
+        const pkColumns = columnsData.filter((col: any) => col.is_primary_key);
+        if (pkColumns.length > 0) {
+          setPrimaryKeyColumns(pkColumns.map((col: any) => col.name));
         }
       }
     } catch (error) {
@@ -164,7 +219,7 @@ export default function DataMapping() {
         objectType,
         tableId,
         mappings,
-        primaryKeyColumn || undefined
+        primaryKeyColumns.length > 0 ? primaryKeyColumns : undefined
       );
       showToast('映射关系保存成功！', 'success');
       // 延迟导航，让用户看到提示
@@ -237,20 +292,29 @@ export default function DataMapping() {
             <div>
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  主键列（用于生成实例ID）
+                  主键列（用于生成实例ID，支持多选设置联合主键）
                 </label>
                 <select
-                  value={primaryKeyColumn}
-                  onChange={(e) => setPrimaryKeyColumn(e.target.value)}
+                  multiple
+                  value={primaryKeyColumns}
+                  onChange={(e) => {
+                    const selected = Array.from(e.target.selectedOptions, option => option.value);
+                    setPrimaryKeyColumns(selected);
+                  }}
+                  size={Math.min(columns.length + 1, 6)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
-                  <option value="">无</option>
                   {columns.map((col) => (
                     <option key={col.name} value={col.name}>
                       {col.name} {col.is_primary_key && '(主键)'}
                     </option>
                   ))}
                 </select>
+                {primaryKeyColumns.length > 0 && (
+                  <div className="mt-2 text-sm text-gray-600">
+                    已选择: {primaryKeyColumns.join(', ')}
+                  </div>
+                )}
               </div>
 
               <div className="space-y-3 max-h-[500px] overflow-y-auto">

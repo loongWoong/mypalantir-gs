@@ -21,11 +21,13 @@ import java.util.List;
 public class OntologyModelService {
     private final String ontologyDir = "./ontology";
     private final Loader loader;
+    private final OntologySummaryService ontologySummaryService;
     private String currentModelId;
     private String currentModelPath;
     
-    public OntologyModelService(Loader loader) {
+    public OntologyModelService(Loader loader, OntologySummaryService ontologySummaryService) {
         this.loader = loader;
+        this.ontologySummaryService = ontologySummaryService;
         // 初始化当前模型ID和路径
         this.currentModelPath = loader.getFilePath();
         // 从路径中提取模型ID
@@ -89,6 +91,9 @@ public class OntologyModelService {
         // 更新当前模型ID和路径
         this.currentModelId = modelId;
         this.currentModelPath = file.getAbsolutePath();
+        
+        // 清除OntologySummaryService的缓存，确保使用新的schema
+        ontologySummaryService.clearCache();
     }
     
     /**

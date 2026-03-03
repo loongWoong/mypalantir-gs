@@ -267,13 +267,23 @@ public class HybridInstanceStorage implements IInstanceStorage {
 
     @Override
     public void deleteInstance(String objectType, String id) throws IOException {
-        // 1. 从Neo4j删除
-        neo4jStorage.deleteInstance(objectType, id);
+        // 系统对象类型（table, database, mapping等）只存储在 Neo4j 中，直接删除
+        if (isSystemObjectType(objectType)) {
+            logger.info("[HybridInstanceStorage] System object type {} detected, deleting from Neo4j only", objectType);
+            neo4jStorage.deleteInstance(objectType, id);
+            logger.debug("Deleted instance {} of type {} from hybrid storage (Neo4j only)", id, objectType);
+            return;
+        }
         
-        // 2. 关系型数据库的删除应该通过ETL或直接SQL删除
-        // 这里不直接删除，由ETL系统处理
-        
-        logger.debug("Deleted instance {} of type {} from hybrid storage (Neo4j only)", id, objectType);
+        // 对于有关系型数据库映射的对象类型，只从 Neo4j 删除（关系型数据库的删除应该通过ETL或直接SQL删除）
+        // 这里不直接删除关系型数据库中的数据，由ETL系统处理
+        try {
+            neo4jStorage.deleteInstance(objectType, id);
+            logger.debug("Deleted instance {} of type {} from hybrid storage (Neo4j only, relational DB should be handled by ETL)", id, objectType);
+        } catch (IOException e) {
+            logger.error("[HybridInstanceStorage] Failed to delete instance {} of type {} from Neo4j: {}", id, objectType, e.getMessage());
+            throw new IOException("Failed to delete instance: " + e.getMessage(), e);
+        }
     }
 
     /**

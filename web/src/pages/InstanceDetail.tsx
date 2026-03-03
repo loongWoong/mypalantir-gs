@@ -87,13 +87,15 @@ export default function InstanceDetail() {
 
   const handleDelete = async () => {
     if (!objectType || !id) return;
-    if (!confirm('Are you sure you want to delete this instance?')) return;
+    if (!confirm('确定要删除此实例吗？此操作不可撤销。')) return;
     try {
-      // TODO: 实现删除逻辑
+      await instanceApi.delete(objectType, id);
+      showToast('实例删除成功', 'success');
       navigate(`/instances/${objectType}`);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to delete instance:', error);
-      alert('Failed to delete instance');
+      const errorMessage = error.response?.data?.message || error.message || '删除实例失败';
+      showToast(errorMessage, 'error');
     }
   };
 

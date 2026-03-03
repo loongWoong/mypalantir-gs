@@ -308,7 +308,7 @@ public class OntologySchemaFactory {
             // 加载 MySQL 驱动
             Class.forName("com.mysql.cj.jdbc.Driver");
             
-            String url = String.format("jdbc:mysql://%s:%d/%s?useSSL=false&serverTimezone=UTC&characterEncoding=utf8",
+            String url = String.format("jdbc:mysql://%s:%d/%s?useSSL=false&serverTimezone=UTC&characterEncoding=utf8&allowPublicKeyRetrieval=true",
                     host, port, dbName);
             Connection conn = DriverManager.getConnection(url, username, password != null ? password : "");
             databaseConnections.put(databaseId, conn);

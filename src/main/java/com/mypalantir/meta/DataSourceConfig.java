@@ -131,7 +131,7 @@ public class DataSourceConfig {
             case "postgres":
                 return String.format("jdbc:postgresql://%s:%d/%s", host, port, database);
             case "mysql":
-                return String.format("jdbc:mysql://%s:%d/%s", host, port, database);
+                return String.format("jdbc:mysql://%s:%d/%s?useSSL=false&serverTimezone=UTC&characterEncoding=utf8&allowPublicKeyRetrieval=true", host, port, database);
             case "oracle":
                 return String.format("jdbc:oracle:thin:@%s:%d:%s", host, port, database);
             case "sqlserver":

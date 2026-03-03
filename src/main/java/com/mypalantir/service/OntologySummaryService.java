@@ -17,6 +17,7 @@ public class OntologySummaryService {
     private final ObjectMapper objectMapper;
     private String cachedSummary;
     private long lastCacheTime;
+    private String cachedSchemaPath; // 缓存对应的schema文件路径
     private static final long CACHE_TTL = 5 * 60 * 1000; // 5分钟缓存
 
     public OntologySummaryService(Loader loader) {
@@ -30,9 +31,13 @@ public class OntologySummaryService {
      */
     public String generateOntologySummary() throws Exception {
         long currentTime = System.currentTimeMillis();
+        String currentSchemaPath = loader.getFilePath();
         
-        // 检查缓存是否有效
-        if (cachedSummary != null && (currentTime - lastCacheTime) < CACHE_TTL) {
+        // 检查缓存是否有效：时间未过期且schema文件路径未改变
+        if (cachedSummary != null 
+            && (currentTime - lastCacheTime) < CACHE_TTL
+            && currentSchemaPath != null 
+            && currentSchemaPath.equals(cachedSchemaPath)) {
             return cachedSummary;
         }
         
@@ -113,6 +118,7 @@ public class OntologySummaryService {
         // 更新缓存
         cachedSummary = json;
         lastCacheTime = currentTime;
+        cachedSchemaPath = currentSchemaPath;
         
         return json;
     }
@@ -123,6 +129,7 @@ public class OntologySummaryService {
     public void clearCache() {
         cachedSummary = null;
         lastCacheTime = 0;
+        cachedSchemaPath = null;
     }
 }
 

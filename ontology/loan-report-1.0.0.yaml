@@ -1,0 +1,705 @@
+version: 1.0.0
+namespace: ontology.gs
+data_sources: []
+object_types:
+  - name: loan
+    display_name: 债项
+    description: 每笔贷款在系统中的唯一标识
+    base_type: null
+    properties:
+      - name: loanId
+        data_type: string
+        required: true
+        display_name: 债项编号
+        description: 每笔贷款在系统中的唯一标识编号
+        default_value: null
+        constraints:
+          unique: true
+      - name: statDate
+        data_type: string
+        required: false
+        display_name: 报表期次
+        description: 报表所对应的统计日期，如年月日等
+        default_value: null
+        constraints: null
+      - name: bsType
+        data_type: string
+        required: false
+        display_name: 业务分类
+        description: 贷款业务的分类维度，例如：流动资金贷款、固定资产贷款等
+        default_value: null
+        constraints: null
+      - name: loanPrinBalRmb
+        data_type: double
+        required: false
+        display_name: 贷款余额-人民币
+        description: 当前贷款未偿还本金余额，以人民币表示
+        default_value: null
+        constraints: null
+      - name: loanPrinBal
+        data_type: double
+        required: false
+        display_name: 贷款余额-原币
+        description: 当前贷款未偿还本金余额，以原始币种表示
+        default_value: null
+        constraints: null
+      - name: loanPrinBalAcc
+        data_type: double
+        required: false
+        display_name: 贷款余额-记账币
+        description: 当前贷款未偿还本金余额，以记账币种表示
+        default_value: null
+        constraints: null
+      - name: loanPrinBalUsd
+        data_type: double
+        required: false
+        display_name: 贷款余额-美元
+        description: 当前贷款未偿还本金余额，以美元表示
+        default_value: null
+        constraints: null
+      - name: intBal
+        data_type: double
+        required: false
+        display_name: 应收利息-人民币
+        description: 当前应收取但尚未收到的利息金额，以人民币计
+        default_value: null
+        constraints: null
+      - name: effDate
+        data_type: string
+        required: false
+        display_name: 起息日
+        description: 贷款开始计算利息的日期
+        default_value: null
+        constraints: null
+      - name: expDate
+        data_type: string
+        required: false
+        display_name: 到期日
+        description: 贷款合同规定的到期还款日期
+        default_value: null
+        constraints: null
+      - name: riskType
+        data_type: string
+        required: false
+        display_name: 五级分类-调整前
+        description: 贷款按照五级分类标准划分的等级（调整前）
+        default_value: null
+        constraints: null
+      - name: riskTypeSup
+        data_type: string
+        required: false
+        display_name: 五级分类-监管调整后
+        description: 监管要求下调整后的五级分类结果
+        default_value: null
+        constraints: null
+      - name: riskTypeAdt
+        data_type: string
+        required: false
+        display_name: 五级分类-审计调整后
+        description: 审计过程中调整后的五级分类结果
+        default_value: null
+        constraints: null
+      - name: riskTypeCode
+        data_type: string
+        required: false
+        display_name: 十三级分类
+        description: 更细致的贷款风险分类体系，共十三个级别
+        default_value: null
+        constraints: null
+      - name: ovdeFlag
+        data_type: string
+        required: false
+        display_name: 逾期标识
+        description: 标识该笔贷款是否处于逾期状态
+        default_value: null
+        constraints: null
+      - name: ovdePrin
+        data_type: double
+        required: false
+        display_name: 逾期金额-人民币
+        description: 贷款已逾期部分的本金金额，以人民币计
+        default_value: null
+        constraints: null
+      - name: ovduDays
+        data_type: int
+        required: false
+        display_name: 逾期天数
+        description: 自贷款到期日至当前的实际逾期天数
+        default_value: null
+        constraints: null
+      - name: regroupFlag
+        data_type: string
+        required: false
+        display_name: 重组标识
+        description: 是否存在债务重组情况的标记
+        default_value: null
+        constraints: null
+      - name: regroupFlagSup
+        data_type: string
+        required: false
+        display_name: 重组标识-监管调整后
+        description: 监管口径下对重组标识的认定
+        default_value: null
+        constraints: null
+      - name: commonProvisionAmt
+        data_type: double
+        required: false
+        display_name: 准备金-人民币
+        description: 表内计提的一般准备金金额，以人民币计
+        default_value: null
+        constraints: null
+      - name: collateralAmtG1102
+        data_type: double
+        required: false
+        display_name: G1102抵押品价值-人民币
+        description: G1102标准下的抵押物评估价值，以人民币计
+        default_value: null
+        constraints: null
+      - name: pledgeAmtG1102
+        data_type: double
+        required: false
+        display_name: G1102质押品价值-人民币
+        description: G1102标准下的质押物评估价值，以人民币计
+        default_value: null
+        constraints: null
+      - name: effectRate
+        data_type: double
+        required: false
+        display_name: 贷款执行利率
+        description: 贷款实际执行的年化利率
+        default_value: null
+        constraints: null
+      - name: pd
+        data_type: double
+        required: false
+        display_name: 违约概率
+        description: 预测该笔贷款在未来一段时间内的违约可能性
+        default_value: null
+        constraints: null
+      - name: loanMaturity
+        data_type: int
+        required: false
+        display_name: 贷款期限-月
+        description: 贷款总期限，单位为月
+        default_value: null
+        constraints: null
+      - name: fstputdt
+        data_type: string
+        required: false
+        display_name: 贷款首次发放日期
+        description: 贷款第一次发放的日期
+        default_value: null
+        constraints: null
+      - name: loanPrin
+        data_type: double
+        required: false
+        display_name: 贷款发放本金
+        description: 贷款实际发放的本金金额
+        default_value: null
+        constraints: null
+      - name: custCd
+        data_type: string
+        required: false
+        display_name: 客户号
+        description: 客户在系统中的唯一识别号码
+        default_value: null
+        constraints: null
+      - name: orgCd
+        data_type: string
+        required: false
+        display_name: 机构号
+        description: 机构的唯一标识编号
+        default_value: null
+        constraints: null
+      - name: prodCd
+        data_type: string
+        required: false
+        display_name: 产品编号
+        description: 贷款产品的唯一标识编号
+        default_value: null
+        constraints: null
+      - name: agreeCd
+        data_type: string
+        required: false
+        display_name: 合同号
+        description: 签订的贷款合同编号
+        default_value: null
+        constraints: null
+      - name: loanDirCd
+        data_type: string
+        required: false
+        display_name: 投向行业代码
+        description: 贷款资金用于哪个行业的代码
+        default_value: null
+        constraints: null
+      - name: curCd
+        data_type: string
+        required: false
+        display_name: 币种代码
+        description: 币种代码
+        default_value: null
+        constraints: null
+    data_source: null
+    url: null
+  - name: customer
+    display_name: 客户
+    description: 贷款客户信息
+    base_type: null
+    properties:
+      - name: custCd
+        data_type: string
+        required: true
+        display_name: 客户号
+        description: 客户在系统中的唯一识别号码
+        default_value: null
+        constraints:
+          unique: true
+      - name: custName
+        data_type: string
+        required: false
+        display_name: 客户名称
+        description: 客户的全称或简称
+        default_value: null
+        constraints: null
+      - name: orgstrCode
+        data_type: string
+        required: false
+        display_name: 组织机构代码
+        description: 客户的组织机构统一代码
+        default_value: null
+        constraints: null
+      - name: socialCreditCode
+        data_type: string
+        required: false
+        display_name: 统一社会信用代码
+        description: 客户的统一社会信用代码
+        default_value: null
+        constraints: null
+      - name: corpProp
+        data_type: string
+        required: false
+        display_name: 企业性质
+        description: 客户的企业性质分类，如国有、民营等
+        default_value: null
+        constraints: null
+      - name: custType
+        data_type: string
+        required: false
+        display_name: 客户类型
+        description: 客户的分类类型，如个人客户、企业客户等
+        default_value: null
+        constraints: null
+      - name: custSubtype
+        data_type: string
+        required: false
+        display_name: 客户子类型
+        description: 客户更细粒度的分类，如小微企业、大型企业等
+        default_value: null
+        constraints: null
+      - name: custScale
+        data_type: string
+        required: false
+        display_name: 企业规模-工信部标准
+        description: 根据工信部标准对企业规模的划分
+        default_value: null
+        constraints: null
+      - name: indusCd
+        data_type: string
+        required: false
+        display_name: 客户行业分类
+        description: 客户所属行业的分类代码
+        default_value: null
+        constraints: null
+      - name: indusName
+        data_type: string
+        required: false
+        display_name: 客户行业名称
+        description: 客户所属行业的中文名称
+        default_value: null
+        constraints: null
+      - name: cclevel
+        data_type: string
+        required: false
+        display_name: 客户内部信用评级
+        description: 内部系统对客户信用等级的评定
+        default_value: null
+        constraints: null
+      - name: resDate
+        data_type: string
+        required: false
+        display_name: 评级有效期
+        description: 客户信用评级的有效截止日期
+        default_value: null
+        constraints: null
+      - name: maxAmtRmb
+        data_type: double
+        required: false
+        display_name: 授信批复额度-人民币
+        description: 授信审批通过的最大可使用额度，以人民币计
+        default_value: null
+        constraints: null
+      - name: loanResBalRmb
+        data_type: double
+        required: false
+        display_name: 剩余可用额度-人民币
+        description: 当前尚未使用的授信额度，以人民币计
+        default_value: null
+        constraints: null
+      - name: motherCode
+        data_type: string
+        required: false
+        display_name: 集团客户号
+        description: 客户所属集团的编号
+        default_value: null
+        constraints: null
+      - name: orgCd
+        data_type: string
+        required: false
+        display_name: 客户所属机构号
+        description: 客户所属的机构编号
+        default_value: null
+        constraints: null
+    data_source: null
+    url: null
+  - name: organization
+    display_name: 机构
+    description: 银行机构信息，支持多级机构层级
+    base_type: null
+    properties:
+      - name: orgCd
+        data_type: string
+        required: true
+        display_name: 机构号
+        description: 机构的唯一标识编号
+        default_value: null
+        constraints:
+          unique: true
+      - name: orgName
+        data_type: string
+        required: false
+        display_name: 机构名称
+        description: 机构的名称
+        default_value: null
+        constraints: null
+      - name: orgLevel
+        data_type: string
+        required: false
+        display_name: 机构层级
+        description: 机构层级，如一级、二级、三级、四级
+        default_value: null
+        constraints: null
+      - name: bankNo
+        data_type: string
+        required: false
+        display_name: 银行号
+        description: 所属银行的编号
+        default_value: null
+        constraints: null
+      - name: statOrgCd
+        data_type: string
+        required: false
+        display_name: 统计用机构号
+        description: 统计口径下使用的机构编号
+        default_value: null
+        constraints: null
+      - name: statOrgName
+        data_type: string
+        required: false
+        display_name: 统计用机构名称
+        description: 统计口径下使用的机构名称
+        default_value: null
+        constraints: null
+      - name: parentOrgCd
+        data_type: string
+        required: false
+        display_name: 上级机构号
+        description: 上级机构的编号
+        default_value: null
+        constraints: null
+    data_source: null
+    url: null
+  - name: product
+    display_name: 产品
+    description: 贷款产品信息
+    base_type: null
+    properties:
+      - name: prodCd
+        data_type: string
+        required: true
+        display_name: 产品编号
+        description: 贷款产品的唯一标识编号
+        default_value: null
+        constraints:
+          unique: true
+      - name: prodName
+        data_type: string
+        required: false
+        display_name: 产品名称
+        description: 贷款对应的产品名称
+        default_value: null
+        constraints: null
+      - name: subProdCd
+        data_type: string
+        required: false
+        display_name: 子产品编号
+        description: 子产品的唯一标识编号
+        default_value: null
+        constraints: null
+      - name: sourceSys
+        data_type: string
+        required: false
+        display_name: 来源系统
+        description: 数据来源于哪个业务系统
+        default_value: null
+        constraints: null
+    data_source: null
+    url: null
+  - name: contract
+    display_name: 合同
+    description: 贷款合同信息
+    base_type: null
+    properties:
+      - name: agreeCd
+        data_type: string
+        required: true
+        display_name: 合同号
+        description: 签订的贷款合同编号
+        default_value: null
+        constraints:
+          unique: true
+      - name: loanCntdcNo
+        data_type: string
+        required: false
+        display_name: 授信文书合同号
+        description: 授信相关文件中的合同编号
+        default_value: null
+        constraints: null
+      - name: sourceBsnNo
+        data_type: string
+        required: false
+        display_name: 原系统业务编号
+        description: 来源于原有系统的业务编号
+        default_value: null
+        constraints: null
+    data_source: null
+    url: null
+  - name: industry
+    display_name: 行业
+    description: 贷款投向行业信息
+    base_type: null
+    properties:
+      - name: loanDirCd
+        data_type: string
+        required: true
+        display_name: 投向行业代码
+        description: 贷款资金用于哪个行业的代码
+        default_value: null
+        constraints:
+          unique: true
+      - name: loanDirName
+        data_type: string
+        required: false
+        display_name: 投向行业名称
+        description: 贷款资金用于哪个行业的名称
+        default_value: null
+        constraints: null
+      - name: loanDir1
+        data_type: string
+        required: false
+        display_name: 一级投向行业
+        description: 贷款投向行业的一级分类
+        default_value: null
+        constraints: null
+      - name: loanDir2
+        data_type: string
+        required: false
+        display_name: 二级投向行业
+        description: 贷款投向行业的二级分类
+        default_value: null
+        constraints: null
+      - name: loanDir3
+        data_type: string
+        required: false
+        display_name: 三级投向行业
+        description: 贷款投向行业的三级分类
+        default_value: null
+        constraints: null
+      - name: drtField
+        data_type: string
+        required: false
+        display_name: 投向领域
+        description: 贷款资金投向的具体领域
+        default_value: null
+        constraints: null
+      - name: straEmerIndu
+        data_type: string
+        required: false
+        display_name: 战略新兴产业类型
+        description: 贷款投向的战略性新兴产业类别
+        default_value: null
+        constraints: null
+    data_source: null
+    url: null
+  - name: currency
+    display_name: 币种
+    description: 币种信息
+    base_type: null
+    properties:
+      - name: curCd
+        data_type: string
+        required: true
+        display_name: 币种代码
+        description: 币种代码
+        default_value: null
+        constraints:
+          unique: true
+      - name: curName
+        data_type: string
+        required: false
+        display_name: 币种名称
+        description: 币种名称
+        default_value: null
+        constraints: null
+    data_source: null
+    url: null
+  - name: customerGroup
+    display_name: 客户集团
+    description: 客户所属集团信息
+    base_type: null
+    properties:
+      - name: motherCode
+        data_type: string
+        required: true
+        display_name: 集团客户号
+        description: 客户所属集团的编号
+        default_value: null
+        constraints:
+          unique: true
+      - name: motherName
+        data_type: string
+        required: false
+        display_name: 集团名称
+        description: 客户所属集团的名称
+        default_value: null
+        constraints: null
+    data_source: null
+    url: null
+link_types:
+  - name: belongsToCustomer
+    display_name: 属于客户
+    description: 债项属于某个客户
+    source_type: loan
+    target_type: customer
+    cardinality: many-to-one
+    direction: directed
+    properties: []
+    property_mappings:
+      custCd: custCd
+    transformation_mappings: null
+    data_source: null
+    url: null
+  - name: belongsToOrganization
+    display_name: 属于机构
+    description: 债项属于某个机构
+    source_type: loan
+    target_type: organization
+    cardinality: many-to-one
+    direction: directed
+    properties: []
+    property_mappings:
+      orgCd: orgCd
+    transformation_mappings: null
+    data_source: null
+    url: null
+  - name: belongsToProduct
+    display_name: 属于产品
+    description: 债项属于某个产品
+    source_type: loan
+    target_type: product
+    cardinality: many-to-one
+    direction: directed
+    properties: []
+    property_mappings:
+      prodCd: prodCd
+    transformation_mappings: null
+    data_source: null
+    url: null
+  - name: belongsToContract
+    display_name: 属于合同
+    description: 债项属于某个合同
+    source_type: loan
+    target_type: contract
+    cardinality: many-to-one
+    direction: directed
+    properties: []
+    property_mappings:
+      agreeCd: agreeCd
+    transformation_mappings: null
+    data_source: null
+    url: null
+  - name: investedInIndustry
+    display_name: 投向行业
+    description: 债项投向某个行业
+    source_type: loan
+    target_type: industry
+    cardinality: many-to-one
+    direction: directed
+    properties: []
+    property_mappings:
+      loanDirCd: loanDirCd
+    transformation_mappings: null
+    data_source: null
+    url: null
+  - name: usesCurrency
+    display_name: 使用币种
+    description: 债项使用某种币种
+    source_type: loan
+    target_type: currency
+    cardinality: many-to-one
+    direction: directed
+    properties: []
+    property_mappings:
+      curCd: curCd
+    transformation_mappings: null
+    data_source: null
+    url: null
+  - name: belongsToGroup
+    display_name: 属于集团
+    description: 客户属于某个集团
+    source_type: customer
+    target_type: customerGroup
+    cardinality: many-to-one
+    direction: directed
+    properties: []
+    property_mappings:
+      motherCode: motherCode
+    transformation_mappings: null
+    data_source: null
+    url: null
+  - name: belongsToCustomerOrg
+    display_name: 客户所属机构
+    description: 客户属于某个机构
+    source_type: customer
+    target_type: organization
+    cardinality: many-to-one
+    direction: directed
+    properties: []
+    property_mappings:
+      orgCd: orgCd
+    transformation_mappings: null
+    data_source: null
+    url: null
+  - name: parentOrganization
+    display_name: 上级机构
+    description: 机构的层级关系
+    source_type: organization
+    target_type: organization
+    cardinality: many-to-one
+    direction: directed
+    properties: []
+    property_mappings:
+      parentOrgCd: orgCd
+    transformation_mappings: null
+    data_source: null
+    url: null
+

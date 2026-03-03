@@ -277,7 +277,15 @@ public class QueryExecutor {
                 );
             }
             
+            // 支持新格式（数组）和旧格式（单个字符串）
+            @SuppressWarnings("unchecked")
+            List<String> primaryKeyColumns = (List<String>) mappingData.get("primary_key_columns");
             String primaryKeyColumn = (String) mappingData.get("primary_key_column");
+            
+            // 如果新格式存在，使用第一个主键列；否则使用旧格式
+            if (primaryKeyColumns != null && !primaryKeyColumns.isEmpty()) {
+                primaryKeyColumn = primaryKeyColumns.get(0);
+            }
             
             @SuppressWarnings("unchecked")
             Map<String, String> columnPropertyMappings = (Map<String, String>) mappingData.get("column_property_mappings");

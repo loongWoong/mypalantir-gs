@@ -30,7 +30,7 @@ export default function DataMappingDialog({
   const [selectedTable, setSelectedTable] = useState<string | null>(null);
   const [columns, setColumns] = useState<Column[]>([]);
   const [mappings, setMappings] = useState<Record<string, string>>({});
-  const [primaryKeyColumn, setPrimaryKeyColumn] = useState<string>('');
+  const [primaryKeyColumns, setPrimaryKeyColumns] = useState<string[]>([]);
   const [existingMappingId, setExistingMappingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -114,9 +114,17 @@ export default function DataMappingDialog({
                 setMappings(mapping.column_property_mappings);
               }
               
-              // 回显主键列
+              // 回显主键列（支持单个或多个）
               if (mapping.primary_key_column) {
-                setPrimaryKeyColumn(mapping.primary_key_column);
+                // 兼容旧格式（单个主键列）和新格式（多个主键列）
+                if (Array.isArray(mapping.primary_key_column)) {
+                  setPrimaryKeyColumns(mapping.primary_key_column);
+                } else {
+                  setPrimaryKeyColumns([mapping.primary_key_column]);
+                }
+              } else if (mapping.primary_key_columns) {
+                // 新格式：primary_key_columns 数组
+                setPrimaryKeyColumns(mapping.primary_key_columns);
               }
               
               // 最后跳转到映射配置步骤
@@ -187,9 +195,21 @@ export default function DataMappingDialog({
     return str.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`).replace(/^_/, '');
   };
 
-  // 工具函数：将下划线命名转换为驼峰命名
+  // 工具函数：将下划线命名转换为驼峰命名（支持大写字母开头的下划线命名）
   const snakeToCamel = (str: string): string => {
-    return str.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+    // 先转为小写，然后转换
+    const lower = str.toLowerCase();
+    return lower.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+  };
+
+  // 工具函数：提取单字母前缀后的部分（如 V_STAT_DATE -> STAT_DATE）
+  const removeSingleLetterPrefix = (str: string): string | null => {
+    // 匹配单字母+下划线的模式（如 V_, N_, D_ 等）
+    const match = str.match(/^([A-Z])_(.+)$/);
+    if (match) {
+      return match[2]; // 返回下划线后面的部分
+    }
+    return null;
   };
 
   // 工具函数：标准化名称用于匹配（统一转为小写）
@@ -197,7 +217,7 @@ export default function DataMappingDialog({
     return name.toLowerCase();
   };
 
-  // 工具函数：判断两个名称是否匹配（支持完全匹配、驼峰/下划线互转）
+  // 工具函数：判断两个名称是否匹配（支持完全匹配、驼峰/下划线互转、单字母前缀去除）
   const isNameMatch = (name1: string, name2: string): boolean => {
     const n1 = normalizeName(name1);
     const n2 = normalizeName(name2);
@@ -205,6 +225,48 @@ export default function DataMappingDialog({
     // 完全匹配（忽略大小写）
     if (n1 === n2) {
       return true;
+    }
+    
+    // 优先处理单字母前缀去除的匹配（如 V_STAT_DATE -> statDate）
+    // 这是最常见的场景，应该优先检查
+    const name1WithoutPrefix = removeSingleLetterPrefix(name1);
+    const name2WithoutPrefix = removeSingleLetterPrefix(name2);
+    
+    if (name1WithoutPrefix) {
+      // 将去除前缀后的部分转为驼峰，然后标准化
+      const camel1WithoutPrefix = normalizeName(snakeToCamel(name1WithoutPrefix));
+      // 直接与 name2 的标准化值比较
+      if (camel1WithoutPrefix === n2) {
+        return true;
+      }
+      // 也与 name2 转驼峰后的标准化值比较（处理 name2 也是下划线格式的情况）
+      const camel2 = normalizeName(snakeToCamel(name2));
+      if (camel1WithoutPrefix === camel2) {
+        return true;
+      }
+    }
+    
+    if (name2WithoutPrefix) {
+      // 将去除前缀后的部分转为驼峰，然后标准化
+      const camel2WithoutPrefix = normalizeName(snakeToCamel(name2WithoutPrefix));
+      // 直接与 name1 的标准化值比较
+      if (camel2WithoutPrefix === n1) {
+        return true;
+      }
+      // 也与 name1 转驼峰后的标准化值比较
+      const camel1 = normalizeName(snakeToCamel(name1));
+      if (camel2WithoutPrefix === camel1) {
+        return true;
+      }
+    }
+    
+    // 如果两者都有单字母前缀，比较去除前缀后的部分
+    if (name1WithoutPrefix && name2WithoutPrefix) {
+      const camel1WithoutPrefix = normalizeName(snakeToCamel(name1WithoutPrefix));
+      const camel2WithoutPrefix = normalizeName(snakeToCamel(name2WithoutPrefix));
+      if (camel1WithoutPrefix === camel2WithoutPrefix) {
+        return true;
+      }
     }
     
     // 驼峰转下划线后匹配
@@ -239,7 +301,7 @@ export default function DataMappingDialog({
       // 只有在没有已有映射时才进行自动匹配
       const hasExistingMappings = Object.keys(mappings).length > 0;
       if (!hasExistingMappings) {
-        // 自动匹配：尝试根据名称匹配列和属性（支持完全匹配、驼峰/下划线互转）
+        // 自动匹配：尝试根据名称匹配列和属性（支持完全匹配、驼峰/下划线互转、单字母前缀去除）
         const autoMappings: Record<string, string> = {};
         columnsData.forEach((col: any) => {
           const matchingProp = objectTypeDef.properties.find(
@@ -247,15 +309,16 @@ export default function DataMappingDialog({
           );
           if (matchingProp) {
             autoMappings[col.name] = matchingProp.name;
+            console.log(`[Auto Mapping] Matched column "${col.name}" to property "${matchingProp.name}"`);
           }
         });
         setMappings(autoMappings);
 
         // 设置主键列（只有在没有已有主键列时才设置）
-        if (!primaryKeyColumn) {
-          const pkColumn = columnsData.find((col: any) => col.is_primary_key);
-          if (pkColumn) {
-            setPrimaryKeyColumn(pkColumn.name);
+        if (primaryKeyColumns.length === 0) {
+          const pkColumns = columnsData.filter((col: any) => col.is_primary_key);
+          if (pkColumns.length > 0) {
+            setPrimaryKeyColumns(pkColumns.map((col: any) => col.name));
           }
         }
       }
@@ -296,10 +359,13 @@ export default function DataMappingDialog({
       // 如果已有映射 ID，则更新；否则创建新的
       if (existingMappingId) {
         // 更新已有映射
+        const primaryKeyColumnsToUpdate = primaryKeyColumns.length > 0 ? primaryKeyColumns : undefined;
+        console.log('[DataMappingDialog] Updating mapping with primaryKeyColumns:', primaryKeyColumnsToUpdate);
+        console.log('[DataMappingDialog] primaryKeyColumns array length:', primaryKeyColumns.length);
         await mappingApi.update(
           existingMappingId,
           mappings,
-          primaryKeyColumn || undefined
+          primaryKeyColumnsToUpdate
         );
         showToast('映射关系更新成功！', 'success');
       } else {
@@ -312,11 +378,14 @@ export default function DataMappingDialog({
         }
 
         const tableId = tableInfo.id;
+        const primaryKeyColumnsToSave = primaryKeyColumns.length > 0 ? primaryKeyColumns : undefined;
+        console.log('[DataMappingDialog] Creating mapping with primaryKeyColumns:', primaryKeyColumnsToSave);
+        console.log('[DataMappingDialog] primaryKeyColumns array length:', primaryKeyColumns.length);
         await mappingApi.create(
           objectType,
           tableId,
           mappings,
-          primaryKeyColumn || undefined
+          primaryKeyColumnsToSave
         );
         showToast('映射关系保存成功！', 'success');
       }
@@ -517,20 +586,29 @@ export default function DataMappingDialog({
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">字段映射配置</h3>
                 <div className="mb-4">
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    主键列（用于生成实例ID）
+                    主键列（用于生成实例ID，支持多选设置联合主键）
                   </label>
                   <select
-                    value={primaryKeyColumn}
-                    onChange={(e) => setPrimaryKeyColumn(e.target.value)}
+                    multiple
+                    value={primaryKeyColumns}
+                    onChange={(e) => {
+                      const selected = Array.from(e.target.selectedOptions, option => option.value);
+                      setPrimaryKeyColumns(selected);
+                    }}
+                    size={Math.min(columns.length + 1, 6)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   >
-                    <option value="">无</option>
                     {columns.map((col) => (
                       <option key={col.name} value={col.name}>
                         {col.name} {col.is_primary_key && '(主键)'}
                       </option>
                     ))}
                   </select>
+                  {primaryKeyColumns.length > 0 && (
+                    <div className="mt-2 text-sm text-gray-600">
+                      已选择: {primaryKeyColumns.join(', ')}
+                    </div>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[600px] overflow-y-auto">

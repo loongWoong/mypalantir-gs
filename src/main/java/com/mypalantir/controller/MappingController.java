@@ -26,12 +26,35 @@ public class MappingController {
             String tableId = (String) request.get("table_id");
             @SuppressWarnings("unchecked")
             Map<String, String> columnPropertyMappings = (Map<String, String>) request.get("column_property_mappings");
+            
+            // 支持新格式（数组）和旧格式（单个字符串）
+            @SuppressWarnings("unchecked")
+            List<String> primaryKeyColumns = (List<String>) request.get("primary_key_columns");
             String primaryKeyColumn = (String) request.get("primary_key_column");
-
-            String mappingId = mappingService.createMapping(objectType, tableId, columnPropertyMappings, primaryKeyColumn);
-            Map<String, String> result = new HashMap<>();
-            result.put("id", mappingId);
-            return ResponseEntity.ok(ApiResponse.success(result));
+            
+            // 调试日志：记录接收到的数据
+            System.out.println("[MappingController.createMapping] Received primary_key_columns: " + primaryKeyColumns);
+            System.out.println("[MappingController.createMapping] Received primary_key_column: " + primaryKeyColumn);
+            
+            // 如果提供了新格式的数组，使用它；否则使用旧格式的单个字符串
+            if (primaryKeyColumns != null && !primaryKeyColumns.isEmpty()) {
+                System.out.println("[MappingController.createMapping] Using primary_key_columns array: " + primaryKeyColumns);
+                String mappingId = mappingService.createMapping(objectType, tableId, columnPropertyMappings, primaryKeyColumns);
+                Map<String, String> result = new HashMap<>();
+                result.put("id", mappingId);
+                return ResponseEntity.ok(ApiResponse.success(result));
+            } else if (primaryKeyColumn != null && !primaryKeyColumn.isEmpty()) {
+                // 兼容旧格式：单个主键列转换为数组
+                String mappingId = mappingService.createMapping(objectType, tableId, columnPropertyMappings, java.util.Arrays.asList(primaryKeyColumn));
+                Map<String, String> result = new HashMap<>();
+                result.put("id", mappingId);
+                return ResponseEntity.ok(ApiResponse.success(result));
+            } else {
+                String mappingId = mappingService.createMapping(objectType, tableId, columnPropertyMappings, null);
+                Map<String, String> result = new HashMap<>();
+                result.put("id", mappingId);
+                return ResponseEntity.ok(ApiResponse.success(result));
+            }
         } catch (Loader.NotFoundException | IOException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(ApiResponse.error(400, e.getMessage()));
@@ -81,9 +104,26 @@ public class MappingController {
         try {
             @SuppressWarnings("unchecked")
             Map<String, String> columnPropertyMappings = (Map<String, String>) request.get("column_property_mappings");
+            
+            // 支持新格式（数组）和旧格式（单个字符串）
+            @SuppressWarnings("unchecked")
+            List<String> primaryKeyColumns = (List<String>) request.get("primary_key_columns");
             String primaryKeyColumn = (String) request.get("primary_key_column");
-
-            mappingService.updateMapping(mappingId, columnPropertyMappings, primaryKeyColumn);
+            
+            // 调试日志：记录接收到的数据
+            System.out.println("[MappingController.updateMapping] Received primary_key_columns: " + primaryKeyColumns);
+            System.out.println("[MappingController.updateMapping] Received primary_key_column: " + primaryKeyColumn);
+            
+            // 如果提供了新格式的数组，使用它；否则使用旧格式的单个字符串
+            if (primaryKeyColumns != null && !primaryKeyColumns.isEmpty()) {
+                System.out.println("[MappingController.updateMapping] Using primary_key_columns array: " + primaryKeyColumns);
+                mappingService.updateMapping(mappingId, columnPropertyMappings, primaryKeyColumns);
+            } else if (primaryKeyColumn != null && !primaryKeyColumn.isEmpty()) {
+                // 兼容旧格式：单个主键列转换为数组
+                mappingService.updateMapping(mappingId, columnPropertyMappings, java.util.Arrays.asList(primaryKeyColumn));
+            } else {
+                mappingService.updateMapping(mappingId, columnPropertyMappings, null);
+            }
             return ResponseEntity.ok(ApiResponse.success(null));
         } catch (IOException e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
