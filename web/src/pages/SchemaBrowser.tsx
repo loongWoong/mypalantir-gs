@@ -1,15 +1,16 @@
 import { useEffect, useState } from 'react';
-import type { ObjectType, LinkType } from '../api/client';
-import { schemaApi, mappingApi, instanceApi } from '../api/client';
+import type { ObjectType, LinkType, DataSourceConfig, Rule } from '../api/client';
+import { schemaApi, mappingApi, instanceApi, rulesApi } from '../api/client';
 import { useWorkspace } from '../WorkspaceContext';
-import { 
-  CubeIcon, 
+import {
+  CubeIcon,
   LinkIcon,
   InformationCircleIcon,
   ServerIcon,
   CheckCircleIcon,
   XCircleIcon,
-  ArrowPathIcon
+  ArrowPathIcon,
+  ShieldCheckIcon
 } from '@heroicons/react/24/outline';
 
 export default function SchemaBrowser() {
@@ -18,7 +19,8 @@ export default function SchemaBrowser() {
   const [linkTypes, setLinkTypes] = useState<LinkType[]>([]);
   const [selectedObjectType, setSelectedObjectType] = useState<ObjectType | null>(null);
   const [selectedLinkType, setSelectedLinkType] = useState<LinkType | null>(null);
-  const [activeTab, setActiveTab] = useState<'properties' | 'datasource'>('properties');
+  const [activeTab, setActiveTab] = useState<'properties' | 'datasource' | 'rules'>('properties');
+  const [rules, setRules] = useState<Rule[]>([]);
   const [linkTypeActiveTab, setLinkTypeActiveTab] = useState<'properties' | 'datasource'>('properties');
   const [loading, setLoading] = useState(true);
   const [testing, setTesting] = useState(false);
@@ -81,7 +83,18 @@ export default function SchemaBrowser() {
     setMappingData([]);
   }, [selectedObjectType?.name]);
 
-  // 当选择的关系类型改变时，重置 Tab
+  // 当选择的对象类型改变时，加载关联规则
+  useEffect(() => {
+    if (selectedObjectType) {
+      rulesApi.getRulesForObjectType(selectedObjectType.name)
+        .then(setRules)
+        .catch(() => setRules([]));
+    } else {
+      setRules([]);
+    }
+  }, [selectedObjectType?.name]);
+
+  // 当选择的 Link Type 改变时，重置 Tab 和测试结果
   useEffect(() => {
     setLinkTypeActiveTab('properties');
     setTestResult(null);
@@ -654,25 +667,81 @@ export default function SchemaBrowser() {
                   <ServerIcon className="w-4 h-4 mr-1" />
                   Data Source
                 </button>
+                <button
+                  onClick={() => setActiveTab('rules')}
+                  className={`py-2 px-1 border-b-2 font-medium text-sm flex items-center ${
+                    activeTab === 'rules'
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  <ShieldCheckIcon className="w-4 h-4 mr-1" />
+                  Rules ({rules.length})
+                </button>
               </nav>
             </div>
 
             {/* Tab 内容 */}
-            {activeTab === 'properties' ? (
+            {activeTab === 'rules' ? (
+              <div className="mb-4">
+                <h4 className="font-semibold text-gray-900 mb-2">SWRL Rules</h4>
+                {rules.length > 0 ? (
+                  <div className="space-y-3">
+                    {rules.map((rule) => (
+                      <div key={rule.name} className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium text-gray-900">{rule.display_name || rule.name}</span>
+                          <span className="text-xs px-2 py-1 bg-indigo-100 text-indigo-700 rounded-full">
+                            {rule.language}
+                          </span>
+                        </div>
+                        {rule.description && (
+                          <p className="text-sm text-gray-600 mt-1">{rule.description}</p>
+                        )}
+                        <div className="mt-2 p-2 bg-indigo-50 rounded border border-indigo-200">
+                          <code className="text-xs text-indigo-900 whitespace-pre-wrap">{rule.expr}</code>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-sm text-gray-500 p-4 text-center">
+                    <InformationCircleIcon className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+                    No rules defined for this object type
+                  </div>
+                )}
+              </div>
+            ) : activeTab === 'properties' ? (
             <div className="mb-4">
               <h4 className="font-semibold text-gray-900 mb-2">Properties</h4>
               <div className="space-y-2">
                 {selectedObjectType.properties.map((prop) => (
                   <div
                     key={prop.name}
-                    className="p-3 bg-gray-50 rounded-lg border border-gray-200"
+                    className={`p-3 rounded-lg border ${
+                      prop.derived
+                        ? 'bg-purple-50 border-purple-200'
+                        : 'bg-gray-50 border-gray-200'
+                    }`}
                   >
                     <div className="flex items-center justify-between">
-                      <span className="font-medium text-gray-900">{prop.name}</span>
-                      <span className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded">
-                        {prop.data_type}
+                      <span className="font-medium text-gray-900">
+                        {prop.display_name || prop.name}
                       </span>
+                      <div className="flex items-center gap-1">
+                        {prop.derived && (
+                          <span className="text-xs px-2 py-1 bg-purple-100 text-purple-700 rounded-full">
+                            Derived
+                          </span>
+                        )}
+                        <span className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded">
+                          {prop.data_type}
+                        </span>
+                      </div>
                     </div>
+                    {prop.display_name && (
+                      <div className="text-xs text-gray-400 mt-0.5 font-mono">{prop.name}</div>
+                    )}
                     {prop.description && (
                       <p className="text-sm text-gray-600 mt-1">{prop.description}</p>
                     )}
@@ -691,6 +760,12 @@ export default function SchemaBrowser() {
                     {prop.constraints && Object.keys(prop.constraints).length > 0 && (
                       <div className="mt-2 text-xs text-gray-500">
                         Constraints: {JSON.stringify(prop.constraints)}
+                      </div>
+                    )}
+                    {prop.derived && prop.expr && (
+                      <div className="mt-2 p-2 bg-purple-100 rounded border border-purple-200">
+                        <div className="text-xs font-semibold text-purple-700 mb-1">CEL Expression:</div>
+                        <code className="text-xs text-purple-900 whitespace-pre-wrap">{prop.expr}</code>
                       </div>
                     )}
                   </div>

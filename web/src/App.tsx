@@ -15,6 +15,7 @@ import NaturalLanguageQuery from './pages/NaturalLanguageQuery';
 import DataComparison from './pages/DataComparison';
 import OntologyBuilder from './pages/OntologyBuilder';
 
+import RulesView from './pages/RulesView';
 
 function App() {
   return (
@@ -37,6 +38,7 @@ function App() {
           <Route path="/data-comparison" element={<DataComparison />} />
           <Route path="/ontology-builder" element={<OntologyBuilder />} />
 
+          <Route path="/rules" element={<RulesView />} />
         </Routes>
       </Layout>
     </BrowserRouter>

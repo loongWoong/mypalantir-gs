@@ -7,7 +7,7 @@ public class Validator {
     private final OntologySchema schema;
     private static final Pattern NAME_PATTERN = Pattern.compile("^[\\p{L}][\\p{L}\\p{N}_]*$");
     private static final Set<String> VALID_DATA_TYPES = Set.of(
-        "string", "int", "long", "float", "double", "bigdecimal", "bool", "date", "datetime", "json", "array"
+        "string", "int", "long", "float", "double", "bigdecimal", "bool", "boolean", "date", "datetime", "json", "array"
     );
     private static final Set<String> VALID_CARDINALITIES = Set.of(
         "one-to-one", "one-to-many", "many-to-one", "many-to-many"
