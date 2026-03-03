@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MyPalantir 测试报告汇总</title>
+  <style>
+    :root { --bg: #0f172a; --card: #1e293b; --text: #e2e8f0; --accent: #38bdf8; --muted: #94a3b8; }
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 2rem; line-height: 1.6; }
+    h1 { font-size: 1.75rem; margin-bottom: 0.5rem; }
+    .subtitle { color: var(--muted); margin-bottom: 2rem; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; }
+    .card { background: var(--card); border-radius: 12px; padding: 1.25rem; border: 1px solid rgba(255,255,255,0.06); }
+    .card h2 { font-size: 1.1rem; margin: 0 0 0.5rem; color: var(--accent); }
+    .card p { margin: 0; color: var(--muted); font-size: 0.9rem; }
+    .card a { display: inline-block; margin-top: 0.75rem; color: var(--accent); text-decoration: none; }
+    .card a:hover { text-decoration: underline; }
+    .badge { display: inline-block; padding: 0.2em 0.5em; border-radius: 6px; font-size: 0.75rem; margin-left: 0.5rem; }
+    .badge.java { background: #3b82f6; } .badge.frontend { background: #22c55e; } .badge.e2e { background: #a855f7; }
+  </style>
+</head>
+<body>
+  <h1>MyPalantir 自动化测试报告</h1>
+  <p class="subtitle">运行 <code>npm run test:all</code> 或 <code>./scripts/run-all-tests.ps1</code> 后，各层报告会生成到下方链接。</p>
+  <div class="grid">
+    <div class="card">
+      <h2>后端 (Java) <span class="badge java">JUnit</span></h2>
+      <p>单元测试与 API 集成测试。含 Surefire HTML、XML 及原始输出。</p>
+      <a href="java/surefire-report.html" target="_blank">查看 HTML 报告 →</a>
+      <a href="java/" target="_blank" style="margin-left: 0.5rem;">报告目录</a>
+    </div>
+    <div class="card">
+      <h2>前端 (Vitest) <span class="badge frontend">UT</span></h2>
+      <p>单元测试结果与覆盖率。推荐用 <code>report.html</code> 直接打开，无 CORS 限制。</p>
+      <a href="frontend/report.html" target="_blank">查看测试报告 (report.html) →</a>
+      <a href="frontend/coverage/index.html" target="_blank" style="margin-left: 0.5rem;">覆盖率</a>
+    </div>
+    <div class="card">
+      <h2>E2E / UI (Playwright) <span class="badge e2e">E2E</span></h2>
+      <p>端到端与 UI 测试报告（含截图与 trace）。</p>
+      <a href="e2e/playwright-report/index.html" target="_blank">查看 Playwright 报告 →</a>
+    </div>
+  </div>
+</body>
+</html>

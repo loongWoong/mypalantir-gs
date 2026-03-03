@@ -1,59 +1,80 @@
 package com.mypalantir.meta;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
-import java.io.IOException;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
-public class ParserTest {
-    public static void main(String[] args) {
-        String schemaPath = "./ontology/schema.yaml";
-        
-        try {
-            // 创建 Parser 并解析
-            Parser parser = new Parser(schemaPath);
-            OntologySchema schema = parser.parse();
-            
-            // 使用 YAML 格式输出，便于查看
-            ObjectMapper yamlMapper = new ObjectMapper(new YAMLFactory());
-            String yamlOutput = yamlMapper.writerWithDefaultPrettyPrinter().writeValueAsString(schema);
-            
-            System.out.println("=== 解析 schema.yaml 得到的 OntologySchema 对象 ===\n");
-            System.out.println(yamlOutput);
-            
-            // 输出统计信息
-            System.out.println("\n=== 统计信息 ===");
-            System.out.println("Version: " + schema.getVersion());
-            System.out.println("Namespace: " + schema.getNamespace());
-            System.out.println("Object Types 数量: " + 
-                (schema.getObjectTypes() != null ? schema.getObjectTypes().size() : 0));
-            System.out.println("Link Types 数量: " + 
-                (schema.getLinkTypes() != null ? schema.getLinkTypes().size() : 0));
-            
-            // 输出 Object Types 列表
-            if (schema.getObjectTypes() != null && !schema.getObjectTypes().isEmpty()) {
-                System.out.println("\n=== Object Types 列表 ===");
-                for (ObjectType ot : schema.getObjectTypes()) {
-                    System.out.println("- " + ot.getName() + 
-                        " (属性数: " + 
-                        (ot.getProperties() != null ? ot.getProperties().size() : 0) + ")");
-                }
-            }
-            
-            // 输出 Link Types 列表
-            if (schema.getLinkTypes() != null && !schema.getLinkTypes().isEmpty()) {
-                System.out.println("\n=== Link Types 列表 ===");
-                for (LinkType lt : schema.getLinkTypes()) {
-                    System.out.println("- " + lt.getName() + 
-                        " (" + lt.getSourceType() + " -> " + lt.getTargetType() + 
-                        ", 属性数: " + 
-                        (lt.getProperties() != null ? lt.getProperties().size() : 0) + ")");
-                }
-            }
-            
-        } catch (IOException e) {
-            System.err.println("解析失败: " + e.getMessage());
-            e.printStackTrace();
-        }
+import java.io.IOException;
+import java.net.URISyntaxException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+/**
+ * Parser 单元测试（JUnit 5）
+ */
+class ParserTest {
+
+    private String getResourcePath(String name) throws URISyntaxException {
+        return Paths.get(getClass().getResource(name).toURI()).toString();
+    }
+
+    @Test
+    void parse_returnsSchemaFromExistingFile() throws IOException, URISyntaxException {
+        String path = getResourcePath("/ontology/schema-mini.yaml");
+        Parser parser = new Parser(path);
+        OntologySchema schema = parser.parse();
+
+        assertNotNull(schema);
+        assertEquals("1.0", schema.getVersion());
+        assertEquals("test", schema.getNamespace());
+        assertNotNull(schema.getObjectTypes());
+        assertEquals(2, schema.getObjectTypes().size());
+        assertTrue(schema.getObjectTypes().stream().anyMatch(ot -> "Vehicle".equals(ot.getName())));
+        assertTrue(schema.getObjectTypes().stream().anyMatch(ot -> "Person".equals(ot.getName())));
+        assertNotNull(schema.getLinkTypes());
+        assertEquals(1, schema.getLinkTypes().size());
+        assertEquals("owns", schema.getLinkTypes().get(0).getName());
+    }
+
+    @Test
+    void parse_throwsWhenFileNotFound() {
+        Parser parser = new Parser("/nonexistent/schema.yaml");
+        assertThrows(IOException.class, parser::parse);
+    }
+
+    @Test
+    void parse_objectTypeHasPropertiesAndDataSource(@TempDir Path tempDir) throws IOException {
+        Path yaml = tempDir.resolve("schema.yaml");
+        Files.writeString(yaml, ""
+            + "version: \"1.0\"\n"
+            + "namespace: ut\n"
+            + "object_types:\n"
+            + "  - name: A\n"
+            + "    display_name: A\n"
+            + "    description: \"\"\n"
+            + "    base_type: null\n"
+            + "    properties:\n"
+            + "      - name: id\n"
+            + "        data_type: string\n"
+            + "        required: true\n"
+            + "    data_source:\n"
+            + "      connection_id: c1\n"
+            + "      table: t1\n"
+            + "      id_column: id\n"
+            + "      field_mapping: { id: id }\n"
+            + "link_types: []\n");
+
+        Parser parser = new Parser(yaml.toString());
+        OntologySchema schema = parser.parse();
+
+        ObjectType ot = schema.getObjectTypes().get(0);
+        assertEquals("A", ot.getName());
+        assertTrue(ot.hasDataSource());
+        assertEquals("c1", ot.getDataSource().getConnectionId());
+        assertEquals("t1", ot.getDataSource().getTable());
+        assertEquals(1, ot.getProperties().size());
+        assertEquals("id", ot.getProperties().get(0).getName());
     }
 }
-

@@ -1,0 +1,60 @@
+# 最小 schema 用于单元测试
+version: "1.0"
+namespace: test
+
+object_types:
+  - name: Person
+    display_name: 人员
+    description: ""
+    base_type: null
+    properties:
+      - name: id
+        data_type: string
+        required: true
+        description: ""
+        default_value: null
+        constraints: null
+    data_source: null
+  - name: Vehicle
+    display_name: 车辆
+    description: ""
+    base_type: null
+    properties:
+      - name: id
+        data_type: string
+        required: true
+        description: ""
+        default_value: null
+        constraints: null
+      - name: plate
+        data_type: string
+        required: false
+        description: ""
+        default_value: null
+        constraints: null
+    data_source:
+      connection_id: ds1
+      table: vehicles
+      id_column: id
+      field_mapping:
+        id: id
+        plate: plate_no
+
+link_types:
+  - name: owns
+    display_name: 持有
+    description: ""
+    source_type: Vehicle
+    target_type: Person
+    cardinality: many-to-one
+    direction: directed
+    properties: []
+
+data_sources:
+  - id: ds1
+    type: jdbc
+    host: localhost
+    port: 3306
+    database: testdb
+    username: user
+    password: ""

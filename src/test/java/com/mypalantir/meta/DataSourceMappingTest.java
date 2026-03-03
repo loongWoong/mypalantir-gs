@@ -1,67 +1,55 @@
 package com.mypalantir.meta;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
-import java.io.IOException;
+import org.junit.jupiter.api.Test;
 
-public class DataSourceMappingTest {
-    public static void main(String[] args) {
-        String schemaPath = "./ontology/schema.yaml";
-        
-        try {
-            Parser parser = new Parser(schemaPath);
-            OntologySchema schema = parser.parse();
-            
-            System.out.println("=== 数据源配置测试 ===\n");
-            
-            // 检查数据源配置
-            if (schema.getDataSources() != null && !schema.getDataSources().isEmpty()) {
-                System.out.println("数据源数量: " + schema.getDataSources().size());
-                for (DataSourceConfig ds : schema.getDataSources()) {
-                    System.out.println("\n数据源 ID: " + ds.getId());
-                    System.out.println("  类型: " + ds.getType());
-                    System.out.println("  主机: " + ds.getHost());
-                    System.out.println("  端口: " + ds.getPort());
-                    System.out.println("  数据库: " + ds.getDatabase());
-                    System.out.println("  JDBC URL: " + ds.buildJdbcUrl());
-                }
-            } else {
-                System.out.println("未配置数据源（使用文件系统存储）");
-            }
-            
-            // 检查 ObjectType 的数据源映射
-            System.out.println("\n=== ObjectType 数据源映射 ===\n");
-            int withDataSource = 0;
-            int withoutDataSource = 0;
-            
-            for (ObjectType ot : schema.getObjectTypes()) {
-                if (ot.hasDataSource()) {
-                    withDataSource++;
-                    DataSourceMapping mapping = ot.getDataSource();
-                    System.out.println("ObjectType: " + ot.getName());
-                    System.out.println("  数据源连接: " + mapping.getConnectionId());
-                    System.out.println("  表名: " + mapping.getTable());
-                    System.out.println("  ID 列: " + mapping.getIdColumn());
-                    System.out.println("  字段映射数量: " + 
-                        (mapping.getFieldMapping() != null ? mapping.getFieldMapping().size() : 0));
-                    if (mapping.getFieldMapping() != null) {
-                        System.out.println("  字段映射:");
-                        mapping.getFieldMapping().forEach((prop, col) -> 
-                            System.out.println("    " + prop + " -> " + col));
-                    }
-                    System.out.println();
-                } else {
-                    withoutDataSource++;
-                }
-            }
-            
-            System.out.println("有数据源配置的 ObjectType: " + withDataSource);
-            System.out.println("无数据源配置的 ObjectType: " + withoutDataSource + " (使用文件系统存储)");
-            
-        } catch (IOException e) {
-            System.err.println("解析失败: " + e.getMessage());
-            e.printStackTrace();
-        }
+import java.io.IOException;
+import java.net.URISyntaxException;
+import java.nio.file.Paths;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+/**
+ * 数据源映射单元测试（JUnit 5）
+ */
+class DataSourceMappingTest {
+
+    private String getResourcePath(String name) throws URISyntaxException {
+        return Paths.get(getClass().getResource(name).toURI()).toString();
+    }
+
+    @Test
+    void schemaWithDataSources_parsesMappings() throws IOException, URISyntaxException {
+        String path = getResourcePath("/ontology/schema-mini.yaml");
+        Parser parser = new Parser(path);
+        OntologySchema schema = parser.parse();
+
+        assertNotNull(schema.getDataSources());
+        assertEquals(1, schema.getDataSources().size());
+        DataSourceConfig ds = schema.getDataSources().get(0);
+        assertEquals("ds1", ds.getId());
+        assertEquals("jdbc", ds.getType());
+        assertEquals("localhost", ds.getHost());
+        assertEquals(3306, ds.getPort());
+        assertEquals("testdb", ds.getDatabase());
+    }
+
+    @Test
+    void objectTypeWithDataSource_hasMapping() throws IOException, URISyntaxException {
+        String path = getResourcePath("/ontology/schema-mini.yaml");
+        Parser parser = new Parser(path);
+        OntologySchema schema = parser.parse();
+
+        ObjectType vehicle = schema.getObjectTypes().stream()
+            .filter(ot -> "Vehicle".equals(ot.getName()))
+            .findFirst()
+            .orElseThrow();
+        assertTrue(vehicle.hasDataSource());
+        DataSourceMapping mapping = vehicle.getDataSource();
+        assertEquals("ds1", mapping.getConnectionId());
+        assertEquals("vehicles", mapping.getTable());
+        assertEquals("id", mapping.getIdColumn());
+        assertNotNull(mapping.getFieldMapping());
+        assertEquals("id", mapping.getFieldMapping().get("id"));
+        assertEquals("plate_no", mapping.getFieldMapping().get("plate"));
     }
 }
-

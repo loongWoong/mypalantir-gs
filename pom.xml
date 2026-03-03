@@ -23,6 +23,8 @@
         <maven.compiler.source>17</maven.compiler.source>
         <maven.compiler.target>17</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <!-- 统一测试报告输出目录（便于与前端报告整合） -->
+        <test.reports.dir>${project.basedir}/test-reports/java</test.reports.dir>
     </properties>
 
     <dependencies>
@@ -125,6 +127,46 @@
 
     <build>
         <plugins>
+            <!-- 单元测试与报告 -->
+            <!-- Surefire 使用默认输出目录 target/surefire-reports，便于 report-only 读取 -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.2.5</version>
+                <configuration>
+                    <reportFormat>plain</reportFormat>
+                    <useFile>true</useFile>
+                    <includes>
+                        <include>**/*Test.java</include>
+                        <include>**/*Tests.java</include>
+                        <include>**/*IT.java</include>
+                        <include>**/*ITCase.java</include>
+                    </includes>
+                    <excludes>
+                        <exclude>**/QueryDebugTest.java</exclude>
+                    </excludes>
+                </configuration>
+            </plugin>
+            <!-- 根据 Surefire 的 XML 生成 HTML 报告，输出到统一目录 -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-report-plugin</artifactId>
+                <version>3.2.5</version>
+                <executions>
+                    <execution>
+                        <id>surefire-report</id>
+                        <phase>test</phase>
+                        <goals>
+                            <goal>report-only</goal>
+                        </goals>
+                        <configuration>
+                            <!-- 从默认 target/surefire-reports 读取 XML，HTML 输出到统一目录 -->
+                            <outputDirectory>${test.reports.dir}</outputDirectory>
+                            <outputName>surefire-report</outputName>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>

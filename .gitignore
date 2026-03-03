@@ -95,11 +95,15 @@ web/.cache/
 *.tar
 *.zip
 
-# Test coverage
+# Test coverage & 自动化测试报告（保留 test-reports/index.html）
 coverage/
 .nyc_output/
 *.lcov
 *.coverage
+test-reports/java/
+test-reports/frontend/
+test-reports/e2e/
+!test-reports/index.html
 
 # Application specific
 application-local.properties
