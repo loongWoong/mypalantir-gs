@@ -18,9 +18,6 @@ public class Property {
     @JsonProperty("required")
     private boolean required;
 
-    @JsonProperty("display_name")
-    private String displayName;
-
     @JsonProperty("description")
     private String description;
 
@@ -97,15 +94,6 @@ public class Property {
 
     public void setConstraints(Map<String, Object> constraints) {
         this.constraints = constraints;
-    }
-
-    @JsonIgnore
-    public String getDisplayName() {
-        return displayName;
-    }
-
-    public void setDisplayName(String displayName) {
-        this.displayName = displayName;
     }
 
     @JsonIgnore

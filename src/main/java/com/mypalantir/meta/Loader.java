@@ -107,6 +107,22 @@ public class Loader {
         }
         merged.setDataSources(mergedDataSources);
         
+        // 合并规则：用户 schema 的规则优先，然后添加系统 schema 中不存在同名的规则
+        List<Rule> mergedRules = new ArrayList<>();
+        if (userSchema.getRules() != null) {
+            mergedRules.addAll(userSchema.getRules());
+        }
+        if (systemSchema.getRules() != null) {
+            for (Rule systemRule : systemSchema.getRules()) {
+                boolean exists = mergedRules.stream()
+                    .anyMatch(r -> r.getName() != null && r.getName().equals(systemRule.getName()));
+                if (!exists) {
+                    mergedRules.add(systemRule);
+                }
+            }
+        }
+        merged.setRules(mergedRules);
+        
         return merged;
     }
 
