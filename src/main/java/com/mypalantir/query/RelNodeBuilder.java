@@ -55,6 +55,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -111,16 +112,18 @@ public class RelNodeBuilder {
             throw new IllegalArgumentException("Object type '" + query.getFrom() + "' not found");
         }
 
-        // 从映射关系获取 DataSourceMapping（如果存在），否则使用 schema 中定义的
-        DataSourceMapping dataSourceMapping = getDataSourceMappingFromMapping(objectType);
+        // 根据 dataSourceType 选择：sync=同步表，否则=映射的原始表
+        boolean useSync = "sync".equalsIgnoreCase(query.getDataSourceType());
+        DataSourceMapping dataSourceMapping = useSync ? getSyncTableDataSourceMapping(objectType) : getDataSourceMappingFromMapping(objectType);
+        String rootTableName = useSync ? (query.getFrom() + "_sync") : query.getFrom();
 
         // 1. 构建 TableScan
-        RelNode scan = buildTableScan(query.getFrom());
+        RelNode scan = buildTableScan(rootTableName);
         
         // 2. 先构建 JOIN（如果有 links 查询）- 必须在 filter 之前，因为 filter 可能需要访问关联表的字段
         if (query.getLinks() != null && !query.getLinks().isEmpty()) {
             for (OntologyQuery.LinkQuery linkQuery : query.getLinks()) {
-                scan = buildJoin(scan, linkQuery, objectType);
+                scan = buildJoin(scan, linkQuery, objectType, query);
             }
         }
         
@@ -473,10 +476,11 @@ public class RelNodeBuilder {
      * @param leftInput 左表（主表，如车辆表）
      * @param linkQuery 关联查询
      * @param sourceObjectType 源对象类型（如"车辆"）
+     * @param query 整体查询（用于 dataSourceType 决定使用同步表或原始表）
      * @return JOIN 后的 RelNode
      */
     private RelNode buildJoin(RelNode leftInput, OntologyQuery.LinkQuery linkQuery, 
-                             ObjectType sourceObjectType) throws Exception {
+                             ObjectType sourceObjectType, OntologyQuery query) throws Exception {
         // 1. 获取 LinkType
         LinkType linkType;
         try {
@@ -524,14 +528,14 @@ public class RelNodeBuilder {
             }
         }
         
-        // 5. 获取数据源映射（从 mapping 动态获取，而不是从 schema 静态配置）
-        actualSourceMapping = getDataSourceMappingFromMapping(actualSourceType);
+        // 5. 获取数据源映射（根据 query.dataSourceType 选择同步表或映射表）
+        actualSourceMapping = getDataSourceMappingForQuery(actualSourceType, query);
         if (actualSourceMapping == null || !actualSourceMapping.isConfigured()) {
             throw new IllegalArgumentException("Source object type '" + actualSourceType.getName() + 
                 "' does not have data source configured. Please configure a mapping for this object type.");
         }
         
-        actualTargetMapping = getDataSourceMappingFromMapping(actualTargetType);
+        actualTargetMapping = getDataSourceMappingForQuery(actualTargetType, query);
         if (actualTargetMapping == null || !actualTargetMapping.isConfigured()) {
             throw new IllegalArgumentException("Target object type '" + actualTargetType.getName() + 
                 "' does not have data source configured. Please configure a mapping for this object type.");
@@ -544,7 +548,7 @@ public class RelNodeBuilder {
             (linkType.getPropertyMappings() != null && !linkType.getPropertyMappings().isEmpty()))) {
              System.out.println("[buildJoin] Using property/transformation mappings for link: " + linkQuery.getName());
              return buildJoinWithTransformationMappings(leftInput, actualSourceType, actualTargetType,
-                                                      linkType, actualTargetMapping, isFromSource);
+                                                      linkType, actualTargetMapping, isFromSource, query);
         }
         
         // 7. 获取 LinkType 的数据源映射（支持显式配置或从 ObjectType mapping 推导）
@@ -562,11 +566,11 @@ public class RelNodeBuilder {
         if (isForeignKeyMode) {
             // 外键模式：直接 JOIN 目标表（目标表中包含外键）
             return buildForeignKeyJoin(leftInput, actualSourceType, actualTargetType, 
-                                      linkType, linkMapping, actualTargetMapping, isFromSource);
+                                      linkType, linkMapping, actualTargetMapping, isFromSource, query);
         } else {
             // 关系表模式：通过中间表 JOIN
             return buildRelationTableJoin(leftInput, actualSourceType, actualTargetType, 
-                                         linkType, linkMapping, actualTargetMapping, isFromSource);
+                                         linkType, linkMapping, actualTargetMapping, isFromSource, query);
         }
     }
 
@@ -588,12 +592,14 @@ public class RelNodeBuilder {
                                         LinkType linkType,
                                         DataSourceMapping linkMapping,
                                         DataSourceMapping targetMapping,
-                                        boolean isFromSource) throws Exception {
+                                        boolean isFromSource,
+                                        OntologyQuery query) throws Exception {
         relBuilder.clear();
         relBuilder.push(leftInput);
         
-        // 扫描目标表（外键就在这个表中）
-        RelNode targetTableScan = buildTableScan(targetObjectType.getName());
+        // 扫描目标表（外键就在这个表中；根据 dataSourceType 可能为 _sync 表）
+        String targetTableName = query != null ? getTableNameForQuery(targetObjectType.getName(), query) : targetObjectType.getName();
+        RelNode targetTableScan = buildTableScan(targetTableName);
         relBuilder.push(targetTableScan);
         
         RelDataType leftRowType = leftInput.getRowType();
@@ -611,7 +617,7 @@ public class RelNodeBuilder {
         if (linkType != null && linkType.hasTransformationMappings()) {
             // 使用 transformation_mappings 构建 JOIN 条件
             return buildJoinWithTransformationMappings(leftInput, sourceObjectType, targetObjectType,
-                                                      linkType, targetMapping, isFromSource);
+                                                      linkType, targetMapping, isFromSource, query);
         }
         
         // 根据查询方向确定 JOIN 条件（原有逻辑）
@@ -673,26 +679,29 @@ public class RelNodeBuilder {
      * @param linkType LinkType 定义（包含 transformation_mappings）
      * @param targetMapping 目标对象的数据源映射
      * @param isFromSource 是否从 source 端查询
+     * @param query 整体查询（用于 dataSourceType，可为 null）
      * @return JOIN 后的 RelNode
      */
     private RelNode buildJoinWithTransformationMappings(RelNode leftInput, ObjectType sourceObjectType,
                                                          ObjectType targetObjectType,
                                                          LinkType linkType,
                                                          DataSourceMapping targetMapping,
-                                                         boolean isFromSource) throws Exception {
+                                                         boolean isFromSource,
+                                                         OntologyQuery query) throws Exception {
         relBuilder.clear();
         relBuilder.push(leftInput);
         
-        // 扫描目标表
-        RelNode targetTableScan = buildTableScan(targetObjectType.getName());
+        // 扫描目标表（根据 dataSourceType 可能为 _sync 表）
+        String targetTableName = query != null ? getTableNameForQuery(targetObjectType.getName(), query) : targetObjectType.getName();
+        RelNode targetTableScan = buildTableScan(targetTableName);
         relBuilder.push(targetTableScan);
         
         RelDataType leftRowType = leftInput.getRowType();
         RelDataType targetRowType = targetTableScan.getRowType();
         RexBuilder rexBuilder = relBuilder.getRexBuilder();
         
-        // 获取源对象的数据源映射
-        DataSourceMapping sourceMapping = getDataSourceMappingFromMapping(sourceObjectType);
+        // 获取源对象的数据源映射（根据 query.dataSourceType）
+        DataSourceMapping sourceMapping = query != null ? getDataSourceMappingForQuery(sourceObjectType, query) : getDataSourceMappingFromMapping(sourceObjectType);
         if (sourceMapping == null || !sourceMapping.isConfigured()) {
             throw new IllegalArgumentException("Source object type '" + sourceObjectType.getName() + 
                 "' does not have data source configured.");
@@ -977,6 +986,7 @@ public class RelNodeBuilder {
      * @param linkMapping LinkType 的数据源映射
      * @param targetMapping 目标对象的数据源映射
      * @param isFromSource 是否从 source 端查询（true：从 source 查询到 target，false：从 target 查询到 source）
+     * @param query 整体查询（用于 dataSourceType，可为 null）
      * @return JOIN 后的 RelNode
      */
     private RelNode buildRelationTableJoin(RelNode leftInput, ObjectType sourceObjectType,
@@ -984,7 +994,8 @@ public class RelNodeBuilder {
                                           LinkType linkType,
                                           DataSourceMapping linkMapping,
                                           DataSourceMapping targetMapping,
-                                          boolean isFromSource) throws Exception {
+                                          boolean isFromSource,
+                                          OntologyQuery query) throws Exception {
         // 检查是否有 transformation_mappings 配置
         if (linkType != null && linkType.hasTransformationMappings()) {
             // 对于关系表模式，transformation_mappings 主要用于构建额外的 JOIN 条件
@@ -1035,8 +1046,9 @@ public class RelNodeBuilder {
             RelNode firstJoin = relBuilder.build();
             RelDataType firstJoinRowType = firstJoin.getRowType();
             
-            // 第二个 JOIN：link_table.target_id_column = target_table.id
-            RelNode targetTableScan = buildTableScan(targetObjectType.getName());
+            // 第二个 JOIN：link_table.target_id_column = target_table.id（根据 dataSourceType 可能为 _sync 表）
+            String targetTableName = query != null ? getTableNameForQuery(targetObjectType.getName(), query) : targetObjectType.getName();
+            RelNode targetTableScan = buildTableScan(targetTableName);
             String targetIdColumn = linkMapping.getTargetIdColumn();
             int linkTargetIdIndex = findFieldIndexInRowType(targetIdColumn, linkRowType);
             if (linkTargetIdIndex < 0) {
@@ -1098,8 +1110,9 @@ public class RelNodeBuilder {
             RelNode firstJoin = relBuilder.build();
             RelDataType firstJoinRowType = firstJoin.getRowType();
             
-            // 第二个 JOIN：link_table.source_id_column = source_table.id
-            RelNode sourceTableScan = buildTableScan(targetObjectType.getName());  // 注意：targetObjectType 实际上是 source（要查询到的对象）
+            // 第二个 JOIN：link_table.source_id_column = source_table.id（注意：targetObjectType 实际上是 source；根据 dataSourceType 可能为 _sync 表）
+            String sourceTableName = query != null ? getTableNameForQuery(targetObjectType.getName(), query) : targetObjectType.getName();
+            RelNode sourceTableScan = buildTableScan(sourceTableName);
             String sourceIdColumn = linkMapping.getSourceIdColumn();
             int linkSourceIdIndex = findFieldIndexInRowType(sourceIdColumn, linkRowType);
             if (linkSourceIdIndex < 0) {
@@ -1820,6 +1833,46 @@ public class RelNodeBuilder {
         return relBuilder.build();
     }
 
+    /**
+     * 根据查询的 dataSourceType 获取数据源映射：sync=同步表，否则=映射的原始表
+     */
+    private DataSourceMapping getDataSourceMappingForQuery(ObjectType objectType, OntologyQuery query) {
+        if (query != null && "sync".equalsIgnoreCase(query.getDataSourceType())) {
+            return getSyncTableDataSourceMapping(objectType);
+        }
+        return getDataSourceMappingFromMapping(objectType);
+    }
+    
+    /**
+     * 根据查询的 dataSourceType 获取 Calcite Schema 中的表名（同步表带 _sync 后缀）
+     */
+    private String getTableNameForQuery(String objectTypeName, OntologyQuery query) {
+        if (query != null && "sync".equalsIgnoreCase(query.getDataSourceType())) {
+            return objectTypeName + "_sync";
+        }
+        return objectTypeName;
+    }
+    
+    /**
+     * 获取同步表 DataSourceMapping（表名=对象类型小写，默认库，列名与属性名一致）
+     */
+    private DataSourceMapping getSyncTableDataSourceMapping(ObjectType objectType) {
+        String tableName = objectType.getName().toLowerCase();
+        DataSourceMapping dataSourceMapping = new DataSourceMapping();
+        dataSourceMapping.setConnectionId("default");  // 系统默认数据源（同步表）
+        dataSourceMapping.setTable(tableName);
+        dataSourceMapping.setIdColumn("id");
+        Map<String, String> fieldMapping = new java.util.HashMap<>();
+        if (objectType.getProperties() != null) {
+            for (Property prop : objectType.getProperties()) {
+                fieldMapping.put(prop.getName(), prop.getName());
+            }
+        }
+        fieldMapping.put("id", "id");
+        dataSourceMapping.setFieldMapping(fieldMapping);
+        return dataSourceMapping;
+    }
+    
     /**
      * 从映射关系获取 DataSourceMapping
      * 强制要求必须配置 Mapping，不再回退到 ObjectType 内部的 data_source

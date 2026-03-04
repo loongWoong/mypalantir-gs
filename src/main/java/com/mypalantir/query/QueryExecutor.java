@@ -218,8 +218,13 @@ public class QueryExecutor {
             throw new IllegalArgumentException("Object type '" + originalQuery.getFrom() + "' not found");
         }
         
-        // 从映射关系获取 DataSourceMapping
-        com.mypalantir.meta.DataSourceMapping dataSourceMapping = getDataSourceMappingFromMapping(objectType);
+        // 根据 dataSourceType 选择：sync=同步表（默认库），raw=映射的原始表
+        com.mypalantir.meta.DataSourceMapping dataSourceMapping;
+        if ("sync".equalsIgnoreCase(originalQuery.getDataSourceType())) {
+            dataSourceMapping = getSyncTableDataSourceMapping(objectType);
+        } else {
+            dataSourceMapping = getDataSourceMappingFromMapping(objectType);
+        }
         
         // 执行 SQL（这是 Calcite 的标准执行方式）
         // 注意：需要将结果中的数据库列名映射回属性名
@@ -325,6 +330,27 @@ public class QueryExecutor {
                 e
             );
         }
+    }
+    
+    /**
+     * 获取同步表 DataSourceMapping
+     * 同步表：表名 = 对象类型名小写，在默认数据库中，列名与本体属性名一致
+     */
+    private com.mypalantir.meta.DataSourceMapping getSyncTableDataSourceMapping(com.mypalantir.meta.ObjectType objectType) {
+        String tableName = objectType.getName().toLowerCase();
+        com.mypalantir.meta.DataSourceMapping dataSourceMapping = new com.mypalantir.meta.DataSourceMapping();
+        dataSourceMapping.setConnectionId("default");  // 系统默认数据源（同步表）
+        dataSourceMapping.setTable(tableName);
+        dataSourceMapping.setIdColumn("id");
+        Map<String, String> fieldMapping = new HashMap<>();
+        if (objectType.getProperties() != null) {
+            for (com.mypalantir.meta.Property prop : objectType.getProperties()) {
+                fieldMapping.put(prop.getName(), prop.getName());
+            }
+        }
+        fieldMapping.put("id", "id");
+        dataSourceMapping.setFieldMapping(fieldMapping);
+        return dataSourceMapping;
     }
     
     /**

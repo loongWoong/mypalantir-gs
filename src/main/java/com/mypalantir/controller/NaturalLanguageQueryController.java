@@ -32,20 +32,25 @@ public class NaturalLanguageQueryController {
     
     /**
      * 执行自然语言查询
-     * 接受自然语言查询文本，转换为 OntologyQuery 并执行
+     * 接受自然语言查询文本，转换为 OntologyQuery 并执行。
+     * 支持 dataSourceType：raw=原始数据（映射表），sync=同步数据（同步表），不传时默认 sync。
      */
     @PostMapping
     public ResponseEntity<ApiResponse<Map<String, Object>>> executeNaturalLanguageQuery(
-            @RequestBody Map<String, String> request) {
+            @RequestBody Map<String, Object> request) {
         try {
-            String query = request.get("query");
+            String query = request.get("query") != null ? request.get("query").toString() : null;
             if (query == null || query.trim().isEmpty()) {
                 return ResponseEntity.badRequest()
                     .body(ApiResponse.error(400, "查询文本不能为空"));
             }
+            String dataSourceType = request.get("dataSourceType") != null ? request.get("dataSourceType").toString() : null;
             
             // 转换为 OntologyQuery
             OntologyQuery ontologyQuery = naturalLanguageQueryService.convertToQuery(query);
+            if (dataSourceType != null && !dataSourceType.isEmpty()) {
+                ontologyQuery.setDataSourceType(dataSourceType);
+            }
             
             // 将 OntologyQuery 转换为 Map 格式
             Map<String, Object> queryMap = convertToMap(ontologyQuery);
@@ -88,20 +93,24 @@ public class NaturalLanguageQueryController {
     
     /**
      * 仅转换自然语言查询为 OntologyQuery（不执行）
-     * 用于调试和验证
+     * 用于调试和验证。支持 dataSourceType：raw=原始数据，sync=同步数据。
      */
     @PostMapping("/convert")
     public ResponseEntity<ApiResponse<Map<String, Object>>> convertNaturalLanguageQuery(
-            @RequestBody Map<String, String> request) {
+            @RequestBody Map<String, Object> request) {
         try {
-            String query = request.get("query");
+            String query = request.get("query") != null ? request.get("query").toString() : null;
             if (query == null || query.trim().isEmpty()) {
                 return ResponseEntity.badRequest()
                     .body(ApiResponse.error(400, "查询文本不能为空"));
             }
+            String dataSourceType = request.get("dataSourceType") != null ? request.get("dataSourceType").toString() : null;
             
             // 转换为 OntologyQuery
             OntologyQuery ontologyQuery = naturalLanguageQueryService.convertToQuery(query);
+            if (dataSourceType != null && !dataSourceType.isEmpty()) {
+                ontologyQuery.setDataSourceType(dataSourceType);
+            }
             
             // 将 OntologyQuery 转换为 Map 格式
             Map<String, Object> queryMap = convertToMap(ontologyQuery);
@@ -185,6 +194,10 @@ public class NaturalLanguageQueryController {
         
         if (query.getOffset() != null) {
             map.put("offset", query.getOffset());
+        }
+        
+        if (query.getDataSourceType() != null && !query.getDataSourceType().isEmpty()) {
+            map.put("dataSourceType", query.getDataSourceType());
         }
         
         return map;

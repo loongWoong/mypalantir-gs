@@ -642,19 +642,32 @@ export interface NaturalLanguageQueryResponse {
   rowCount?: number;
 }
 
+/** 自然语言查询请求：query 必填，dataSourceType 控制解析与执行时使用的数据源 */
+export interface NaturalLanguageQueryRequest {
+  query: string;
+  /** raw=原始数据（映射表），sync=同步数据（同步表）；不传默认 sync */
+  dataSourceType?: 'raw' | 'sync';
+}
+
 export const naturalLanguageQueryApi = {
-  execute: async (query: string): Promise<NaturalLanguageQueryResponse> => {
+  execute: async (queryOrRequest: string | NaturalLanguageQueryRequest): Promise<NaturalLanguageQueryResponse> => {
+    const body = typeof queryOrRequest === 'string'
+      ? { query: queryOrRequest }
+      : { query: queryOrRequest.query, dataSourceType: queryOrRequest.dataSourceType };
     const response = await apiClient.post<ApiResponse<NaturalLanguageQueryResponse>>(
       '/query/natural-language',
-      { query }
+      body
     );
     return response.data.data;
   },
 
-  convert: async (query: string): Promise<NaturalLanguageQueryResponse> => {
+  convert: async (queryOrRequest: string | NaturalLanguageQueryRequest): Promise<NaturalLanguageQueryResponse> => {
+    const body = typeof queryOrRequest === 'string'
+      ? { query: queryOrRequest }
+      : { query: queryOrRequest.query, dataSourceType: queryOrRequest.dataSourceType };
     const response = await apiClient.post<ApiResponse<NaturalLanguageQueryResponse>>(
       '/query/natural-language/convert',
-      { query }
+      body
     );
     return response.data.data;
   },

@@ -105,6 +105,13 @@ public class QueryParser {
             query.setOrderBy(parseOrderBy(orderByList));
         }
         
+        if (map.containsKey("dataSourceType") || map.containsKey("data_source_type")) {
+            String dataSourceType = (String) map.getOrDefault("dataSourceType", map.get("data_source_type"));
+            if (dataSourceType != null && !dataSourceType.isEmpty()) {
+                query.setDataSourceType(dataSourceType);
+            }
+        }
+        
         return query;
     }
 

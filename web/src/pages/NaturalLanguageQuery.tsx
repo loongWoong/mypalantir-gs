@@ -44,8 +44,11 @@ const EXAMPLE_QUERIES = [
   }
 ];
 
+export type DataSourceType = 'raw' | 'sync';
+
 export default function NaturalLanguageQuery() {
   const [query, setQuery] = useState('');
+  const [dataSourceType, setDataSourceType] = useState<DataSourceType>('sync');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<NaturalLanguageQueryResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -65,7 +68,10 @@ export default function NaturalLanguageQuery() {
     setShowConvertedQuery(false);
 
     try {
-      const response = await naturalLanguageQueryApi.execute(queryToExecute);
+      const response = await naturalLanguageQueryApi.execute({
+        query: queryToExecute,
+        dataSourceType,
+      });
       setResult(response);
       setShowConvertedQuery(true);
     } catch (err: any) {
@@ -112,6 +118,34 @@ export default function NaturalLanguageQuery() {
       <div className="flex-1 flex overflow-hidden">
         {/* Left Column - Query Input and Examples */}
         <div className="w-1/2 border-r border-gray-200 overflow-y-auto p-6 space-y-6">
+          {/* Data Source Type */}
+          <div className="bg-white rounded-lg shadow-sm p-6">
+            <div className="flex items-center gap-4">
+              <label className="inline-flex items-center cursor-pointer">
+                <input
+                  type="radio"
+                  name="dataSourceType"
+                  value="sync"
+                  checked={dataSourceType === 'sync'}
+                  onChange={() => setDataSourceType('sync')}
+                  className="text-blue-600 focus:ring-blue-500"
+                />
+                <span className="ml-2 text-sm text-gray-700">同步数据</span>
+              </label>
+              <label className="inline-flex items-center cursor-pointer">
+                <input
+                  type="radio"
+                  name="dataSourceType"
+                  value="raw"
+                  checked={dataSourceType === 'raw'}
+                  onChange={() => setDataSourceType('raw')}
+                  className="text-blue-600 focus:ring-blue-500"
+                />
+                <span className="ml-2 text-sm text-gray-700">原始数据</span>
+              </label>
+            </div>
+          </div>
+
           {/* Query Input */}
           <div className="bg-white rounded-lg shadow-sm p-6">
             <label htmlFor="query-input" className="block text-sm font-medium text-gray-700 mb-2">

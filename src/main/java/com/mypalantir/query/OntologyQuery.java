@@ -67,6 +67,12 @@ public class OntologyQuery {
     private List<OrderBy> orderBy;
 
     /**
+     * 数据源类型：raw=原始数据（映射表），sync=同步数据（同步表）
+     * 用于自然语言查询等场景下控制解析、校验与执行时查询的表。
+     */
+    private String dataSourceType;
+
+    /**
      * 获取查询的根对象类型（支持 from 和 object 两种方式）
      */
     public String getFrom() {
@@ -131,6 +137,14 @@ public class OntologyQuery {
 
     public void setOrderBy(List<OrderBy> orderBy) {
         this.orderBy = orderBy;
+    }
+
+    public String getDataSourceType() {
+        return dataSourceType;
+    }
+
+    public void setDataSourceType(String dataSourceType) {
+        this.dataSourceType = dataSourceType;
     }
 
     public List<Object> getFilter() {

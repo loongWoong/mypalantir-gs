@@ -75,6 +75,11 @@ public class OntologySchemaFactory {
                     // 直接将表添加到 rootSchema
                     rootSchema.add(objectType.getName(), table);
                 }
+                // 同步表：表名 = 对象类型小写，在默认库，供 dataSourceType=sync 时使用
+                OntologyTable syncTable = createSyncTable(objectType);
+                if (syncTable != null) {
+                    rootSchema.add(objectType.getName() + "_sync", syncTable);
+                }
             }
         }
         
@@ -268,6 +273,35 @@ public class OntologySchemaFactory {
             System.err.println("[OntologySchemaFactory] Failed to create table from mapping for " + 
                              objectType.getName() + ": " + e.getMessage());
             e.printStackTrace();
+            return null;
+        }
+    }
+    
+    /**
+     * 为 ObjectType 创建同步表（默认库，表名 = 对象类型名小写，列名与属性名一致）
+     * 用于自然语言查询等场景下 dataSourceType=sync 时查询同步数据。
+     */
+    private OntologyTable createSyncTable(ObjectType objectType) {
+        try {
+            Connection defaultConn = databaseMetadataService.getConnectionForDatabase(null);
+            if (defaultConn == null) {
+                return null;
+            }
+            DataSourceMapping dataSourceMapping = new DataSourceMapping();
+            dataSourceMapping.setConnectionId("default");  // 系统默认数据源（同步表）
+            dataSourceMapping.setTable(objectType.getName().toLowerCase());
+            dataSourceMapping.setIdColumn("id");
+            Map<String, String> fieldMapping = new HashMap<>();
+            if (objectType.getProperties() != null) {
+                for (com.mypalantir.meta.Property prop : objectType.getProperties()) {
+                    fieldMapping.put(prop.getName(), prop.getName());
+                }
+            }
+            fieldMapping.put("id", "id");
+            dataSourceMapping.setFieldMapping(fieldMapping);
+            return new JdbcOntologyTable(objectType, dataSourceMapping, defaultConn);
+        } catch (Exception e) {
+            System.err.println("[OntologySchemaFactory] Failed to create sync table for " + objectType.getName() + ": " + e.getMessage());
             return null;
         }
     }

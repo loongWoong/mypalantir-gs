@@ -383,16 +383,21 @@ public class OntologyRelToSqlConverter extends RelToSqlConverter {
         
         System.out.println("[replaceColumnNames] Database type: " + dbType + ", quoteChar: '" + quoteChar + "'");
         
-        // 替换表名：将对象类型名称替换为映射表名
+        // 替换表名：将对象类型名称替换为映射表名（同步表在 schema 中为 ObjectType_sync，SQL 中应使用物理表名，不带 _sync 后缀）
         String dbTableNameQuoted = quoteChar.isEmpty() ? actualDbTableName : (quoteChar + actualDbTableName + quoteChar);
-        // 替换带引号的表名（双引号或反引号）
         String beforeTableReplace = sql;
+        // 替换带引号的表名（双引号或反引号）
         sql = sql.replaceAll("(?i)\"" + java.util.regex.Pattern.quote(objectTypeName) + "\"", dbTableNameQuoted);
         sql = sql.replaceAll("(?i)`" + java.util.regex.Pattern.quote(objectTypeName) + "`", dbTableNameQuoted);
         // 替换不带引号的表名（在 FROM、JOIN 子句中）
         sql = sql.replaceAll("(?i)\\b" + java.util.regex.Pattern.quote(objectTypeName) + "\\b", dbTableNameQuoted);
+        // 同步表在 Calcite schema 中注册为 ObjectType_sync，生成 SQL 时改为物理表名（无 _sync 后缀）
+        String schemaSyncTableName = objectTypeName + "_sync";
+        sql = sql.replaceAll("(?i)\"" + java.util.regex.Pattern.quote(schemaSyncTableName) + "\"", dbTableNameQuoted);
+        sql = sql.replaceAll("(?i)`" + java.util.regex.Pattern.quote(schemaSyncTableName) + "`", dbTableNameQuoted);
+        sql = sql.replaceAll("(?i)\\b" + java.util.regex.Pattern.quote(schemaSyncTableName) + "\\b", dbTableNameQuoted);
         if (!beforeTableReplace.equals(sql)) {
-            System.out.println("[replaceColumnNames] Table name replaced: " + objectTypeName + " -> " + dbTableNameQuoted);
+            System.out.println("[replaceColumnNames] Table name replaced: " + objectTypeName + " (and " + schemaSyncTableName + ") -> " + dbTableNameQuoted);
         }
         
         // 替换列名：将属性名替换为数据库列名
