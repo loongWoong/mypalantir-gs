@@ -784,7 +784,7 @@ export default function LinkList() {
                         <tr key={link.id} className="hover:bg-slate-50 transition-colors group">
                           <td className="px-6 py-4 whitespace-nowrap">
                             <RouterLink
-                              to={`/instances/${linkTypeDef.source_type}/${link.source_id}`}
+                              to={`/instances/${linkTypeDef.source_type}/${encodeURIComponent(String(link.source_id ?? ''))}`}
                               className="inline-flex items-center px-2.5 py-0.5 rounded border border-blue-100 bg-blue-50 text-blue-700 text-xs font-mono hover:bg-blue-100 transition-colors"
                             >
                               {link.source_id.length > 12 ? link.source_id.substring(0, 12) + '...' : link.source_id}
@@ -792,7 +792,7 @@ export default function LinkList() {
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <RouterLink
-                              to={`/instances/${linkTypeDef.target_type}/${link.target_id}`}
+                              to={`/instances/${linkTypeDef.target_type}/${encodeURIComponent(String(link.target_id ?? ''))}`}
                               className="inline-flex items-center px-2.5 py-0.5 rounded border border-emerald-100 bg-emerald-50 text-emerald-700 text-xs font-mono hover:bg-emerald-100 transition-colors"
                             >
                               {link.target_id.length > 12 ? link.target_id.substring(0, 12) + '...' : link.target_id}

@@ -204,11 +204,20 @@ export const modelApi = {
   },
 };
 
+export interface OntologyRulePayload {
+  name: string;
+  display_name?: string;
+  description?: string;
+  language: string;
+  expr: string;
+}
+
 export interface OntologyBuilderPayload {
   version: string;
   namespace: string;
   object_types: Array<Record<string, any>>;
   link_types: Array<Record<string, any>>;
+  rules?: OntologyRulePayload[];
   data_sources?: Array<Record<string, any>>;
 }
 

@@ -213,7 +213,7 @@ function isValidDataType(dataType: string): boolean {
     return false;
   }
 
-  const validTypes = ['string', 'int', 'long', 'float', 'double', 'bigdecimal', 'bool', 'date', 'datetime', 'json', 'array', 'integer'];
+  const validTypes = ['string', 'int', 'long', 'float', 'double', 'bigdecimal', 'bool', 'boolean', 'date', 'datetime', 'json', 'array', 'integer'];
 
   // 支持数组类型 array<type>
   if (dataType.startsWith('array<') && dataType.endsWith('>')) {

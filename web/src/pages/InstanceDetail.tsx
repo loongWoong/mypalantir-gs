@@ -7,7 +7,8 @@ import InstanceForm from '../components/InstanceForm';
 import { ToastContainer, useToast } from '../components/Toast';
 
 export default function InstanceDetail() {
-  const { objectType, id } = useParams<{ objectType: string; id: string }>();
+  const { objectType, id: idParam } = useParams<{ objectType: string; id: string }>();
+  const id = idParam ? decodeURIComponent(idParam) : undefined;
   const navigate = useNavigate();
   const [instance, setInstance] = useState<Instance | null>(null);
   const [objectTypeDef, setObjectTypeDef] = useState<ObjectType | null>(null);

@@ -670,7 +670,7 @@ object_types:
     data_type: string
     required: false
     display_name: 对境外贷款标识
-    description: 标识该笔贷款是否为对境外客户的贷款
+    description: 标识该笔贷款是否为对境外客户的贷款 1:是 0:否
     default_value: null
     constraints: null
   - name: freeTradeZone

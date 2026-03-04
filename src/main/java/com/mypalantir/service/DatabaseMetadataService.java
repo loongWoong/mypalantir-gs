@@ -103,6 +103,43 @@ public class DatabaseMetadataService {
         return columns;
     }
 
+    /**
+     * 获取表的主键列名列表，按 KEY_SEQ 顺序返回（支持联合主键）
+     * @param databaseId 数据库 ID（null 表示默认数据库）
+     * @param tableName 表名
+     * @return 主键列名列表，无主键或失败时返回空列表
+     */
+    public List<String> getPrimaryKeyColumns(String databaseId, String tableName) {
+        List<String> ordered = new ArrayList<>();
+        Connection conn = null;
+        try {
+            conn = getConnectionForDatabase(databaseId);
+            DatabaseMetaData metaData = conn.getMetaData();
+            String catalog = getDatabaseName(databaseId);
+            try (ResultSet pkRs = metaData.getPrimaryKeys(catalog, null, tableName)) {
+                List<Object[]> rows = new ArrayList<>();
+                while (pkRs.next()) {
+                    int keySeq = pkRs.getInt("KEY_SEQ");
+                    String columnName = pkRs.getString("COLUMN_NAME");
+                    rows.add(new Object[]{ Integer.valueOf(keySeq), columnName });
+                }
+                rows.sort((a, b) -> ((Integer) a[0]).compareTo((Integer) b[0]));
+                for (Object[] row : rows) {
+                    ordered.add((String) row[1]);
+                }
+            }
+        } catch (SQLException | IOException e) {
+            // 返回空列表，调用方会回退到默认 id 列
+        } finally {
+            if (conn != null) {
+                try {
+                    if (!conn.isClosed()) conn.close();
+                } catch (SQLException ignored) {}
+            }
+        }
+        return ordered;
+    }
+
     public Map<String, Object> getTableInfo(String databaseId, String tableName) throws SQLException, IOException {
         Map<String, Object> tableInfo = new HashMap<>();
         tableInfo.put("name", tableName);

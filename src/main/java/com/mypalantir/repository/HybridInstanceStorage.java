@@ -242,10 +242,20 @@ public class HybridInstanceStorage implements IInstanceStorage {
             logger.info("[HybridInstanceStorage] ========== getInstance END ==========");
             return instance;
         } catch (IOException e) {
-            // 实例存储查询失败（同步表不存在或其他错误），直接抛出异常，不回退到 Neo4j
-            // 严格查询界限：不从文件读取
-            logger.info("[HybridInstanceStorage] Failed to query sync table for instance {} of type {} (sync table may not exist): {}, throwing exception (NOT reading from file storage)", 
-                id, objectType, e.getMessage());
+            // 实例存储查询失败（如联合主键在同步表未命中、或同步表不存在）
+            // 若错误为 instance not found，尝试从 Neo4j 读取（兼容列表来自 Neo4j 而详情请求同一 id 的场景）
+            boolean isNotFound = e.getMessage() != null && (e.getMessage().contains("instance not found") || e.getMessage().contains("not found"));
+            if (isNotFound) {
+                try {
+                    Map<String, Object> neo4jInstance = neo4jStorage.getInstance(objectType, id);
+                    logger.info("[HybridInstanceStorage] Instance {} of type {} not in sync table, returned from Neo4j", id, objectType);
+                    logger.info("[HybridInstanceStorage] ========== getInstance END ==========");
+                    return neo4jInstance;
+                } catch (IOException neo4jEx) {
+                    logger.debug("[HybridInstanceStorage] Instance {} not found in Neo4j either: {}", id, neo4jEx.getMessage());
+                }
+            }
+            logger.info("[HybridInstanceStorage] Failed to query sync table for instance {} of type {}: {}", id, objectType, e.getMessage());
             logger.info("[HybridInstanceStorage] ========== getInstance END ==========");
             throw e;
         }

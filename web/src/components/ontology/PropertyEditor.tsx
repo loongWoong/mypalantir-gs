@@ -1,10 +1,18 @@
 import { useState } from 'react';
 import type { Attribute } from '../../models/OntologyModel';
-import { TrashIcon, PlusIcon } from '@heroicons/react/24/outline';
+import { TrashIcon, PlusIcon, DocumentTextIcon } from '@heroicons/react/24/outline';
+import { CelExprBuilder } from './CelExprBuilder';
+import type { EntityOption, RelationOption } from './CelExprBuilder';
 
 interface PropertyEditorProps {
   attributes: Attribute[];
   onChange: (attributes: Attribute[]) => void;
+  /** 当前实体名，用于 CEL 衍生属性（仅显示从该实体出发的关系） */
+  currentEntityName?: string;
+  /** 关系列表，用于 CEL 表达式中的 links.xxx */
+  relations?: RelationOption[];
+  /** 实体列表（含属性），用于 CEL 中关系目标实体的属性下拉 */
+  entities?: EntityOption[];
 }
 
 const DATA_TYPES = [
@@ -15,13 +23,25 @@ const DATA_TYPES = [
   'double',
   'bigdecimal',
   'bool',
+  'boolean',
   'date',
   'datetime',
   'json',
   'array',
 ];
 
-export function PropertyEditor({ attributes, onChange }: PropertyEditorProps) {
+export function PropertyEditor({
+  attributes,
+  onChange,
+  currentEntityName = '',
+  relations = [],
+  entities = [],
+}: PropertyEditorProps) {
+  const relationsFromEntity =
+    currentEntityName && relations.length > 0
+      ? relations.filter((r) => r.source_type === currentEntityName)
+      : relations;
+  const derivedAttrs = attributes.filter((a) => a.derived === true);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
 
   const addAttribute = () => {
@@ -72,7 +92,7 @@ export function PropertyEditor({ attributes, onChange }: PropertyEditorProps) {
             }`}
           >
             <div className="grid grid-cols-12 gap-2 items-center">
-              <div className="col-span-3">
+              <div className="col-span-2">
                 <input
                   type="text"
                   placeholder="属性名"
@@ -82,7 +102,7 @@ export function PropertyEditor({ attributes, onChange }: PropertyEditorProps) {
                   onFocus={() => setEditingIndex(index)}
                 />
               </div>
-              <div className="col-span-3">
+              <div className="col-span-2">
                 <select
                   value={attr.type}
                   onChange={(e) => updateAttribute(index, { type: e.target.value })}
@@ -115,6 +135,16 @@ export function PropertyEditor({ attributes, onChange }: PropertyEditorProps) {
                   title="唯一字段（与必填组合可设置为主键）"
                 />
                 <label className="text-xs text cursor-pointer" onClick={() => updateAttribute(index, { unique: !attr.unique })}>唯一</label>
+              </div>
+              <div className="col-span-2 flex items-center gap-1">
+                <input
+                  type="checkbox"
+                  checked={attr.derived || false}
+                  onChange={(e) => updateAttribute(index, { derived: e.target.checked, ...(e.target.checked && !attr.expr ? { expr: '' } : {}) })}
+                  className="w-4 h-4"
+                  title="CEL 衍生属性，表达式在下方配置"
+                />
+                <label className="text-xs cursor-pointer" onClick={() => updateAttribute(index, { derived: !attr.derived })}>衍生</label>
               </div>
               <div className="col-span-1 flex items-center gap-1">
                 {attr.required && attr.unique && (
@@ -154,11 +184,43 @@ export function PropertyEditor({ attributes, onChange }: PropertyEditorProps) {
                   onChange={(e) => updateAttribute(index, { default_value: e.target.value })}
                   className="w-full text-xs border rounded px-2 py-1"
                 />
+                {attr.derived && (
+                  <p className="text-xs text-blue-600">CEL 表达式请在下方「CEL 衍生属性配置」中填写</p>
+                )}
               </div>
             )}
           </div>
         ))}
       </div>
+
+      {/* CEL 衍生属性配置：在属性列表下方，仅当存在衍生属性且提供了关系/实体时显示 */}
+      {derivedAttrs.length > 0 && relationsFromEntity.length > 0 && entities.length > 0 && (
+        <div className="border-t border-gray-200 pt-4 mt-4">
+          <h4 className="text-sm font-medium text-gray-700 flex items-center gap-1 mb-2">
+            <DocumentTextIcon className="w-4 h-4" />
+            CEL 衍生属性配置
+          </h4>
+          <p className="text-xs text-gray-500 mb-3">为勾选「衍生」的属性配置 CEL 表达式，用于由关系与聚合计算得出属性值</p>
+          <div className="space-y-4">
+            {attributes.map((attr, index) =>
+              attr.derived ? (
+                <div key={index} className="border border-gray-200 rounded-lg p-3 bg-gray-50/50">
+                  <div className="text-sm font-medium text-gray-800 mb-2">
+                    {attr.display_name || attr.name || '未命名'}
+                    {attr.name && <span className="text-gray-500 font-normal ml-1">({attr.name})</span>}
+                  </div>
+                  <CelExprBuilder
+                    expr={attr.expr ?? ''}
+                    onChange={(expr) => updateAttribute(index, { expr })}
+                    relations={relationsFromEntity}
+                    entities={entities}
+                  />
+                </div>
+              ) : null
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

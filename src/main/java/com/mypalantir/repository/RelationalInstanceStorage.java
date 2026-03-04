@@ -300,28 +300,62 @@ public class RelationalInstanceStorage implements IInstanceStorage {
             String primaryKeyColumn = null; // 用于 WHERE 子句（单个主键列时）
             
             if (primaryKeyColumns == null || primaryKeyColumns.isEmpty()) {
-                // 如果无法从 mapping 配置获取主键，尝试从表结构获取
-                primaryKeyColumn = getPrimaryKeyColumnFromTable(null, tableName);
-                if (primaryKeyColumn == null || primaryKeyColumn.isEmpty()) {
-                    // 最后回退到默认的 'id'
-                    primaryKeyColumn = "id";
-                    primaryKeyColumns = java.util.Arrays.asList("id");
-                    logger.warn("[RelationalInstanceStorage] Could not determine primary key column for table {}, using default 'id'", tableName);
+                // 优先从表结构获取全部主键列（支持联合主键），再回退到单列或 id
+                List<String> fromTable = databaseMetadataService.getPrimaryKeyColumns(null, tableName);
+                if (fromTable != null && !fromTable.isEmpty()) {
+                    primaryKeyColumns = fromTable;
+                    primaryKeyColumn = primaryKeyColumns.get(0);
+                    logger.info("[RelationalInstanceStorage] Using primary key column(s) from table metadata: {}", primaryKeyColumns);
                 } else {
-                    primaryKeyColumns = java.util.Arrays.asList(primaryKeyColumn);
-                    logger.info("[RelationalInstanceStorage] Using primary key column from table metadata: {}", primaryKeyColumn);
+                    primaryKeyColumn = getPrimaryKeyColumnFromTable(null, tableName);
+                    if (primaryKeyColumn == null || primaryKeyColumn.isEmpty()) {
+                        primaryKeyColumn = "id";
+                        primaryKeyColumns = java.util.Arrays.asList("id");
+                        logger.warn("[RelationalInstanceStorage] Could not determine primary key column for table {}, using default 'id'", tableName);
+                    } else {
+                        primaryKeyColumns = java.util.Arrays.asList(primaryKeyColumn);
+                        logger.info("[RelationalInstanceStorage] Using primary key column from table metadata: {}", primaryKeyColumn);
+                    }
                 }
             } else {
-                primaryKeyColumn = primaryKeyColumns.get(0); // 用于 WHERE 子句
+                primaryKeyColumn = primaryKeyColumns.get(0); // 用于单主键 WHERE 子句
                 logger.info("[RelationalInstanceStorage] Using primary key columns from mapping: {}", primaryKeyColumns);
             }
             
-            // 构建 WHERE 子句（目前只支持单个主键列的查询）
-            String sql = "SELECT * FROM `" + tableName + "` WHERE `" + primaryKeyColumn + "` = ?";
-            logger.info("[RelationalInstanceStorage] Executing SQL: {} with parameter id = {}", sql, id);
+            // 同步表列名使用属性名（property name），mapping 中的 primary_key_columns 是源表列名，需转换为同步表列名
+            Map<String, String> columnToPropertyMap = buildColumnToPropertyMap(objectTypeDef, tableName);
+            List<String> syncTablePkColumns = resolveSyncTablePrimaryKeyColumns(primaryKeyColumns, columnToPropertyMap);
+            String syncTablePkColumnSingle = syncTablePkColumns.isEmpty() ? primaryKeyColumn : syncTablePkColumns.get(0);
+            
+            // 构建 WHERE 子句：支持单主键与联合主键（联合主键时 id 格式为 "val1_val2"，与 getIdFromPrimaryKey 一致）
+            String sql;
+            List<String> idPartsForWhere = null;
+            if (syncTablePkColumns != null && syncTablePkColumns.size() > 1) {
+                idPartsForWhere = new ArrayList<>(java.util.Arrays.asList(id.split("_", -1)));
+                if (idPartsForWhere.size() != syncTablePkColumns.size()) {
+                    logger.warn("[RelationalInstanceStorage] Composite key mismatch: id has {} parts (split by '_'), but primary key has {} columns for table {}", 
+                        idPartsForWhere.size(), syncTablePkColumns.size(), tableName);
+                    throw new IOException("instance not found");
+                }
+                List<String> whereClauses = new ArrayList<>();
+                for (int i = 0; i < syncTablePkColumns.size(); i++) {
+                    whereClauses.add("`" + syncTablePkColumns.get(i) + "` = ?");
+                }
+                sql = "SELECT * FROM `" + tableName + "` WHERE " + String.join(" AND ", whereClauses);
+                logger.info("[RelationalInstanceStorage] Executing SQL (composite key): {} with id parts = {}", sql, idPartsForWhere);
+            } else {
+                sql = "SELECT * FROM `" + tableName + "` WHERE `" + syncTablePkColumnSingle + "` = ?";
+                logger.info("[RelationalInstanceStorage] Executing SQL: {} with parameter id = {}", sql, id);
+            }
             
             try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
-                pstmt.setString(1, id);
+                if (idPartsForWhere != null) {
+                    for (int i = 0; i < idPartsForWhere.size(); i++) {
+                        pstmt.setString(i + 1, idPartsForWhere.get(i));
+                    }
+                } else {
+                    pstmt.setString(1, id);
+                }
                 try (ResultSet rs = pstmt.executeQuery()) {
                     if (rs.next()) {
                         Map<String, Object> instance = new HashMap<>();
@@ -329,9 +363,6 @@ public class RelationalInstanceStorage implements IInstanceStorage {
                         java.sql.ResultSetMetaData metaData = rs.getMetaData();
                         int columnCount = metaData.getColumnCount();
                         logger.info("[RelationalInstanceStorage] ResultSet has {} columns", columnCount);
-                        
-                        // 构建列名到属性名的映射
-                        Map<String, String> columnToPropertyMap = buildColumnToPropertyMap(objectTypeDef, tableName);
                         
                         for (int i = 1; i <= columnCount; i++) {
                             String columnName = metaData.getColumnName(i);
@@ -784,6 +815,29 @@ public class RelationalInstanceStorage implements IInstanceStorage {
         }
         
         return null;
+    }
+
+    /**
+     * 将主键列名解析为同步表列名（同步表使用属性名作为列名，mapping 中为主键源表列名）
+     * @param primaryKeyColumns 主键列名列表（来自 mapping 为源表列名，来自表元数据则为同步表列名）
+     * @param columnToPropertyMap 列名到属性名映射（源表列名 -> 属性名）
+     * @return 用于同步表 WHERE 的列名列表（属性名），顺序与 primaryKeyColumns 一致
+     */
+    private List<String> resolveSyncTablePrimaryKeyColumns(List<String> primaryKeyColumns, Map<String, String> columnToPropertyMap) {
+        if (primaryKeyColumns == null || primaryKeyColumns.isEmpty()) {
+            return primaryKeyColumns;
+        }
+        List<String> resolved = new ArrayList<>();
+        for (String pkCol : primaryKeyColumns) {
+            String syncCol = null;
+            if (columnToPropertyMap != null) {
+                syncCol = columnToPropertyMap.get(pkCol);
+                if (syncCol == null) syncCol = columnToPropertyMap.get(pkCol.toLowerCase());
+                if (syncCol == null) syncCol = columnToPropertyMap.get(pkCol.toUpperCase());
+            }
+            resolved.add(syncCol != null ? syncCol : pkCol);
+        }
+        return resolved;
     }
 
     /**

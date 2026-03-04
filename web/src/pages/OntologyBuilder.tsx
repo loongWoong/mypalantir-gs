@@ -30,14 +30,17 @@ import {
   InformationCircleIcon,
   ArrowsRightLeftIcon,
   ArrowUturnLeftIcon,
+  DocumentTextIcon,
+  PencilSquareIcon,
 } from '@heroicons/react/24/outline';
 import { ontologyBuilderApi, type OntologyVersion } from '../api/client';
-import { type OntologyModel, type Entity, type Relation, createDefaultEntity, createDefaultRelation, toApiFormat, fromApiFormat } from '../models/OntologyModel';
+import { type OntologyModel, type Entity, type Relation, type Rule, createDefaultEntity, createDefaultRelation, createDefaultRule, toApiFormat, fromApiFormat } from '../models/OntologyModel';
 import { validateModel, type ValidationError } from '../utils/ontologyValidator';
 import { useWorkspace } from '../WorkspaceContext';
 import { EntityNode } from '../components/ontology/EntityNode';
 import { PropertyEditor } from '../components/ontology/PropertyEditor';
 import { PropertyMappingsEditor } from '../components/ontology/PropertyMappingsEditor';
+import { RuleExpressionEditor } from '../components/ontology/RuleExpressionEditor';
 
 const nodeTypes = {
   entity: EntityNode,
@@ -51,6 +54,7 @@ export default function OntologyBuilder() {
     namespace: 'ontology.builder',
     entities: [],
     relations: [],
+    rules: [],
   });
 
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
@@ -84,7 +88,13 @@ export default function OntologyBuilder() {
   const [showRollbackDialog, setShowRollbackDialog] = useState(false);
   const [rollbackVersion, setRollbackVersion] = useState<string>('');
   const [loadingRollback, setLoadingRollback] = useState(false);
+  const [rightPanelMode, setRightPanelMode] = useState<'entity-relation' | 'rules'>('entity-relation');
+  const [selectedRuleId, setSelectedRuleId] = useState<string | null>(null);
   const { selectedWorkspaceId, selectedWorkspace } = useWorkspace();
+
+  const rules = model.rules ?? [];
+  const selectedRule =
+    selectedRuleId != null ? (rules.find((r) => r.id === selectedRuleId) ?? null) : null;
 
   const getApiErrorMessage = useCallback((error: any, fallback = '未知错误'): string => {
     return error?.response?.data?.message || error?.response?.data?.data?.message || error?.message || fallback;
@@ -391,6 +401,34 @@ export default function OntologyBuilder() {
       ...prev,
       relations: prev.relations.map((r) => (r.id === relationId ? { ...r, ...updates } : r)),
     }));
+  };
+
+  // 规则 CRUD
+  const addRule = () => {
+    const newRule = createDefaultRule();
+    setModel((prev) => ({
+      ...prev,
+      rules: [...(prev.rules ?? []), newRule],
+    }));
+    setSelectedRuleId(newRule.id);
+    setRightPanelMode('rules');
+  };
+
+  const updateRule = (ruleId: string, updates: Partial<Rule>) => {
+    setModel((prev) => ({
+      ...prev,
+      rules: (prev.rules ?? []).map((r) => (r.id === ruleId ? { ...r, ...updates } : r)),
+    }));
+  };
+
+  const deleteRule = (ruleId: string) => {
+    setModel((prev) => ({
+      ...prev,
+      rules: (prev.rules ?? []).filter((r) => r.id !== ruleId),
+    }));
+    if (selectedRuleId === ruleId) {
+      setSelectedRuleId(null);
+    }
   };
 
   // 校验并生成YML
@@ -806,10 +844,12 @@ export default function OntologyBuilder() {
             onNodeClick={(_, node) => {
               setSelectedNode(node);
               setSelectedEdge(null);
+              setRightPanelMode('entity-relation');
             }}
             onEdgeClick={(_, edge) => {
               setSelectedEdge(edge);
               setSelectedNode(null);
+              setRightPanelMode('entity-relation');
             }}
             onPaneClick={() => {
               setSelectedNode(null);
@@ -834,8 +874,168 @@ export default function OntologyBuilder() {
         </div>
 
         {/* 右侧：属性编辑面板 */}
-        <div className="col-span-4 bg-white border border-gray-200 rounded-lg p-4 overflow-y-auto">
-          {selectedEntity ? (
+        <div className="col-span-4 bg-white border border-gray-200 rounded-lg p-4 overflow-y-auto flex flex-col">
+          {/* 面板模式切换 */}
+          <div className="flex border-b border-gray-200 mb-4 pb-3 gap-1">
+            <button
+              type="button"
+              onClick={() => {
+                setRightPanelMode('entity-relation');
+                setSelectedRuleId(null);
+              }}
+              className={`flex-1 px-3 py-2 rounded-md text-sm font-medium flex items-center justify-center gap-1.5 ${
+                rightPanelMode === 'entity-relation'
+                  ? 'bg-blue-100 text-blue-700 border border-blue-300'
+                  : 'bg-gray-50 text-gray-600 border border-gray-200 hover:bg-gray-100'
+              }`}
+            >
+              <WrenchScrewdriverIcon className="w-4 h-4" />
+              实体与关系
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setRightPanelMode('rules');
+                setSelectedNode(null);
+                setSelectedEdge(null);
+              }}
+              className={`flex-1 px-3 py-2 rounded-md text-sm font-medium flex items-center justify-center gap-1.5 ${
+                rightPanelMode === 'rules'
+                  ? 'bg-blue-100 text-blue-700 border border-blue-300'
+                  : 'bg-gray-50 text-gray-600 border border-gray-200 hover:bg-gray-100'
+              }`}
+            >
+              <DocumentTextIcon className="w-4 h-4" />
+              规则
+              {rules.length > 0 && (
+                <span className="px-1.5 py-0.5 bg-gray-200 rounded text-xs">{rules.length}</span>
+              )}
+            </button>
+          </div>
+
+          {rightPanelMode === 'rules' ? (
+            <div className="flex-1 flex flex-col min-h-0 space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-gray-900">规则列表</h3>
+                <button
+                  type="button"
+                  onClick={addRule}
+                  className="px-2 py-1.5 rounded-md bg-blue-600 text-white text-sm hover:bg-blue-700 flex items-center gap-1"
+                >
+                  <PlusIcon className="w-4 h-4" />
+                  添加规则
+                </button>
+              </div>
+              {rules.length === 0 ? (
+                <div className="text-center text-gray-500 py-6 text-sm">
+                  <p>暂无规则</p>
+                  <p className="mt-1">点击「添加规则」创建 SWRL 等规则</p>
+                </div>
+              ) : (
+                <>
+                  <ul className="border border-gray-200 rounded-md divide-y divide-gray-100 max-h-40 overflow-y-auto">
+                    {rules.map((r) => (
+                      <li key={r.id}>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedRuleId(r.id)}
+                          className={`w-full text-left px-3 py-2 text-sm flex items-center justify-between gap-2 ${
+                            selectedRuleId === r.id ? 'bg-blue-50 text-blue-800' : 'hover:bg-gray-50'
+                          }`}
+                        >
+                          <span className="font-medium truncate">{r.name || '(未命名)'}</span>
+                          <span className="text-xs text-gray-400 shrink-0">{r.language}</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                  {selectedRule ? (
+                    <div className="border border-gray-200 rounded-lg p-4 space-y-4 flex-1 overflow-y-auto">
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-medium text-gray-900">编辑规则</h4>
+                        <button
+                          type="button"
+                          onClick={() => selectedRule && deleteRule(selectedRule.id)}
+                          className="text-red-500 hover:text-red-700"
+                        >
+                          <TrashIcon className="w-5 h-5" />
+                        </button>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">名称 *</label>
+                        <input
+                          type="text"
+                          value={selectedRule.name}
+                          onChange={(e) => updateRule(selectedRule.id, { name: e.target.value })}
+                          className="w-full border rounded px-3 py-2 text-sm"
+                          placeholder="规则唯一标识，如 passage_integrity_normal"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">显示名称</label>
+                        <input
+                          type="text"
+                          value={selectedRule.display_name ?? ''}
+                          onChange={(e) => updateRule(selectedRule.id, { display_name: e.target.value })}
+                          className="w-full border rounded px-3 py-2 text-sm"
+                          placeholder="如：通行路径完整性正常"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">描述</label>
+                        <textarea
+                          value={selectedRule.description ?? ''}
+                          onChange={(e) => updateRule(selectedRule.id, { description: e.target.value })}
+                          className="w-full border rounded px-3 py-2 text-sm"
+                          rows={2}
+                          placeholder="规则说明"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">语言</label>
+                        <select
+                          value={selectedRule.language}
+                          onChange={(e) => updateRule(selectedRule.id, { language: e.target.value })}
+                          className="w-full border rounded px-3 py-2 text-sm"
+                        >
+                          <option value="swrl">SWRL</option>
+                        </select>
+                        <p className="text-xs text-gray-500 mt-0.5">规则使用 SWRL 表示逻辑蕴含；衍生属性请在上方实体属性中勾选「衍生」并配置 CEL</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">表达式 (expr) *</label>
+                        <RuleExpressionEditor
+                          language="swrl"
+                          expr={selectedRule.expr ?? ''}
+                          onChange={(expr) => updateRule(selectedRule.id, { expr })}
+                          entityTypeNames={model.entities.map((e) => e.name)}
+                          entities={model.entities.map((e) => ({
+                            name: e.name,
+                            display_name: e.display_name,
+                            attributes: (e.attributes ?? []).map((a) => ({
+                              name: a.name,
+                              display_name: a.display_name,
+                            })),
+                          }))}
+                          relations={model.relations.map((r) => ({
+                            name: r.name,
+                            display_name: r.display_name,
+                            source_type: r.source_type,
+                            target_type: r.target_type,
+                          }))}
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center text-gray-500 py-4 text-sm">
+                      <PencilSquareIcon className="w-8 h-8 mx-auto text-gray-300 mb-1" />
+                      <p>从左侧列表选择一条规则进行编辑</p>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          ) : selectedEntity ? (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="font-semibold text-gray-900">编辑实体</h3>
@@ -907,6 +1107,18 @@ export default function OntologyBuilder() {
                 <PropertyEditor
                   attributes={selectedEntity.attributes}
                   onChange={(attributes) => updateEntity(selectedEntity.id, { attributes })}
+                  currentEntityName={selectedEntity.name}
+                  relations={model.relations.map((r) => ({
+                    name: r.name,
+                    display_name: r.display_name,
+                    source_type: r.source_type,
+                    target_type: r.target_type,
+                  }))}
+                  entities={model.entities.map((e) => ({
+                    name: e.name,
+                    display_name: e.display_name,
+                    attributes: (e.attributes ?? []).map((a) => ({ name: a.name, display_name: a.display_name })),
+                  }))}
                 />
               </div>
             </div>

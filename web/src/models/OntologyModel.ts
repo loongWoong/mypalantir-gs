@@ -3,6 +3,16 @@
  * 这是前端内部使用的统一数据结构，不直接操作YML
  */
 
+/** 规则定义（如 SWRL），与后端 Rule 对应 */
+export interface Rule {
+  id: string;
+  name: string;
+  display_name?: string;
+  description?: string;
+  language: string;
+  expr: string;
+}
+
 export interface OntologyModel {
   id: string;
   name: string;
@@ -10,6 +20,7 @@ export interface OntologyModel {
   namespace: string;
   entities: Entity[];
   relations: Relation[];
+  rules?: Rule[];
   metadata?: Record<string, any>;
 }
 
@@ -36,6 +47,10 @@ export interface Attribute {
   description?: string;
   default_value?: any;
   constraints?: Record<string, any>;
+  /** 是否为 CEL 衍生属性 */
+  derived?: boolean;
+  /** CEL 表达式（仅当 derived 为 true 时有效） */
+  expr?: string;
 }
 
 export interface Relation {
@@ -82,9 +97,12 @@ export function toApiFormat(model: OntologyModel): any {
           default_value: attr.default_value,
           constraints: Object.keys(constraints).length > 0 ? constraints : null,
         };
-        // 只有当display_name存在时才添加
         if (attr.display_name !== undefined && attr.display_name !== null && attr.display_name !== '') {
           property.display_name = attr.display_name;
+        }
+        if (attr.derived === true) {
+          property.derived = true;
+          if (attr.expr !== undefined && attr.expr !== null) property.expr = attr.expr;
         }
         return property;
       }),
@@ -129,6 +147,15 @@ export function toApiFormat(model: OntologyModel): any {
       }
       return linkType;
     }),
+    rules: (model.rules && model.rules.length > 0)
+      ? model.rules.map((r) => ({
+          name: r.name,
+          display_name: r.display_name,
+          description: r.description,
+          language: r.language || 'swrl',
+          expr: r.expr,
+        }))
+      : [],
     data_sources: [],
   };
 }
@@ -164,6 +191,8 @@ export function fromApiFormat(apiData: any): OntologyModel {
         description: prop.description,
         default_value: prop.default_value,
         constraints: Object.keys(constraints || {}).length > 0 ? constraints : undefined,
+        derived: prop.derived === true,
+        expr: prop.expr ?? undefined,
       };
     }),
     data_source: ot.data_source,
@@ -195,6 +224,15 @@ export function fromApiFormat(apiData: any): OntologyModel {
     url: lt.url,
   }));
 
+  const rules: Rule[] = (apiData.rules || []).map((r: any, index: number) => ({
+    id: `rule-${index}-${r.name || Date.now()}`,
+    name: r.name || '',
+    display_name: r.display_name,
+    description: r.description,
+    language: r.language || 'swrl',
+    expr: r.expr || '',
+  }));
+
   return {
     id: `model-${Date.now()}`,
     name: apiData.name || 'Untitled Model',
@@ -202,6 +240,7 @@ export function fromApiFormat(apiData: any): OntologyModel {
     namespace: apiData.namespace || 'ontology.builder',
     entities,
     relations,
+    rules,
     metadata: apiData.metadata,
   };
 }
@@ -245,6 +284,20 @@ export function createDefaultEntity(): Entity {
       },
     ],
     position: { x: 0, y: 0 },
+  };
+}
+
+/**
+ * 创建默认的规则
+ */
+export function createDefaultRule(): Rule {
+  return {
+    id: `rule-${Date.now()}`,
+    name: '',
+    display_name: '',
+    description: '',
+    language: 'swrl',
+    expr: '',
   };
 }
 

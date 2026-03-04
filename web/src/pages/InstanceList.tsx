@@ -1396,7 +1396,7 @@ export default function InstanceList() {
                   <tr key={instance.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <Link
-                        to={`/instances/${objectType}/${instance.id || ''}`}
+                        to={`/instances/${objectType}/${encodeURIComponent(String(instance.id ?? ''))}`}
                         className="text-blue-600 hover:text-blue-800 text-sm font-mono"
                       >
                         {instance.id ? `${instance.id.substring(0, 8)}...` : '-'}
