@@ -13,6 +13,7 @@ export default defineConfig({
   reporter: [
     ['html', { outputFolder: path.join(__dirname, '..', 'test-reports', 'e2e', 'playwright-report'), open: 'never' }],
     ['junit', { outputFile: path.join(__dirname, '..', 'test-reports', 'e2e', 'junit.xml') }],
+    ['allure-playwright', { resultsDir: path.join(__dirname, '..', 'test-reports', 'allure-results') }],
   ],
   use: {
     baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5173',

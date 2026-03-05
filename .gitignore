@@ -70,7 +70,7 @@ web/.env
 web/.env.local
 web/.vite/
 web/.cache/
-
+node_modules/
 # Temporary files
 *.tmp
 *.temp

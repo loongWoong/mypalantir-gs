@@ -19,5 +19,19 @@ Write-Host "`n=== 3/3 E2E/UI 测试 (Playwright) ===" -ForegroundColor Cyan
 if ($LASTEXITCODE -ne 0) { Write-Host "E2E 测试失败" -ForegroundColor Red; exit 1 }
 
 Set-Location $root
-Write-Host "`n全部测试通过。报告目录: $root\test-reports" -ForegroundColor Green
-Write-Host "打开汇总页: test-reports\index.html" -ForegroundColor Gray
+
+# 使用 Allure 整合后端 / 前端 / E2E 报告
+$allureResults = Join-Path $root "test-reports\allure-results"
+$allureReport = Join-Path $root "test-reports\allure-report"
+if (Test-Path $allureResults) {
+    Write-Host "`n正在生成 Allure 整合报告..." -ForegroundColor Cyan
+    & npx allure generate $allureResults -o $allureReport --clean
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "`n全部测试通过。Allure 报告目录: $allureReport" -ForegroundColor Green
+        Write-Host "打开汇总页: test-reports\allure-report\index.html" -ForegroundColor Gray
+        Write-Host "或执行: allure open test-reports\allure-report" -ForegroundColor Gray
+    }
+} else {
+    Write-Host "`n全部测试通过。报告目录: $root\test-reports" -ForegroundColor Green
+    Write-Host "Allure results directory not found. Please make sure allure-vitest and allure-playwright are installed and tests have been executed." -ForegroundColor Yellow
+}

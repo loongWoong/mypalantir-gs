@@ -2,6 +2,9 @@
   "name": "mypalantir-gs",
   "private": true,
   "description": "MyPalantir 自动化测试一键运行",
+  "devDependencies": {
+    "allure-commandline": "^2.37.0"
+  },
   "scripts": {
     "test:all": "npm run test:backend && npm run test:frontend && npm run test:e2e",
     "test:backend": "mvn test -q",
