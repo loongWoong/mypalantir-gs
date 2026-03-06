@@ -19,6 +19,7 @@ MyPalantir 的核心思想是**将业务概念与物理存储解耦**，通过 O
 - **数据源无关**：同一业务概念可以映射到不同的物理数据源（PostgreSQL、MySQL、H2、文件系统等）
 - **关系抽象**：通过 LinkType 抽象对象间的关系，支持多种物理实现模式
 - **统一接口**：提供统一的查询 DSL，屏蔽底层数据源的差异
+- **声明式推理**：通过衍生属性、函数和规则的三层协作，将业务分析逻辑从硬编码转变为声明式定义
 
 ### 设计原则
 
@@ -26,6 +27,7 @@ MyPalantir 的核心思想是**将业务概念与物理存储解耦**，通过 O
 2. **映射灵活**：支持多种数据源映射模式，适应不同的数据库设计
 3. **查询优化**：基于 Apache Calcite 的查询优化器，自动生成高效的 SQL
 4. **类型安全**：完整的 Schema 验证机制，确保数据模型的一致性
+5. **数据-算法-推理分离**：衍生属性负责数据计算，函数负责复杂算法，规则负责逻辑推理
 
 ## 系统架构
 
@@ -35,8 +37,8 @@ MyPalantir 的核心思想是**将业务概念与物理存储解耦**，通过 O
 ┌─────────────────────────────────────────────────────────────┐
 │                     应用层 (Application Layer)                │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐        │
-│  │  Web UI      │  │  REST API    │  │  Query DSL   │        │
-│  │  (React)     │  │  (Spring)     │  │  (JSON)      │        │
+│  │  Web UI      │  │  REST API    │  │  AI Agent    │        │
+│  │  (React)     │  │  (Spring)     │  │  (Tool Call) │        │
 │  └──────────────┘  └──────────────┘  └──────────────┘        │
 └─────────────────────────────────────────────────────────────┘
                             ↓
@@ -44,27 +46,164 @@ MyPalantir 的核心思想是**将业务概念与物理存储解耦**，通过 O
 │                    Ontology 层 (Ontology Layer)              │
 │  ┌──────────────────────────────────────────────────────┐    │
 │  │  Schema Definition (YAML)                          │    │
-│  │  - ObjectType (对象类型)                            │    │
-│  │  - LinkType (关系类型)                              │    │
-│  │  - Property (属性定义)                              │    │
-│  │  - DataSourceMapping (数据源映射)                   │    │
+│  │  - ObjectType (对象类型)      - LinkType (关系类型)  │    │
+│  │  - Property (属性定义)        - DataSourceMapping    │    │
+│  │  - DerivedProperty (衍生属性, CEL)                  │    │
+│  │  - Function (函数/工具定义)                          │    │
+│  │  - Rule (推理规则, SWRL)                            │    │
 │  └──────────────────────────────────────────────────────┘    │
 │                            ↓                                 │
-│  ┌──────────────────────────────────────────────────────┐    │
-│  │  Query Engine (查询引擎)                             │    │
-│  │  - OntologyQuery DSL → RelNode → SQL                │    │
-│  │  - Apache Calcite 优化器                             │    │
-│  │  - 自动 JOIN 优化                                    │    │
-│  └──────────────────────────────────────────────────────┘    │
+│  ┌───────────────────────┐  ┌────────────────────────────┐   │
+│  │  Query Engine         │  │  Reasoning Engine          │   │
+│  │  - OntologyQuery DSL  │  │  - CEL 衍生属性求值        │   │
+│  │  - RelNode → SQL      │  │  - Function 调用           │   │
+│  │  - Calcite 优化器      │  │  - SWRL 前向链推理         │   │
+│  └───────────────────────┘  └────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────┘
                             ↓
 ┌─────────────────────────────────────────────────────────────┐
 │                   数据源层 (Data Source Layer)                │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐        │
-│  │  JDBC        │  │  File System  │  │  (Future)    │        │
-│  │  (Database)  │  │  (JSON)      │  │  API/Stream  │        │
+│  │  JDBC        │  │  File System  │  │  External    │        │
+│  │  (Database)  │  │  (JSON)      │  │  API/Service │        │
 │  └──────────────┘  └──────────────┘  └──────────────┘        │
 └─────────────────────────────────────────────────────────────┘
+```
+
+### 推理引擎架构：数据-算法-推理三层分离
+
+传统业务分析系统中，分析逻辑通常硬编码为工作流或过程式代码。MyPalantir 采用声明式的方式，将业务分析逻辑分解为三个层次，各司其职：
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  衍生属性（CEL 表达式）—— 负责"数据"                          │
+│  简单聚合、等值判断、集合比较                                   │
+│  例：path_fee_total = sum(路径明细.费用)                      │
+│      detail_count_matched = count(路径明细) == count(拆分明细) │
+├─────────────────────────────────────────────────────────────┤
+│  函数/工具（Function）—— 负责"算法"                            │
+│  序列分析、模式匹配、外部计算、外部数据                          │
+│  例：check_gantry_hex_continuity(门架列表) → boolean          │
+│      check_balance_continuity(门架列表) → boolean             │
+├─────────────────────────────────────────────────────────────┤
+│  推理规则（SWRL）—— 负责"推理"                                │
+│  组合命题、链式推导、根因诊断                                   │
+│  例：路径不一致 ∧ 门架HEX不连续 → 根因="ETC门架不完整"         │
+└─────────────────────────────────────────────────────────────┘
+```
+
+#### 设计决策：什么放在哪一层
+
+| 场景                                     | 放置层         | 原因                   |
+| ---------------------------------------- | -------------- | ---------------------- |
+| 用户需要看到的中间值（费用合计、数量）   | 衍生属性       | 界面展示需要           |
+| 同一计算被多条规则引用                   | 衍生属性       | 作为缓存避免重复计算   |
+| 有序遍历、相邻比较、重复检测等算法       | 函数           | 表达式难以清晰表达     |
+| 涉及外部服务调用（如牌识拟合）           | 函数           | 需要 external 实现     |
+| 多条件组合判断、根因分类、链式传播       | 规则           | 声明式推理的核心价值   |
+| 纯判断且只用一次                         | 规则直接调函数 | 无需中间层             |
+
+#### 函数定义
+
+函数在 YAML 中声明输入输出签名，实现方式可以是引擎内置（`builtin`）或外部服务（`external`）：
+
+```yaml
+functions:
+  - name: check_gantry_hex_continuity
+    display_name: 门架HEX连续性检测
+    description: "检查相邻门架的HEX编码是否首尾衔接"
+    input:
+      - name: gantry_transactions
+        type: "list<GantryTransaction>"
+    output:
+      type: boolean
+    implementation: builtin
+
+  - name: fit_actual_route
+    display_name: 实际路径拟合
+    description: "根据牌识流水拟合实际路径，与门架计费路径比对"
+    input:
+      - name: passage
+        type: Passage
+    output:
+      type: boolean
+    implementation: external   # 调用外部牌识服务
+```
+
+函数定义天然兼容 **LLM Agent 的 tool schema**——推理引擎批量调用做监控筛查，智能体按需调用做个案诊断，共用同一套函数：
+
+|            | 推理引擎                 | 智能体 (Agent)               |
+| ---------- | ------------------------ | ---------------------------- |
+| 触发方式   | 规则前件匹配时自动调用   | Agent 根据推理需要主动调用   |
+| 调用范围   | 批量、全量扫描           | 单条、按需探查               |
+| 适合场景   | 日常监控、批量筛查       | 个案分析、交互式诊断         |
+
+#### 规则如何调用函数
+
+规则中直接通过函数名调用，推理引擎负责参数绑定和执行：
+
+```yaml
+rules:
+  # 衍生属性驱动的简单规则（基于缓存值）
+  - name: passage_integrity_normal
+    expr: >
+      Passage(?p) ∧ detail_count_matched(?p, true)
+        ∧ interval_set_matched(?p, true)
+        ∧ fee_matched(?p, true)
+        → check_status(?p, "正常")
+
+  # 函数驱动的深度诊断规则（调用算法）
+  - name: obu_route_cause_etc_incomplete
+    expr: >
+      Passage(?p) ∧ obu_split_status(?p, "路径不一致")
+        ∧ detect_duplicate_intervals(
+            links(?p, passage_has_gantry_transactions)) == false
+        ∧ check_gantry_hex_continuity(
+            links(?p, passage_has_gantry_transactions)) == false
+        → obu_route_cause(?p, "ETC门架不完整")
+```
+
+#### 业务示例：OBU 拆分异常诊断
+
+以高速公路 ETC(OBU) 交易拆分异常分析为例，展示三层协作的完整过程。
+
+传统方式下，这个分析过程需要编码为一个多步工作流（查询、循环、比较、赋值、传播）。在 MyPalantir 中，只需声明业务命题和推理关系，引擎自动完成匹配和推导：
+
+```
+前置条件筛选（函数判定）
+│  is_single_province_etc(?p) ∧ is_obu_billing_mode1(?p)
+│
+├─ 维度一：路径一致性（函数检测 + 规则推导根因）
+│   check_route_consistency(拆分明细, 门架流水) == false
+│   ├─ detect_duplicate_intervals() == true    → "门架收费单元重复"
+│   ├─ check_gantry_hex_continuity() == false  → "ETC门架不完整"
+│   │   └─ detect_late_upload() == true        → "门架延迟上传"
+│   └─ check_gantry_count_complete() == false  → "CPC门架不完整"
+│       └─ detect_late_upload() == true        → "门架延迟上传"
+│
+├─ 维度二：金额一致性（函数检测 + 规则推导根因）
+│   check_fee_detail_consistency(拆分明细, 门架流水) == false
+│   ├─ check_rounding_mismatch() == true       → "四舍五入取整差异"
+│   └─ check_balance_continuity() == false     → "卡内累计金额异常"
+│
+├─ 维度三：实际路径 vs 计费路径（外部函数）
+│   fit_actual_route(?p) == false              → "实际路径偏差"
+│
+└─ 链式传播（规则自动推导）
+    异常 Passage → 标记关联 Vehicle → 标记关联 TollStation
+```
+
+对应的衍生属性提供用户在界面上看到的中间数据：
+
+```
+通行路径详情：
+  路径明细数量:    5
+  拆分明细数量:    4        ← 用户一眼看到差异
+  门架交易数量:    5
+  路径费用合计:    158.00
+  拆分费用合计:    156.00   ← 用户看到金额差异
+  门架费用合计:    158.00
+  诊断结论:        路径不一致 → ETC门架不完整 → 门架延迟上传
 ```
 
 ### 查询引擎架构
@@ -389,7 +528,8 @@ web.static.path=./web/dist
 ```
 mypalantir/
 ├── ontology/              # Ontology 定义
-│   └── schema.yaml        # Schema 定义文件
+│   ├── schema.yaml        # 基础 Schema 定义文件
+│   └── toll.yaml          # 高速收费业务模型（含衍生属性、函数、规则）
 ├── src/main/java/         # Java 源代码
 ├── web/                   # React 前端
 │   ├── src/               # 源代码
