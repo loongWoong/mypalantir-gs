@@ -20,6 +20,9 @@ public class DatasourceIntegrationService {
     @Value("${dome.datasource.base-url:http://localhost:8080}")
     private String datasourceBaseUrl;
     
+    @Value("${dome.enabled:true}")
+    private boolean domeEnabled;
+
     @Autowired(required = false)
     private DomeAuthService domeAuthService;
     
@@ -51,6 +54,10 @@ public class DatasourceIntegrationService {
      * 获取数据源列表
      */
     public List<Map<String, Object>> getDatasourceList() {
+        if (!domeEnabled) {
+            return List.of();
+        }
+
         String url = datasourceBaseUrl + "/datasourceManager/list";
         HttpHeaders headers = createHeaders();
         HttpEntity<?> entity = new HttpEntity<>(headers);

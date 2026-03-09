@@ -15,6 +15,7 @@ public class Validator {
 
     public Validator(OntologySchema schema) {
         this.schema = schema;
+        System.out.println("DEBUG: Validator loaded (patched version with hex dump support)");
     }
 
     public void validate() throws ValidationException {
@@ -67,7 +68,16 @@ public class Validator {
                         propertyNames.add(prop.getName());
 
                         if (!isValidDataType(prop.getDataType())) {
-                            throw new ValidationException("object_types[" + ot.getName() + "].properties[" + prop.getName() + "]: invalid data_type '" + prop.getDataType() + "'");
+                            String dataType = prop.getDataType();
+                            String hex = "";
+                            if (dataType != null) {
+                                StringBuilder sb = new StringBuilder();
+                                for (char c : dataType.toCharArray()) {
+                                    sb.append(String.format("%04x ", (int) c));
+                                }
+                                hex = " (hex: " + sb.toString().trim() + ")";
+                            }
+                            throw new ValidationException("object_types[" + ot.getName() + "].properties[" + prop.getName() + "]: invalid data_type '" + prop.getDataType() + "'" + hex);
                         }
                     }
                 }
@@ -231,15 +241,18 @@ public class Validator {
         if (dataType == null) {
             return false;
         }
-        if (dataType.startsWith("array<") && dataType.endsWith(">")) {
-            String innerType = dataType.substring(6, dataType.length() - 1);
+        // Normalize: trim and lowercase
+        String normalized = dataType.trim().toLowerCase();
+        
+        if (normalized.startsWith("array<") && normalized.endsWith(">")) {
+            String innerType = normalized.substring(6, normalized.length() - 1);
             return isValidDataType(innerType);
         }
         // 支持 integer 作为 int 的别名（向后兼容）
-        if ("integer".equals(dataType)) {
+        if ("integer".equals(normalized)) {
             return true;
         }
-        return VALID_DATA_TYPES.contains(dataType);
+        return VALID_DATA_TYPES.contains(normalized);
     }
 
     public static class ValidationException extends Exception {

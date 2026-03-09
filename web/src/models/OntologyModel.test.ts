@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { toApiFormat, fromApiFormat } from './OntologyModel';
-import type { OntologyModel, Entity, Relation } from './OntologyModel';
+import type { OntologyModel } from './OntologyModel';
 
 describe('OntologyModel', () => {
   describe('toApiFormat', () => {

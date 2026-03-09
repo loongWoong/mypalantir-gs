@@ -14,6 +14,7 @@ import org.springframework.web.client.ResponseErrorHandler;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -27,6 +28,9 @@ public class EtlDefinitionIntegrationService {
     
     @Value("${dome.scheduler.base-url:http://localhost:8080}")
     private String schedulerBaseUrl;
+
+    @Value("${dome.enabled:true}")
+    private boolean domeEnabled;
     
     @Autowired(required = false)
     private DomeAuthService domeAuthService;
@@ -57,7 +61,16 @@ public class EtlDefinitionIntegrationService {
      * 创建 ETL 定义
      */
     public Map<String, Object> createEtlDefinition(Map<String, Object> etlModel) {
-        String url = schedulerBaseUrl + "/etlDefinition";
+        if (!domeEnabled) {
+            logger.info("Dome 服务已禁用，跳过创建/更新 ETL 定义");
+            Map<String, Object> result = new HashMap<>();
+            result.put("success", true);
+            result.put("message", "Dome 服务已禁用，模拟成功");
+            return result;
+        }
+
+        // 构造请求URL
+        String url = schedulerBaseUrl.replaceAll("/+$", "") + "/etlDefinition/save";
         
         // 在发送请求前，处理id字段以避免外部服务的NPE问题
         // 如果id存在但可能不存在于数据库中，移除id字段，让外部服务将其视为新创建
@@ -125,7 +138,8 @@ public class EtlDefinitionIntegrationService {
             // 检查响应状态码
             if (!stringResponse.getStatusCode().is2xxSuccessful()) {
                 String errorBody = stringResponse.getBody();
-                String contentType = stringResponse.getHeaders().getFirst(HttpHeaders.CONTENT_TYPE);
+                String contentType = stringResponse.getHeaders() != null ? 
+                    stringResponse.getHeaders().getFirst(HttpHeaders.CONTENT_TYPE) : "unknown";
                 logger.error("dome-scheduler返回错误响应: status={}, contentType={}, body={}", 
                     stringResponse.getStatusCode(), contentType, errorBody);
                 
@@ -137,24 +151,25 @@ public class EtlDefinitionIntegrationService {
             }
             
             // 如果响应是JSON格式，尝试解析为Map
-            String contentType = stringResponse.getHeaders().getFirst(HttpHeaders.CONTENT_TYPE);
+            String contentType = stringResponse.getHeaders() != null ? 
+                stringResponse.getHeaders().getFirst(HttpHeaders.CONTENT_TYPE) : null;
             if (contentType != null && contentType.contains("application/json")) {
                 try {
                     // 使用ObjectMapper解析JSON响应体
                     @SuppressWarnings("unchecked")
                     Map<String, Object> responseBody = objectMapper.readValue(
                         stringResponse.getBody(), Map.class);
-                    return responseBody != null ? responseBody : Map.of();
+                    return responseBody != null ? responseBody : new HashMap<>();
                 } catch (Exception e) {
                     logger.warn("无法将JSON响应解析为Map: {}", e.getMessage());
-                    Map<String, Object> result = new java.util.HashMap<>();
+                    Map<String, Object> result = new HashMap<>();
                     result.put("rawResponse", stringResponse.getBody());
                     return result;
                 }
             } else {
                 // 非JSON响应，返回原始内容
                 logger.warn("dome-scheduler返回非JSON响应: contentType={}", contentType);
-                Map<String, Object> result = new java.util.HashMap<>();
+                Map<String, Object> result = new HashMap<>();
                 result.put("rawResponse", stringResponse.getBody());
                 result.put("contentType", contentType);
                 return result;

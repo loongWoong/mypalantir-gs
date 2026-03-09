@@ -91,7 +91,7 @@ export function celExprToVisual(expr: string): CelVisualExpr | null {
 
   const ops: Array<CelVisualExpr['operator']> = ['==', '!=', '<=', '>=', '<', '>'];
   let opIndex = -1;
-  let opStr = '==';
+  let opStr: CelVisualExpr['operator'] = '==';
   for (const o of ops) {
     const i = t.indexOf(o);
     if (i >= 0 && (opIndex < 0 || i < opIndex)) {

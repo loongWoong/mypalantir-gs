@@ -1,0 +1,27 @@
+{
+  "versions" : [ {
+    "version" : "1.0.1",
+    "namespace" : "ontology.gs",
+    "filename" : "Test",
+    "file_path" : "ontology\\models\\Test\\v1_0_1.yaml",
+    "previous_version" : null,
+    "commit_message" : null,
+    "author" : null,
+    "timestamp" : 1772790393111,
+    "workspace_id" : "0d1a5c47-2c2e-44a3-94a9-9158e91793b8",
+    "workspace_name" : null,
+    "changes" : [ "初始版本" ]
+  }, {
+    "version" : "1.0.2",
+    "namespace" : "ontology.gs",
+    "filename" : "Test",
+    "file_path" : "ontology\\models\\Test\\v1_0_2.yaml",
+    "previous_version" : "1.0.1",
+    "commit_message" : null,
+    "author" : null,
+    "timestamp" : 1772790475684,
+    "workspace_id" : "0d1a5c47-2c2e-44a3-94a9-9158e91793b8",
+    "workspace_name" : null,
+    "changes" : [ "对象类型变更: 1 项", "关系类型变更: 1 项", "版本: 1.0.1 → 1.0.2" ]
+  } ]
+}

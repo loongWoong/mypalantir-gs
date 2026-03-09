@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { ObjectType, LinkType, DataSourceConfig, Rule } from '../api/client';
+import type { ObjectType, LinkType, Rule } from '../api/client';
 import { schemaApi, mappingApi, instanceApi, rulesApi } from '../api/client';
 import { useWorkspace } from '../WorkspaceContext';
 import {

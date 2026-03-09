@@ -65,6 +65,9 @@ public class Config {
     @Value("${dome.default.target.datasource.id:}")
     private String defaultTargetDatasourceId;
 
+    @Value("${dome.enabled:true}")
+    private boolean domeEnabled;
+
     @PostConstruct
     public void init() {
         // 从 .env 文件或环境变量中读取 Neo4j 配置，覆盖默认值
@@ -158,6 +161,14 @@ public class Config {
 
     public String getNeo4jPassword() {
         return neo4jPassword;
+    }
+
+    public boolean isDomeEnabled() {
+        return domeEnabled;
+    }
+
+    public void setDomeEnabled(boolean domeEnabled) {
+        this.domeEnabled = domeEnabled;
     }
 
     public String getDefaultTargetDatasourceId() {

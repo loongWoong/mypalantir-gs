@@ -80,6 +80,9 @@ public class DomeAuthService {
     
     @Value("${dome.auth.token:}")
     private String staticToken;
+
+    @Value("${dome.enabled:true}")
+    private boolean domeEnabled;
     
     private String accessToken;
     private String refreshToken;
@@ -97,6 +100,12 @@ public class DomeAuthService {
     
     @PostConstruct
     public void init() {
+        // 如果禁用了 Dome 服务，直接返回
+        if (!domeEnabled) {
+            logger.info("[DomeAuthService] Dome 服务已禁用 (dome.enabled=false)，跳过初始化");
+            return;
+        }
+
         // 如果配置了静态 token，优先使用静态 token
         if (staticToken != null && !staticToken.isEmpty()) {
             logger.info("[DomeAuthService] 使用配置的静态 token");
@@ -172,6 +181,10 @@ public class DomeAuthService {
      * 获取有效的 token（自动刷新）
      */
     public String getToken() {
+        if (!domeEnabled) {
+            return null;
+        }
+        
         // 如果配置了静态 token，直接返回
         if (staticToken != null && !staticToken.isEmpty()) {
             return staticToken;
@@ -461,7 +474,7 @@ public class DomeAuthService {
      */
     @Scheduled(fixedRate = 30 * 60 * 1000) // 30分钟
     public void scheduledRefresh() {
-        if (!authEnabled || staticToken != null && !staticToken.isEmpty()) {
+        if (!domeEnabled || !authEnabled || staticToken != null && !staticToken.isEmpty()) {
             return;
         }
         

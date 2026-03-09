@@ -50,6 +50,8 @@ cd mypalantir
 
 # 2. 构建后端
 mvn clean install
+## 2.1 打jar包
+mvn package
 
 # 3. 构建前端
 cd web && npm install && npm run build && cd ..

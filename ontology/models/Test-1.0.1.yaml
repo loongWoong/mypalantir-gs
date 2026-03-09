@@ -1,0 +1,62 @@
+version: 1.0.1
+namespace: ontology.gs
+data_sources: []
+object_types:
+  - name: car
+    display_name: 车辆
+    description: ""
+    base_type: null
+    properties:
+      - name: id
+        display_name: null
+        data_type: string
+        required: true
+        description: 主键
+        default_value: null
+        constraints:
+          unique: true
+        derived: false
+        expr: null
+      - name: cardId
+        display_name: etc卡ID
+        data_type: string
+        required: false
+        description: ""
+        default_value: null
+        constraints: null
+        derived: false
+        expr: null
+    data_source: null
+    url: null
+  - name: etcCard
+    display_name: 通行介质ETC卡
+    description: ""
+    base_type: null
+    properties:
+      - name: id
+        display_name: null
+        data_type: string
+        required: true
+        description: 主键
+        default_value: null
+        constraints:
+          unique: true
+        derived: false
+        expr: null
+    data_source: null
+    url: null
+link_types:
+  - name: have
+    display_name: 车辆持有ETC卡
+    description: ""
+    source_type: car
+    target_type: etcCard
+    cardinality: one-to-one
+    direction: directed
+    properties: []
+    property_mappings:
+      cardId: id
+    transformation_mappings: null
+    data_source: null
+    url: null
+rules: []

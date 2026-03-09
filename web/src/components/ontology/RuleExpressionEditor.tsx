@@ -214,12 +214,12 @@ export function RuleExpressionEditor({
   };
 
   /** CEL：根据关系名取目标实体属性（links.xxx 指向的目标类型上的属性） */
-  const getAttributesForLinkType = (linkTypeName: string): { name: string; display_name?: string }[] => {
-    const rel = relations.find((r) => r.name === linkTypeName);
-    if (!rel) return [];
-    const ent = getEntity(rel.target_type);
-    return ent?.attributes ?? [];
-  };
+  // const getAttributesForLinkType = (linkTypeName: string): { name: string; display_name?: string }[] => {
+  //   const rel = relations.find((r) => r.name === linkTypeName);
+  //   if (!rel) return [];
+  //   const ent = getEntity(rel.target_type);
+  //   return ent?.attributes ?? [];
+  // };
 
   return (
     <div className="space-y-3">
