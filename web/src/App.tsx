@@ -9,6 +9,7 @@ import DataSourceManagement from './pages/DataSourceManagement';
 import QueryBuilder from './pages/QueryBuilder';
 import NaturalLanguageQuery from './pages/NaturalLanguageQuery';
 import RulesView from './pages/RulesView';
+import ReasoningView from './pages/ReasoningView';
 
 function App() {
   return (
@@ -25,6 +26,7 @@ function App() {
           <Route path="/query" element={<QueryBuilder />} />
           <Route path="/natural-language-query" element={<NaturalLanguageQuery />} />
           <Route path="/rules" element={<RulesView />} />
+          <Route path="/reasoning" element={<ReasoningView />} />
         </Routes>
       </Layout>
     </BrowserRouter>

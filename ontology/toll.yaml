@@ -61,7 +61,7 @@ object_types:
     data_source:
       connection_id: local_h2
       table: TOLL_STATIONS
-      id_column: station_id
+      id_column: STATION_ID
       field_mapping:
         station_id: STATION_ID
         station_name: STATION_NAME
@@ -103,7 +103,7 @@ object_types:
     data_source:
       connection_id: local_h2
       table: TOLL_LANES
-      id_column: lane_id
+      id_column: LANE_ID
       field_mapping:
         lane_id: LANE_ID
         lane_number: LANE_NUMBER
@@ -139,7 +139,7 @@ object_types:
     data_source:
       connection_id: local_h2
       table: GANTRIES
-      id_column: gantry_id
+      id_column: GANTRY_ID
       field_mapping:
         gantry_id: GANTRY_ID
         gantry_hex: GANTRY_HEX
@@ -174,7 +174,7 @@ object_types:
     data_source:
       connection_id: local_h2
       table: OPERATORS
-      id_column: oper_id
+      id_column: OPER_ID
       field_mapping:
         oper_id: OPER_ID
         oper_name: OPER_NAME
@@ -214,7 +214,7 @@ object_types:
     data_source:
       connection_id: local_h2
       table: VEHICLES
-      id_column: vehicle_id
+      id_column: VEHICLE_ID
       field_mapping:
         vehicle_id: VEHICLE_ID
         plate_num: PLATE_NUM
@@ -260,7 +260,7 @@ object_types:
     data_source:
       connection_id: local_h2
       table: MEDIA
-      id_column: media_id
+      id_column: MEDIA_ID
       field_mapping:
         media_id: MEDIA_ID
         media_type: MEDIA_TYPE
@@ -283,34 +283,36 @@ object_types:
       table: TBL_ENTRYWASTE
       id_column: ID
       field_mapping:
-        交易流水号: ID
-        通行标识: PASSID
-        交易时间: ENTIME
-        逻辑日期: LDATE
-        压线圈时间: TRIGGERTIME
-        接收时间: RECEIVETIME
-        收费站编号（快照）: ENTOLLSTATIONID
-        车道号（快照）: ENTOLLLANE
-        操作员姓名（快照）: OPERNAME
-        班长名称（快照）: MONITORNAME
-        车牌号（快照）: VLP
-        车牌颜色（快照）: VLPC
-        车型（快照）: VEHICLETYPE
-        交易编码: TRANSCODE
-        交易类型: TRANSTYPE
-        批次号: BATCHNUM
-        班次: SHIFT
-        入口重量: ENWEIGHT
-        入口轴数: ENAXLECOUNT
-        交易前余额（分）: BALANCEBEFORE
-        卡面扣费金额: TRANSFEE
-        TAC码: TAC
-        终端机编号: TERMINALNO
-        部特情类型: SPECIALTYPE
-        业务分析特情状态: SPINFO
-        交易描述: DESCRIPTION
-        校验码: VERIFYCODE
-        校检标志: VERIFYFLAG
+        id: ID
+        pass_id: PASSID
+        trans_time: ENTIME
+        l_date: LDATE
+        trigger_time: TRIGGERTIME
+        receive_time: RECEIVETIME
+        snapshot_station_id: ENTOLLSTATIONID
+        snapshot_lane_number: ENTOLLLANE
+        snapshot_oper_name: OPERNAME
+        snapshot_monitor_name: MONITORNAME
+        snapshot_plate_num: VLP
+        snapshot_plate_color: VLPC
+        snapshot_vehicle_type: VEHICLETYPE
+        trans_code: TRANSCODE
+        trans_type: TRANSTYPE
+        batch_num: BATCHNUM
+        shift: SHIFT
+        en_weight: ENWEIGHT
+        en_axle_count: ENAXLECOUNT
+        balance_before: BALANCEBEFORE
+        trans_fee: TRANSFEE
+        tac: TAC
+        terminal_no: TERMINALNO
+        special_type: SPECIALTYPE
+        sp_info: SPINFO
+        description: DESCRIPTION
+        verify_code: VERIFYCODE
+        verify_flag: VERIFYFLAG
+        media_type: MEDIATYPE
+        card_net: CARDNET
     properties:
       # 核心标识
       - name: id
@@ -324,15 +326,15 @@ object_types:
         required: false
         description: "通行标识ID"
       
-      # 时间信息
+      # 时间信息（TBL_ENTRYWASTE 中为 VARCHAR 类型）
       - name: trans_time
         display_name: 交易时间
-        data_type: date
+        data_type: string
         required: false
         description: "交易时间"
       - name: l_date
         display_name: 逻辑日期
-        data_type: date
+        data_type: string
         required: false
         description: "逻辑日期"
       - name: trigger_time
@@ -342,7 +344,7 @@ object_types:
         description: "压线圈时间"
       - name: receive_time
         display_name: 接收时间
-        data_type: date
+        data_type: string
         required: false
         description: "接收时间"
       
@@ -416,7 +418,7 @@ object_types:
         description: "入口轴数"
       - name: balance_before
         display_name: 交易前余额（分）
-        data_type: int
+        data_type: string
         required: false
         description: "交易前余额（分）"
       - name: trans_fee
@@ -459,6 +461,16 @@ object_types:
         data_type: int
         required: false
         description: "校检标志"
+      - name: media_type
+        display_name: 通行介质类型
+        data_type: int
+        required: false
+        description: "通行介质类型（1=OBU, 2=CPC卡）"
+      - name: card_net
+        display_name: 卡网络号
+        data_type: string
+        required: false
+        description: "卡发行网络编号（如3701=山东）"
 
   # 出口交易（事实表）
   - name: ExitTransaction
@@ -469,35 +481,35 @@ object_types:
       table: TBL_EXITWASTE
       id_column: ID
       field_mapping:
-        交易流水号: ID
-        通行标识: PASSID
-        交易时间: EXTIME
-        入口时间（历史）: ENTIME
-        逻辑日期: LDATE
-        接收时间: RECEIVETIME
-        入口收费站名称（快照）: ENTOLLSTATIONNAME
-        出口收费站名称（快照）: EXTOLLSTATIONNAME
-        出口车道号（快照）: EXTOLLLANE
-        操作员姓名（快照）: OPERNAME
-        车牌号（快照）: EXVLP
-        车牌颜色（快照）: EXVLPC
-        车型（快照）: EXVEHICLETYPE
-        总交易金额: FEE
-        应收金额: PAYFEE
-        优惠金额: DISCOUNTFEE
-        卡面扣费金额: TRANSFEE
-        计费里程（米）: TOLLDISTANCE
-        实际里程(米): REALDISTANCE
-        超时时间(秒): OVERTIME
-        发票代码: INVOICECODE
-        发票编号: INVOICEID
-        支付类型: PAYTYPE
-        支付卡类型: PAYCARDTYPE
-        是否多省交易: MULTIPROVINCE
-        交易编码: TRANSCODE
-        交易类型: TRANSTYPE
-        部特情类型: SPECIALTYPE
-        交易描述: DESCRIPTION
+        id: ID
+        pass_id: PASSID
+        trans_time: EXTIME
+        en_time: ENTIME
+        l_date: LDATE
+        receive_time: RECEIVETIME
+        snapshot_en_station_name: ENTOLLSTATIONNAME
+        snapshot_ex_station_name: EXTOLLSTATIONNAME
+        snapshot_ex_lane_number: EXTOLLLANE
+        snapshot_oper_name: OPERNAME
+        snapshot_plate_num: EXVLP
+        snapshot_plate_color: EXVLPC
+        snapshot_vehicle_type: EXVEHICLETYPE
+        fee: FEE
+        pay_fee: PAYFEE
+        discount_fee: DISCOUNTFEE
+        trans_fee: TRANSFEE
+        toll_distance: TOLLDISTANCE
+        real_distance: REALDISTANCE
+        over_time: OVERTIME
+        invoice_code: INVOICECODE
+        invoice_id: INVOICEID
+        pay_type: PAYTYPE
+        pay_card_type: PAYCARDTYPE
+        multi_province: MULTIPROVINCE
+        trans_code: TRANSCODE
+        trans_type: TRANSTYPE
+        special_type: SPECIALTYPE
+        description: DESCRIPTION
     properties:
       # 核心标识
       - name: id
@@ -661,30 +673,30 @@ object_types:
       table: TBL_GANTRYWASTE
       id_column: TRADEID
       field_mapping:
-        计费交易编号: TRADEID
-        通行标识: PASSID
-        计费交易时间: TRANSTIME
-        通过上个门架的时间: LASTGANTRYTIME
-        接收时间: RECEIVETIME
-        门架HEX编码（快照）: GANTRYHEX
-        上个门架HEX（快照）: LASTGANTRYHEX
-        车牌号（快照）: VLP
-        车牌颜色（快照）: VLPC
-        车型（快照）: VEHICLETYPE
-        应收金额: PAYFEE
-        交易金额: FEE
-        优惠金额: DISCOUNTFEE
-        卡面扣费金额: TRANSFEE
-        计费里程数: FEEMILEAGE
-        收费单元编号组合: TOLLINTERVALID
-        门架顺序号: GANTRYORDERNUM
-        交易前余额（分）: BALANCEBEFORE
-        交易后余额（分）: BALANCEAFTER
-        交易类型标识: TRANSTYPE
-        匹配状态: MATCHSTATUS
-        去重状态: VALIDSTATUS
-        处理状态: DEALSTATUS
-        对交易的文字解释: DESCRIPTION
+        trade_id: TRADEID
+        pass_id: PASSID
+        trans_time: TRANSTIME
+        last_gantry_time: LASTGANTRYTIME
+        receive_time: RECEIVETIME
+        snapshot_gantry_hex: GANTRYHEX
+        snapshot_last_gantry_hex: LASTGANTRYHEX
+        snapshot_plate_num: VLP
+        snapshot_plate_color: VLPC
+        snapshot_vehicle_type: VEHICLETYPE
+        pay_fee: PAYFEE
+        fee: FEE
+        discount_fee: DISCOUNTFEE
+        trans_fee: TRANSFEE
+        fee_mileage: FEEMILEAGE
+        toll_interval_id: TOLLINTERVALID
+        gantry_order_num: GANTRYORDERNUM
+        balance_before: BALANCEBEFORE
+        balance_after: BALANCEAFTER
+        trans_type: TRANSTYPE
+        match_status: MATCHSTATUS
+        valid_status: VALIDSTATUS
+        deal_status: DEALSTATUS
+        description: DESCRIPTION
     properties:
       # 核心标识
       - name: trade_id
@@ -827,15 +839,15 @@ object_types:
       table: TBL_PATH
       id_column: PASSID
       field_mapping:
-        通行标识: PASSID
-        车牌号: PLATENUM
-        车牌颜色: PLATECOLOR
-        入口时间: ENTIME
-        出口时间: EXTIME
-        入口收费站编号: ENTOLLSTATIONID
-        出口收费站编号: EXTOLLSTATIONID
-        入口车道编号: ENTOLLLANEID
-        出口车道编号: EXTOLLLANEID
+        pass_id: PASSID
+        plate_num: PLATENUM
+        plate_color: PLATECOLOR
+        en_time: ENTIME
+        ex_time: EXTIME
+        en_station_id: ENTOLLSTATIONID
+        ex_station_id: EXTOLLSTATIONID
+        en_lane_id: ENTOLLLANEID
+        ex_lane_id: EXTOLLLANEID
     properties:
       - name: pass_id
         display_name: 通行标识
@@ -854,12 +866,12 @@ object_types:
         description: "车牌颜色"
       - name: en_time
         display_name: 入口时间
-        data_type: date
+        data_type: string
         required: false
         description: "入口时间"
       - name: ex_time
         display_name: 出口时间
-        data_type: date
+        data_type: string
         required: false
         description: "出口时间"
       - name: en_station_id
@@ -989,12 +1001,12 @@ object_types:
       table: TBL_PATHDETAIL
       id_column: ID
       field_mapping:
-        交易标识: ID
-        通行标识: PASSID
-        车牌号码: PLATENUM
-        标识点标识: IDENTIFYPOINTID
-        交易时间: TRANSTIME
-        收费单元费用: FEE
+        id: ID
+        pass_id: PASSID
+        plate_num: PLATENUM
+        identify_point_id: IDENTIFYPOINTID
+        trans_time: TRANSTIME
+        fee: FEE
     properties:
       - name: id
         display_name: 交易标识
@@ -1018,7 +1030,7 @@ object_types:
         description: "标识点标识"
       - name: trans_time
         display_name: 交易时间
-        data_type: date
+        data_type: string
         required: false
         description: "交易时间"
       - name: fee
@@ -1026,17 +1038,6 @@ object_types:
         data_type: string
         required: false
         description: "收费单元费用"
-    data_source:
-      connection_id: local_h2
-      table: TBL_PATHDETAIL
-      id_column: ID
-      field_mapping:
-        交易标识: ID
-        通行标识: PASSID
-        车牌号码: PLATENUM
-        标识点标识: IDENTIFYPOINTID
-        交易时间: TRANSTIME
-        收费单元费用: FEE
 
   # 收费拆分明细（事实表）
   - name: SplitDetail
@@ -1048,16 +1049,16 @@ object_types:
       table: TBL_SPLITDETAIL
       id_column: pass_id
       field_mapping:
-        通行ID: pass_id
-        交易ID: transaction_id
-        收费单元ID: interval_id
-        区间通行费: toll_interval_fee
-        区间应付费用: toll_interval_pay_fee
-        区间优惠费用: toll_interval_discount_fee
-        拆分标志: split_flag
-        省拆分时间: pro_split_time
-        省拆分类型: pro_split_type
-        拆分备注: split_remark
+        pass_id: pass_id
+        transaction_id: transaction_id
+        interval_id: interval_id
+        toll_interval_fee: toll_interval_fee
+        toll_interval_pay_fee: toll_interval_pay_fee
+        toll_interval_discount_fee: toll_interval_discount_fee
+        split_flag: split_flag
+        pro_split_time: pro_split_time
+        pro_split_type: pro_split_type
+        split_remark: split_remark
     properties:
       - name: pass_id
         display_name: 通行ID
@@ -1085,21 +1086,17 @@ object_types:
           max_length: 50
       - name: toll_interval_fee
         display_name: 区间通行费
-        data_type: float
+        data_type: string
         required: true
         description: "该收费单元的通行费金额（元），优惠前"
-        constraints:
-          min: 0
       - name: toll_interval_pay_fee
         display_name: 区间应付费用
-        data_type: float
+        data_type: string
         required: true
         description: "该收费单元的实际应付金额（元）"
-        constraints:
-          min: 0
       - name: toll_interval_discount_fee
         display_name: 区间优惠费用
-        data_type: float
+        data_type: string
         required: true
         description: "该收费单元的优惠/折扣金额（元），正值表示优惠，负值表示加收"
       - name: split_flag
@@ -1112,7 +1109,7 @@ object_types:
           max: 1
       - name: pro_split_time
         display_name: 省拆分时间
-        data_type: datetime
+        data_type: string
         required: true
         description: "省级拆分处理的时间戳，格式：YYYY-MM-DD HH:MM:SS"
       - name: pro_split_type
@@ -1188,10 +1185,9 @@ link_types:
     direction: directed
     data_source:
       connection_id: local_h2
-      # ID引用存储在entry_transactions表中，但不暴露为属性
       table: TBL_ENTRYWASTE
-      source_id_column: EN_TOLL_STATION_ID  # 数据库列名
-      target_id_column: station_id
+      source_id_column: ENTOLLSTATIONID
+      target_id_column: STATION_ID
       link_mode: foreign_key
       field_mapping: {}
 
@@ -1230,7 +1226,7 @@ link_types:
   # 入口交易涉及车辆
   - name: entry_involves_vehicle
     display_name: 入口交易涉及车辆
-    description: "入口交易涉及车辆"
+    description: "入口交易涉及车辆（通过车牌号关联）"
     source_type: EntryTransaction
     target_type: Vehicle
     cardinality: many-to-one
@@ -1238,8 +1234,8 @@ link_types:
     data_source:
       connection_id: local_h2
       table: TBL_ENTRYWASTE
-      source_id_column: VEHICLEID  # 需要通过车牌号关联，这里简化处理
-      target_id_column: vehicle_id
+      source_id_column: VLP
+      target_id_column: PLATE_NUM
       link_mode: foreign_key
       field_mapping: {}
 

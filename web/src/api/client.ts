@@ -351,5 +351,61 @@ export const naturalLanguageQueryApi = {
   },
 };
 
+// Reasoning API
+export interface TraceEntry {
+  cycle: number;
+  rule: string;
+  fact: string;
+}
+
+export interface RuleEvaluation {
+  rule: string;
+  displayName: string;
+  matched: boolean;
+  fact?: string;
+  factIsNew?: boolean;
+}
+
+export interface CycleDetail {
+  cycle: number;
+  newFactsProduced: boolean;
+  rules: RuleEvaluation[];
+}
+
+export interface InferenceResult {
+  cycleCount: number;
+  cycles: CycleDetail[];
+  trace: TraceEntry[];
+  facts: Record<string, any>;
+}
+
+export interface ReasoningStatus {
+  parsedRules: number;
+  registeredFunctions: string[];
+}
+
+export const reasoningApi = {
+  infer: async (passageId: string): Promise<InferenceResult> => {
+    const response = await apiClient.post<ApiResponse<InferenceResult>>(
+      '/reasoning/infer',
+      { passage_id: passageId }
+    );
+    return response.data.data;
+  },
+
+  batch: async (limit = 10): Promise<Record<string, any>[]> => {
+    const response = await apiClient.post<ApiResponse<Record<string, any>[]>>(
+      '/reasoning/batch',
+      { limit }
+    );
+    return response.data.data;
+  },
+
+  status: async (): Promise<ReasoningStatus> => {
+    const response = await apiClient.get<ApiResponse<ReasoningStatus>>('/reasoning/status');
+    return response.data.data;
+  },
+};
+
 export default apiClient;
 

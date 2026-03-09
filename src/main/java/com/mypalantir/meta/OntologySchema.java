@@ -20,6 +20,9 @@ public class OntologySchema {
     @JsonProperty("link_types")
     private List<LinkType> linkTypes;
 
+    @JsonProperty("functions")
+    private List<FunctionDef> functions;
+
     @JsonProperty("rules")
     private List<Rule> rules;
 
@@ -66,6 +69,15 @@ public class OntologySchema {
 
     public void setDataSources(List<DataSourceConfig> dataSources) {
         this.dataSources = dataSources;
+    }
+
+    @JsonIgnore
+    public List<FunctionDef> getFunctions() {
+        return functions;
+    }
+
+    public void setFunctions(List<FunctionDef> functions) {
+        this.functions = functions;
     }
 
     @JsonIgnore

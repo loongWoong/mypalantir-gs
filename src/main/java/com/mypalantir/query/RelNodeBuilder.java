@@ -114,18 +114,28 @@ public class RelNodeBuilder {
             // 注意：如果有 JOIN，需要处理来自多个表的字段
             // 收集所有要选择的字段：主表的字段 + 关联表的字段
             List<String> allSelectFields = new ArrayList<>();
+            boolean hasWildcard = false;
             if (query.getSelect() != null && !query.getSelect().isEmpty()) {
-                allSelectFields.addAll(query.getSelect());
+                if (query.getSelect().contains("*")) {
+                    hasWildcard = true;
+                } else {
+                    allSelectFields.addAll(query.getSelect());
+                }
             }
             // 添加关联表的 select 字段
             if (query.getLinks() != null && !query.getLinks().isEmpty()) {
                 for (OntologyQuery.LinkQuery linkQuery : query.getLinks()) {
                     if (linkQuery.getSelect() != null && !linkQuery.getSelect().isEmpty()) {
-                        allSelectFields.addAll(linkQuery.getSelect());
+                        if (linkQuery.getSelect().contains("*")) {
+                            hasWildcard = true;
+                        } else {
+                            allSelectFields.addAll(linkQuery.getSelect());
+                        }
                     }
                 }
             }
-            if (!allSelectFields.isEmpty()) {
+            // 如果包含通配符 "*"，不执行 Project，返回所有字段
+            if (!hasWildcard && !allSelectFields.isEmpty()) {
                 scan = buildProject(scan, allSelectFields, objectType, query.getLinks());
             }
         }
@@ -779,32 +789,48 @@ public class RelNodeBuilder {
      * 查找字段在行类型中的索引
      */
     private int findFieldIndex(String propertyName, ObjectType objectType, RelDataType rowType) {
-        // 行类型的第一列是 id，然后是属性
-        // 需要根据属性名找到对应的索引
-        
+        // 行类型的第一列是 id，然后是属性（排除衍生属性和 id 重复属性）
+        // 需要与 JdbcOntologyTable.buildRowType() 的逻辑保持一致
+
         List<org.apache.calcite.rel.type.RelDataTypeField> fields = rowType.getFieldList();
-        
+
         // 首先检查是否是 id 字段
         if ("id".equals(propertyName) && !fields.isEmpty()) {
-            // id 字段在索引 0
             return 0;
         }
-        
-        // 然后查找属性字段
+
+        // 确定 id 列名（用于跳过重复的 id 属性）
+        String idCol = "";
+        DataSourceMapping mapping = objectType.getDataSource();
+        if (mapping != null && mapping.getIdColumn() != null) {
+            idCol = mapping.getIdColumn().toUpperCase();
+        }
+
+        // 查找属性字段，跳过衍生属性和 id 重复属性（与 buildRowType 一致）
         if (objectType.getProperties() != null) {
-            int propertyIndex = 0;
+            int fieldOffset = 1; // 从 1 开始（跳过 id 字段）
             for (Property prop : objectType.getProperties()) {
-                if (prop.getName().equals(propertyName)) {
-                    // 索引 = 1 (id) + propertyIndex
-                    int fieldIndex = 1 + propertyIndex;
-                    if (fieldIndex < fields.size()) {
-                        return fieldIndex;
+                // 跳过衍生属性
+                if (prop.isDerived()) {
+                    continue;
+                }
+                // 跳过与 ID 列重复的 id 属性
+                if ("id".equals(prop.getName()) && mapping != null) {
+                    String colName = mapping.getColumnName(prop.getName());
+                    if (colName != null && colName.toUpperCase().equals(idCol)) {
+                        continue;
                     }
                 }
-                propertyIndex++;
+
+                if (prop.getName().equals(propertyName)) {
+                    if (fieldOffset < fields.size()) {
+                        return fieldOffset;
+                    }
+                }
+                fieldOffset++;
             }
         }
-        
+
         return -1;
     }
 
