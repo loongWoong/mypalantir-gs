@@ -5,6 +5,8 @@ import com.mypalantir.meta.*;
 import com.mypalantir.reasoning.ReasoningService;
 import com.mypalantir.reasoning.engine.InferenceResult;
 import com.mypalantir.reasoning.function.FunctionRegistry;
+import com.mypalantir.query.OntologyQuery;
+import com.mypalantir.service.NaturalLanguageQueryService;
 import com.mypalantir.service.QueryService;
 import com.mypalantir.query.QueryExecutor;
 import org.springframework.stereotype.Component;
@@ -19,11 +21,14 @@ public class AgentTools {
 
     private final ReasoningService reasoningService;
     private final QueryService queryService;
+    private final NaturalLanguageQueryService nlqService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public AgentTools(ReasoningService reasoningService, QueryService queryService) {
+    public AgentTools(ReasoningService reasoningService, QueryService queryService,
+                      NaturalLanguageQueryService nlqService) {
         this.reasoningService = reasoningService;
         this.queryService = queryService;
+        this.nlqService = nlqService;
     }
 
     /**
@@ -37,6 +42,7 @@ public class AgentTools {
                 case "search_rules" -> searchRules(args);
                 case "call_function" -> callFunction(args);
                 case "run_inference" -> runInference(args);
+                case "query_data" -> queryData(args);
                 default -> "未知工具: " + toolName;
             };
         } catch (Exception e) {
@@ -156,6 +162,31 @@ public class AgentTools {
     }
 
     /**
+     * 自然语言数据查询
+     * args: { "query": "查询所有拆分异常的Passage" }
+     */
+    private String queryData(Map<String, Object> args) throws Exception {
+        String query = (String) args.get("query");
+        if (query == null) return "缺少参数 query";
+
+        try {
+            OntologyQuery ontologyQuery = nlqService.convertToQuery(query);
+            // 转换为 Map 执行
+            Map<String, Object> queryMap = objectMapper.convertValue(ontologyQuery, new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {});
+            // 移除 null 值
+            queryMap.values().removeIf(Objects::isNull);
+            QueryExecutor.QueryResult result = queryService.executeQuery(queryMap);
+            Map<String, Object> resp = new LinkedHashMap<>();
+            resp.put("columns", result.getColumns());
+            resp.put("rowCount", result.getRowCount());
+            resp.put("rows", result.getRows());
+            return objectMapper.writeValueAsString(resp);
+        } catch (NaturalLanguageQueryService.NaturalLanguageQueryException e) {
+            return "查询失败: " + e.getMessage();
+        }
+    }
+
+    /**
      * 执行完整推理
      * args: { "passage_id": "PASS_LATE_001" }
      */
@@ -199,6 +230,11 @@ public class AgentTools {
 
             5. run_inference - 执行完整规则引擎推理（一次性返回所有规则结果）
                参数: {"passage_id": "通行路径ID"}
+
+            6. query_data - 用自然语言查询本体数据（支持过滤、聚合、排序等）
+               参数: {"query": "自然语言查询，如：查询所有拆分异常的Passage"}
+               示例: {"query": "显示入口站为S0085的所有Passage"}
+               适用场景: 需要按条件批量查询、统计、筛选数据时使用
             """;
     }
 }

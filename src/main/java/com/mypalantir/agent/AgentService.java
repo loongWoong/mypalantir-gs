@@ -22,7 +22,6 @@ public class AgentService {
 
     private static final Logger logger = LoggerFactory.getLogger(AgentService.class);
     private static final int MAX_STEPS = 15;
-    private static final int MIN_TOOL_CALLS = 3; // 至少调用3次工具才允许给最终结论
 
     private final LLMService llmService;
     private final AgentTools agentTools;
@@ -87,18 +86,6 @@ public class AgentService {
             String answer = extractSection(llmResponse, "Answer");
 
             if (answer != null) {
-                // 如果已经调过工具（诊断模式）但次数不够，拒绝给结论
-                // 如果从未调过工具（非诊断问题，如"你是谁"），直接放行
-                boolean isDiagnosticMode = toolCallCount > 0 || extractSection(llmResponse, "Action") != null;
-                if (isDiagnosticMode && toolCallCount < MIN_TOOL_CALLS) {
-                    logger.info("Step {}: LLM tried to answer early (toolCalls={}), rejecting", i + 1, toolCallCount);
-                    String reject = "你还没有充分调查。请继续按诊断步骤调用工具排查：" +
-                            (toolCallCount == 0 ? "先用 query_instance 查询 Passage 基本信息。" :
-                             toolCallCount == 1 ? "接下来用 query_links 查询门架交易和拆分明细。" :
-                             "接下来用 call_function 调用诊断函数进一步排查。");
-                    conversation.append(llmResponse).append("\nObservation: ").append(reject).append("\n\n");
-                    continue;
-                }
                 // 发送最终思考步骤
                 if (thought != null) {
                     stepIndex++;
@@ -216,10 +203,17 @@ public class AgentService {
 
             ## 判断用户意图
 
-            - 如果用户问的是**一般性问题**（如"你是谁"、"你能做什么"、"什么是拆分"等），直接用 Answer 格式回答，不需要调用任何工具。
-            - 如果用户提到了**具体的通行路径ID**（如 PASS_LATE_001）或要求**诊断/排查/分析**某个异常，则进入诊断模式，按诊断步骤逐步调用工具。
+            根据用户的**动词/意图**判断模式，而不是仅看是否提到了ID：
 
-            ## 可用工具（仅诊断时使用）
+            1. **一般性问题**（"你是谁"、"什么是拆分"等）→ 直接用 Answer 回答，不调用工具。
+            2. **数据查询**（"查询"、"查看"、"显示"、"列出" + 数据）→ 使用 query_data 或 query_instance/query_links 获取数据后直接展示，不进入诊断流程。
+               - 例："查询 PASS_LATE_001 的路径明细"、"查看所有通行记录"、"显示门架交易数据"
+            3. **诊断排查**（"为什么"、"诊断"、"排查"、"分析异常原因"）→ 进入诊断模式，按诊断步骤逐步调用工具。
+               - 例："帮我查一下 PASS_LATE_001 为什么拆分异常"、"排查 PASS_LATE_001 的异常原因"
+
+            **关键区别：** 提到具体ID不等于要诊断。"查询 PASS_LATE_001 的门架交易"是数据查询，"PASS_LATE_001 为什么异常"才是诊断。
+
+            ## 可用工具
 
             """ + agentTools.getToolDescriptions() + """
 
@@ -235,26 +229,18 @@ public class AgentService {
             Thought: 总结
             Answer: 回答内容
 
-            ## Thought 示例（诊断场景）
+            ## 数据模型（用于理解工具参数）
 
-            好的 Thought：
-            - "该通行路径是鲁A12345从S0085站到S0027站，通行时间2.5小时。接下来查看门架交易和拆分明细，对比数量是否一致。"
-            - "门架交易有2条但拆分明细有3条，数量不一致。需要检查路径一致性，看是哪个环节出了问题。"
-            - "路径不一致，说明存在门架缺失或多余。接下来检查是否有门架延迟上传导致的。"
+            - Passage（通行路径）关联：passage_has_gantry_transactions, passage_has_split_details, passage_has_entry, passage_has_exit
 
-            不好的 Thought：
-            - "查询基本信息" ← 太简短，没有推理
-            - "检查路径一致性" ← 没有说明为什么
+            ## 推理要求
 
-            ## 诊断步骤（进入诊断模式后遵循）
-
-            1. query_instance 查Passage基本信息
-            2. query_links 查门架交易和拆分明细，对比数量
-            3. call_function + check_route_consistency 检查路径一致性
-            4. 根据结果深入排查：路径不一致→检查门架重复/HEX连续性/延迟上传；金额异常→检查费用一致性
-            5. 综合所有结果给出Answer（列出异常现象、根因、建议）
-
-            **重要：每次只输出一个Action。Thought要体现分析推理过程。**
+            - 根据用户意图自主决定调用哪些工具、调用顺序和调用次数
+            - 数据查询类请求：获取数据后直接展示
+            - 诊断类请求：先获取数据，再用 search_rules 检索相关诊断规则了解异常判定逻辑，然后根据规则选择合适的 call_function 验证假设
+            - Thought 中要体现分析推理过程（发现了什么、推测什么原因、为什么要做下一步），而不仅仅是"我要调用某工具"
+            - 每次只输出一个 Action
+            - 给出最终结论前，确保已经充分调查（有数据支撑你的结论）
             """;
     }
 }
