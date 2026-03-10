@@ -5,7 +5,7 @@ import com.mypalantir.meta.LinkType;
 import com.mypalantir.meta.Loader;
 import com.mypalantir.meta.ObjectType;
 import com.mypalantir.meta.Property;
-import com.mypalantir.meta.Function;
+import com.mypalantir.meta.FunctionDef;
 import com.mypalantir.meta.Rule;
 import com.mypalantir.service.DataSourceTestService;
 import com.mypalantir.service.SchemaService;
@@ -150,15 +150,15 @@ public class SchemaController {
     }
 
     @GetMapping("/functions")
-    public ResponseEntity<ApiResponse<List<Function>>> listFunctions() {
-        List<Function> functions = schemaService.listFunctions();
+    public ResponseEntity<ApiResponse<List<FunctionDef>>> listFunctions() {
+        List<FunctionDef> functions = schemaService.listFunctions();
         return ResponseEntity.ok(ApiResponse.success(functions));
     }
 
     @GetMapping("/functions/{name}")
-    public ResponseEntity<ApiResponse<Function>> getFunction(@PathVariable String name) {
+    public ResponseEntity<ApiResponse<FunctionDef>> getFunction(@PathVariable String name) {
         try {
-            Function function = schemaService.getFunction(name);
+            FunctionDef function = schemaService.getFunction(name);
             return ResponseEntity.ok(ApiResponse.success(function));
         } catch (Loader.NotFoundException e) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)

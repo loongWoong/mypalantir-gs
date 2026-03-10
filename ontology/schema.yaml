@@ -1228,7 +1228,102 @@ object_types:
         data_type: date
         required: false
         description: "逻辑日期"
+      # ---- 衍生属性（derived properties，由 CEL 表达式计算） ----
+      # 设计原则：
+      #   - 衍生属性只保留用户需要看到的业务指标（数据）
+      #   - 复杂判断逻辑（算法）抽为 functions，由规则直接调用
+      #   - SWRL 规则负责组合命题进行推理
 
+      # -- 基础统计指标 --
+      - name: path_detail_count
+        display_name: 路径明细数量
+        data_type: int
+        derived: true
+        expr: "size(links.path_has_path_details)"
+        description: "该通行路径关联的路径明细记录数"
+
+      - name: split_detail_count
+        display_name: 拆分明细数量
+        data_type: int
+        derived: true
+        expr: "size(links.path_has_split_details)"
+        description: "该通行路径关联的拆分明细记录数"
+
+      - name: gantry_transaction_count
+        display_name: 门架交易数量
+        data_type: int
+        derived: true
+        expr: "size(links.Path_has_gantry_transactions)"
+        description: "该通行路径关联的门架交易记录数"
+
+      # -- 费用汇总指标 --
+      - name: path_fee_total
+        display_name: 路径明细费用合计
+        data_type: float
+        derived: true
+        expr: >
+          links.path_has_path_details
+            .map(d, double(d.fee)).sum()
+        description: "路径明细中各收费单元费用的合计"
+
+      - name: split_fee_total
+        display_name: 拆分明细费用合计
+        data_type: float
+        derived: true
+        expr: >
+          links.path_has_split_details
+            .map(s, s.toll_interval_fee).sum()
+        description: "拆分明细中各区间通行费的合计"
+
+      - name: gantry_fee_total
+        display_name: 门架交易费用合计
+        data_type: float
+        derived: true
+        expr: >
+          links.Path_has_gantry_transactions
+            .map(g, double(g.fee)).sum()
+        description: "门架交易中各笔交易金额的合计"
+
+      - name: gantry_pay_fee_total
+        display_name: 门架应收金额合计
+        data_type: float
+        derived: true
+        expr: >
+          links.Path_has_gantry_transactions
+            .map(g, double(g.pay_fee)).sum()
+        description: "门架交易中各笔应收金额的合计"
+
+      # -- 简单等值判断（多规则共用，作为缓存保留） --
+      - name: detail_count_matched
+        display_name: 明细数量是否一致
+        data_type: boolean
+        derived: true
+        expr: >
+          size(links.path_has_path_details)
+          == size(links.path_has_split_details)
+        description: "路径明细数量与拆分明细数量是否一致"
+
+      - name: interval_set_matched
+        display_name: 收费单元是否对应
+        data_type: boolean
+        derived: true
+        expr: >
+          links.path_has_path_details
+            .map(d, d.identify_point_id).sort()
+          == links.path_has_split_details
+            .map(s, s.interval_id).sort()
+        description: "路径明细的标识点与拆分明细的收费单元是否一一对应"
+
+      - name: fee_matched
+        display_name: 费用是否一致
+        data_type: boolean
+        derived: true
+        expr: >
+          links.path_has_path_details
+            .map(d, double(d.fee)).sum()
+          == links.path_has_split_details
+            .map(s, s.toll_interval_fee).sum()
+        description: "路径明细费用合计与拆分明细通行费合计是否一致"
   - name: PathDetail
     display_name: 车辆通行路径明细
     description: "车辆通行路径明细"
@@ -2610,6 +2705,19 @@ link_types:
       vlp: plate_num
       vlpc: plate_color
 
+  - name: Path_has_gantry_transactions
+    display_name: 路径关联门架交易
+    description: "通行路径关联的门架交易记录数"
+    url: "http://192.168.22.217:8000/demo/Path_has_gantry_transactions.html"
+    source_type: Path
+    target_type: GantryTransaction
+    cardinality: one-to-many
+    direction: directed
+    property_mappings:
+      pass_id: pass_id
+      plate_num: vlp
+      plate_color: vlpc
+
   - name: path_has_path_details
     display_name: 路径持有路径明细
     description: "路径持有多个路径明细（passId -> passId）"
@@ -2730,3 +2838,455 @@ link_types:
       pay_card_type: pay_card_type
       clear_date: clear_date
       l_date: l_date
+# ============================================
+# 函数/工具定义（Functions / Tools）
+# 复杂算法抽为可调用函数，供推理引擎和智能体共用
+# 衍生属性负责"数据"，函数负责"算法"，规则负责"推理"
+# ============================================
+
+functions:
+
+  # ------------------------------------------
+  # 前置条件判定
+  # ------------------------------------------
+
+  - name: is_single_province_etc
+    display_name: 单省ETC交易判定
+    description: "判定出口交易是否为本省单省ETC交易（卡网络号==本省 ∧ 省份标识==单省 ∧ 支付方式==ETC）"
+    input:
+      - name: Path
+        type: Path
+        description: "通行路径实例"
+    output:
+      type: boolean
+      description: "true=单省ETC交易"
+    implementation: builtin
+
+  - name: is_obu_billing_mode1
+    display_name: OBU计费方式1判定
+    description: "判定通行介质为OBU且计费方式为1"
+    input:
+      - name: Path
+        type: Path
+        description: "通行路径实例"
+    output:
+      type: boolean
+      description: "true=OBU计费方式1"
+    implementation: builtin
+
+  # ------------------------------------------
+  # 路径一致性检测
+  # ------------------------------------------
+
+  - name: check_route_consistency
+    display_name: 拆分路径与门架路径一致性检测
+    description: "比较拆分结果的收费单元组合与门架流水的收费单元组合是否一致"
+    input:
+      - name: split_details
+        type: "list<SplitDetail>"
+        description: "拆分明细列表"
+      - name: gantry_transactions
+        type: "list<GantryTransaction>"
+        description: "门架交易列表"
+    output:
+      type: boolean
+      description: "true=路径一致"
+    implementation: builtin
+
+  - name: detect_duplicate_intervals
+    display_name: 收费单元重复检测
+    description: "检测门架流水中是否存在重复的收费单元（同一门架重复上报）"
+    input:
+      - name: gantry_transactions
+        type: "list<GantryTransaction>"
+        description: "门架交易列表"
+    output:
+      type: boolean
+      description: "true=存在重复"
+    implementation: builtin
+
+  - name: check_gantry_hex_continuity
+    display_name: 门架HEX连续性检测
+    description: >
+      检查一组门架交易按顺序排列后，相邻门架的HEX编码是否首尾衔接
+      （前一门架的 gantry_hex == 后一门架的 last_gantry_hex）
+    input:
+      - name: gantry_transactions
+        type: "list<GantryTransaction>"
+        description: "门架交易列表"
+    output:
+      type: boolean
+      description: "true=连续, false=存在断裂"
+    implementation: builtin
+
+  - name: check_gantry_count_complete
+    display_name: 门架数量完整性检测
+    description: "检查门架流水数量是否等于最后一条门架的顺序号（交易成功数）"
+    input:
+      - name: gantry_transactions
+        type: "list<GantryTransaction>"
+        description: "门架交易列表"
+    output:
+      type: boolean
+      description: "true=数量完整"
+    implementation: builtin
+
+  - name: detect_late_upload
+    display_name: 门架延迟上传检测
+    description: "检测是否存在门架流水接收时间晚于拆分时间的情况"
+    input:
+      - name: gantry_transactions
+        type: "list<GantryTransaction>"
+        description: "门架交易列表"
+      - name: split_time
+        type: date
+        description: "拆分时间"
+    output:
+      type: boolean
+      description: "true=存在延迟上传"
+    implementation: builtin
+
+  # ------------------------------------------
+  # 金额一致性检测
+  # ------------------------------------------
+
+  - name: check_fee_detail_consistency
+    display_name: 分单元金额一致性检测
+    description: "逐收费单元比较拆分金额与门架流水金额是否一致"
+    input:
+      - name: split_details
+        type: "list<SplitDetail>"
+        description: "拆分明细列表"
+      - name: gantry_transactions
+        type: "list<GantryTransaction>"
+        description: "门架交易列表"
+    output:
+      type: boolean
+      description: "true=逐单元金额一致"
+    implementation: builtin
+
+  - name: check_rounding_mismatch
+    display_name: 四舍五入取整差异检测
+    description: >
+      计算分省实收金额 = min(round(门架累计应收 * discount_rate), 门架累计实收)，
+      判断与门架累计实收是否因取整产生差异
+    input:
+      - name: gantry_transactions
+        type: "list<GantryTransaction>"
+        description: "门架交易列表"
+      - name: discount_rate
+        type: float
+        default: 0.95
+        description: "折扣率，默认0.95"
+    output:
+      type: boolean
+      description: "true=存在取整差异"
+    implementation: builtin
+
+  - name: check_balance_continuity
+    display_name: 卡内余额连续性检测
+    description: "检查相邻门架交易的交易后余额是否等于下一笔的交易前余额"
+    input:
+      - name: gantry_transactions
+        type: "list<GantryTransaction>"
+        description: "门架交易列表"
+    output:
+      type: boolean
+      description: "true=余额连续, false=存在断裂"
+    implementation: builtin
+
+  # ------------------------------------------
+  # 实际路径拟合
+  # ------------------------------------------
+
+  - name: fit_actual_route
+    display_name: 实际路径拟合
+    description: "根据牌识流水拟合车辆实际通行路径的收费单元序列，并与门架计费路径比对"
+    input:
+      - name: Path
+        type: Path
+        description: "通行路径实例"
+    output:
+      type: boolean
+      description: "true=实际路径与计费路径一致"
+    implementation: external
+
+
+# ============================================
+# 规则定义（Rules）
+# 衍生属性提供数据，函数提供算法，规则组合命题进行推理
+# ============================================
+
+rules:
+  # ==========================================================
+  # 第一部分：通行路径完整性校验（基础规则）
+  # 基于衍生属性的简单命题组合
+  # ==========================================================
+
+  # 规则1：明细数量一致 + 收费单元对应 + 费用一致 → 正常
+  - name: Path_integrity_normal
+    display_name: 通行路径完整性正常
+    description: "路径明细与拆分明细在数量、收费单元、费用三个维度均一致，判定为正常"
+    language: swrl
+    expr: >
+      Path(?p) ∧ detail_count_matched(?p, true)
+        ∧ interval_set_matched(?p, true)
+        ∧ fee_matched(?p, true)
+        → check_status(?p, "正常")
+
+  # 规则2：明细数量不一致 → 不正常
+  - name: Path_count_mismatch
+    display_name: 通行路径明细数量不一致
+    description: "路径明细数量与拆分明细数量不一致，判定为不正常"
+    language: swrl
+    expr: >
+      Path(?p) ∧ detail_count_matched(?p, false)
+        → check_status(?p, "不正常")
+
+  # 规则3：数量一致但收费单元不对应 → 不正常
+  - name: Path_interval_mismatch
+    display_name: 通行路径收费单元不对应
+    description: "明细数量一致但收费单元无法一一对应，判定为不正常"
+    language: swrl
+    expr: >
+      Path(?p) ∧ detail_count_matched(?p, true)
+        ∧ interval_set_matched(?p, false)
+        → check_status(?p, "不正常")
+
+  # 规则4：数量和单元都对应但费用不一致 → 费用异常
+  - name: Path_fee_mismatch
+    display_name: 通行路径费用不一致
+    description: "明细数量和收费单元均对应，但费用合计不一致，判定为费用异常"
+    language: swrl
+    expr: >
+      Path(?p) ∧ detail_count_matched(?p, true)
+        ∧ interval_set_matched(?p, true)
+        ∧ fee_matched(?p, false)
+        → check_status(?p, "费用异常")
+
+  # ------------------------------------------
+  # 链式推导：从通行路径异常上推到车辆
+  # ------------------------------------------
+
+  # 规则5：通行路径不正常 → 关联车辆标记存在异常通行
+  - name: vehicle_has_abnormal_Path
+    display_name: 车辆存在异常通行
+    description: "如果车辆关联的某条通行路径状态为不正常，则标记该车辆存在异常通行"
+    language: swrl
+    expr: >
+      Path(?p) ∧ check_status(?p, "不正常")
+        ∧ entry_involves_vehicle(?p, ?v)
+        → has_abnormal_Path(?v, true)
+
+  # 规则6：通行路径费用异常 → 关联车辆标记存在费用异常
+  - name: vehicle_has_fee_abnormal_Path
+    display_name: 车辆存在费用异常通行
+    description: "如果车辆关联的某条通行路径状态为费用异常，则标记该车辆存在费用异常"
+    language: swrl
+    expr: >
+      Path(?p) ∧ check_status(?p, "费用异常")
+        ∧ entry_involves_vehicle(?p, ?v)
+        → has_fee_abnormal_Path(?v, true)
+
+  # ------------------------------------------
+  # 链式推导：从车辆异常上推到收费站
+  # ------------------------------------------
+
+  # 规则7：收费站有异常通行记录 → 标记收费站需关注
+  - name: station_has_abnormal_traffic
+    display_name: 收费站存在异常通行
+    description: "如果某收费站的入口交易关联到不正常的通行路径，则标记该站需关注"
+    language: swrl
+    expr: >
+      Path(?p) ∧ check_status(?p, "不正常")
+        ∧ entry_at_station(?p, ?s)
+        → has_abnormal_traffic(?s, true)
+
+  # ==========================================================
+  # 第二部分：OBU拆分异常诊断（调用函数进行深度分析）
+  # 前置条件 → 三维度异常检测 → 根因诊断 → 链式传播
+  # ==========================================================
+
+  # ------------------------------------------
+  # 前置条件：OBU单省ETC交易筛选
+  # ------------------------------------------
+
+  - name: obu_split_scope
+    display_name: OBU拆分分析范围
+    description: "单省ETC + OBU计费方式1 的交易纳入拆分异常分析范围"
+    language: swrl
+    expr: >
+      Path(?p)
+        ∧ is_single_province_etc(?p) == true
+        ∧ is_obu_billing_mode1(?p) == true
+        → in_obu_split_scope(?p, true)
+
+  # ------------------------------------------
+  # 第一层判定：三维度异常检测
+  # ------------------------------------------
+
+  # 三维度均正常 → 拆分正常
+  - name: obu_split_normal
+    display_name: OBU拆分正常
+    description: "拆分路径、金额、实际路径三个维度均一致，判定OBU拆分正常"
+    language: swrl
+    expr: >
+      Path(?p) ∧ in_obu_split_scope(?p, true)
+        ∧ check_route_consistency(
+            links(?p, path_has_split_details),
+            links(?p, Path_has_gantry_transactions)) == true
+        ∧ check_fee_detail_consistency(
+            links(?p, path_has_split_details),
+            links(?p, Path_has_gantry_transactions)) == true
+        ∧ fit_actual_route(?p) == true
+        → obu_split_status(?p, "正常")
+
+  # 拆分路径与门架路径不一致
+  - name: obu_split_route_mismatch
+    display_name: OBU拆分路径不一致
+    description: "拆分结果的收费单元组合与门架流水的收费单元组合不一致"
+    language: swrl
+    expr: >
+      Path(?p) ∧ in_obu_split_scope(?p, true)
+        ∧ check_route_consistency(
+            links(?p, path_has_split_details),
+            links(?p, Path_has_gantry_transactions)) == false
+        → obu_split_status(?p, "路径不一致")
+
+  # 拆分金额与流水金额不一致
+  - name: obu_split_fee_mismatch
+    display_name: OBU拆分金额不一致
+    description: "拆分路径一致，但逐收费单元金额与门架流水金额不一致"
+    language: swrl
+    expr: >
+      Path(?p) ∧ in_obu_split_scope(?p, true)
+        ∧ check_route_consistency(
+            links(?p, path_has_split_details),
+            links(?p, Path_has_gantry_transactions)) == true
+        ∧ check_fee_detail_consistency(
+            links(?p, path_has_split_details),
+            links(?p, Path_has_gantry_transactions)) == false
+        → obu_split_status(?p, "金额不一致")
+
+  # 实际路径与计费路径不一致
+  - name: obu_split_actual_route_mismatch
+    display_name: 实际路径与计费路径不一致
+    description: "拆分路径和金额均一致，但牌识拟合的实际路径与门架计费路径不一致"
+    language: swrl
+    expr: >
+      Path(?p) ∧ in_obu_split_scope(?p, true)
+        ∧ check_route_consistency(
+            links(?p, path_has_split_details),
+            links(?p, Path_has_gantry_transactions)) == true
+        ∧ check_fee_detail_consistency(
+            links(?p, path_has_split_details),
+            links(?p, Path_has_gantry_transactions)) == true
+        ∧ fit_actual_route(?p) == false
+        → obu_split_status(?p, "实际路径偏差")
+
+  # ------------------------------------------
+  # 第二层诊断：路径不一致的根因
+  # ------------------------------------------
+
+  # 根因：门架收费单元重复
+  - name: obu_route_cause_duplicate_gantry
+    display_name: 根因-门架收费单元重复
+    description: "路径不一致的原因为门架流水中存在重复的收费单元（同一门架重复上报）"
+    language: swrl
+    expr: >
+      Path(?p) ∧ obu_split_status(?p, "路径不一致")
+        ∧ detect_duplicate_intervals(
+            links(?p, Path_has_gantry_transactions)) == true
+        → obu_route_cause(?p, "门架收费单元重复")
+
+  # 根因：ETC门架路径不完整（HEX不连续）
+  - name: obu_route_cause_etc_incomplete
+    display_name: 根因-ETC门架路径不完整
+    description: "路径不一致的原因为相邻门架HEX编码不连续，存在缺失门架"
+    language: swrl
+    expr: >
+      Path(?p) ∧ obu_split_status(?p, "路径不一致")
+        ∧ detect_duplicate_intervals(
+            links(?p, Path_has_gantry_transactions)) == false
+        ∧ check_gantry_hex_continuity(
+            links(?p, Path_has_gantry_transactions)) == false
+        → obu_route_cause(?p, "ETC门架不完整")
+
+  # 根因：CPC门架路径不完整（数量不符）
+  - name: obu_route_cause_cpc_incomplete
+    display_name: 根因-CPC门架路径不完整
+    description: "路径不一致的原因为门架流水数量与最后一条门架的顺序号不符"
+    language: swrl
+    expr: >
+      Path(?p) ∧ obu_split_status(?p, "路径不一致")
+        ∧ detect_duplicate_intervals(
+            links(?p, Path_has_gantry_transactions)) == false
+        ∧ check_gantry_hex_continuity(
+            links(?p, Path_has_gantry_transactions)) == true
+        ∧ check_gantry_count_complete(
+            links(?p, Path_has_gantry_transactions)) == false
+        → obu_route_cause(?p, "CPC门架不完整")
+
+  # 根因进一步：门架不完整是因为延迟上传
+  - name: obu_route_cause_late_upload
+    display_name: 根因-门架延迟上传
+    description: "门架不完整的进一步原因为门架流水接收时间晚于拆分时间"
+    language: swrl
+    expr: >
+      Path(?p)
+        ∧ (obu_route_cause(?p, "ETC门架不完整")
+           ∨ obu_route_cause(?p, "CPC门架不完整"))
+        ∧ detect_late_upload(
+            links(?p, Path_has_gantry_transactions),
+            links(?p, path_has_split_details)[0].pro_split_time) == true
+        → obu_incomplete_reason(?p, "门架延迟上传")
+
+  # ------------------------------------------
+  # 第二层诊断：金额不一致的根因
+  # ------------------------------------------
+
+  # 根因：四舍五入取整差异
+  - name: obu_fee_cause_rounding
+    display_name: 根因-四舍五入取整差异
+    description: "金额不一致的原因为分省实收与门架实收因取整产生差异"
+    language: swrl
+    expr: >
+      Path(?p) ∧ obu_split_status(?p, "金额不一致")
+        ∧ check_rounding_mismatch(
+            links(?p, Path_has_gantry_transactions), 0.95) == true
+        → obu_fee_cause(?p, "四舍五入取整差异")
+
+  # 根因：卡内累计金额异常
+  - name: obu_fee_cause_balance_anomaly
+    display_name: 根因-卡内累计金额异常
+    description: "金额不一致的原因为相邻门架交易的卡内余额不衔接（前笔交易后余额≠后笔交易前余额）"
+    language: swrl
+    expr: >
+      Path(?p) ∧ obu_split_status(?p, "金额不一致")
+        ∧ check_balance_continuity(
+            links(?p, Path_has_gantry_transactions)) == false
+        → obu_fee_cause(?p, "卡内累计金额异常")
+
+  # ------------------------------------------
+  # 链式传播：OBU拆分异常上推到车辆和收费站
+  # ------------------------------------------
+
+  - name: vehicle_has_obu_split_abnormal
+    display_name: 车辆存在OBU拆分异常
+    description: "车辆关联的通行路径存在OBU拆分异常（路径不一致/金额不一致/实际路径偏差）"
+    language: swrl
+    expr: >
+      Path(?p) ∧ in_obu_split_scope(?p, true)
+        ∧ obu_split_status(?p, ?status) ∧ (?status != "正常")
+        ∧ entry_involves_vehicle(?p, ?v)
+        → has_obu_split_abnormal(?v, true)
+
+  - name: station_has_obu_split_abnormal
+    display_name: 收费站存在OBU拆分异常
+    description: "收费站关联的通行路径存在OBU拆分异常"
+    language: swrl
+    expr: >
+      Path(?p) ∧ in_obu_split_scope(?p, true)
+        ∧ obu_split_status(?p, ?status) ∧ (?status != "正常")
+        ∧ entry_at_station(?p, ?s)
+        → has_obu_split_abnormal(?s, true)

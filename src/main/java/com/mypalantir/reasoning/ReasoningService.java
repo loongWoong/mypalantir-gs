@@ -14,9 +14,13 @@ import org.springframework.stereotype.Service;
 
 import jakarta.annotation.PostConstruct;
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /**
  * 推理服务：整合 CEL 求值器、函数框架、SWRL 解析器和前向链引擎。
+ * 按当前加载的本体模型（Loader）动态解析规则与关联，支持 schema.yaml / toll.yaml 等任意模型。
  */
 @Service
 public class ReasoningService {
@@ -26,7 +30,9 @@ public class ReasoningService {
     private final FunctionRegistry functionRegistry;
     private final CelEvaluator celEvaluator;
 
-    private List<SWRLRule> parsedRules;
+    /** 按当前模型路径缓存已解析规则，切换模型时自动失效 */
+    private volatile String cachedRulesPath;
+    private volatile List<SWRLRule> cachedParsedRules;
 
     public ReasoningService(Loader loader, QueryService queryService, FunctionRegistry functionRegistry) {
         this.loader = loader;
@@ -37,25 +43,37 @@ public class ReasoningService {
 
     @PostConstruct
     public void initialize() {
-        // 注册内置函数
         registerBuiltinFunctions();
+    }
 
-        // 解析 SWRL 规则
-        try {
-            OntologySchema schema = loader.getSchema();
-            SWRLParser parser = new SWRLParser(schema, functionRegistry);
-            this.parsedRules = parser.parseAll(schema);
-            System.out.println("Parsed " + parsedRules.size() + " SWRL rules");
-
-            // 检查未注册的 builtin 函数
-            List<String> missing = functionRegistry.getMissingBuiltins(schema);
-            if (!missing.isEmpty()) {
-                System.err.println("WARNING: Missing builtin functions: " + missing);
+    /**
+     * 获取当前模型下已解析的 SWRL 规则，切换模型后会自动重新解析
+     */
+    private List<SWRLRule> getParsedRules() {
+        OntologySchema schema = loader.getSchema();
+        if (schema == null) return List.of();
+        String path = loader.getFilePath();
+        if (path == null) path = "";
+        if (!path.equals(cachedRulesPath)) {
+            synchronized (this) {
+                if (!path.equals(cachedRulesPath)) {
+                    try {
+                        SWRLParser parser = new SWRLParser(schema, functionRegistry);
+                        cachedParsedRules = parser.parseAll(schema);
+                        cachedRulesPath = path;
+                        List<String> missing = functionRegistry.getMissingBuiltins(schema);
+                        if (!missing.isEmpty()) {
+                            System.err.println("WARNING: Missing builtin functions: " + missing);
+                        }
+                    } catch (Exception e) {
+                        System.err.println("Failed to parse SWRL rules: " + e.getMessage());
+                        cachedParsedRules = List.of();
+                        cachedRulesPath = path;
+                    }
+                }
             }
-        } catch (Exception e) {
-            System.err.println("Failed to initialize reasoning service: " + e.getMessage());
-            this.parsedRules = List.of();
         }
+        return cachedParsedRules != null ? cachedParsedRules : List.of();
     }
 
     private void registerBuiltinFunctions() {
@@ -72,83 +90,208 @@ public class ReasoningService {
     }
 
     /**
-     * 对单个 Passage 执行推理
+     * 对当前本体模型下指定对象类型与实例执行推理（按右上角所选本体模型）。
+     * 关联数据从当前 schema 动态获取，支持 Passage(toll) / Path(schema) 等任意类型。
      */
-    public InferenceResult inferPassage(String passageId) throws Exception {
-        // 1. 查询 Passage 实例数据
-        Map<String, Object> passage = queryInstance("Passage", passageId);
-        if (passage == null) {
-            throw new IllegalArgumentException("Passage not found: " + passageId);
+    public InferenceResult inferInstance(String objectType, String instanceId) throws Exception {
+        Map<String, Object> instance = queryInstance(objectType, instanceId);
+        if (instance == null) {
+            throw new IllegalArgumentException("Instance not found: " + objectType + " id=" + instanceId);
         }
 
-        // 2. 查询关联数据
+        // 从当前 schema 获取该类型的所有出边，动态查询关联数据
         Map<String, List<Map<String, Object>>> linkedData = new LinkedHashMap<>();
-        linkedData.put("passage_has_gantry_transactions", queryLinkedInstances("Passage", passageId, "passage_has_gantry_transactions"));
-        linkedData.put("passage_has_split_details", queryLinkedInstances("Passage", passageId, "passage_has_split_details"));
-        linkedData.put("passage_has_details", queryLinkedInstances("Passage", passageId, "passage_has_details"));
-
-        // 查询出口交易和介质信息（供 IsSingleProvinceEtc/IsObuBillingMode1 使用）
-        List<Map<String, Object>> exitTxList = queryLinkedInstances("Passage", passageId, "passage_has_exit");
-        if (!exitTxList.isEmpty()) {
-            passage.put("_exit_transaction", exitTxList.get(0));
+        OntologySchema schema = loader.getSchema();
+        if (schema != null && schema.getLinkTypes() != null) {
+            for (LinkType lt : schema.getLinkTypes()) {
+                if (!objectType.equals(lt.getSourceType())) continue;
+                List<Map<String, Object>> list = queryLinkedInstances(objectType, instanceId, lt.getName());
+                linkedData.put(lt.getName(), list);
+            }
+            // 入边：如 Path 的 gantry_to_path（GantryTransaction→Path），按“目标=当前实例”查源表，供规则 links(?p, Path_has_gantry_transactions) 使用
+            for (LinkType lt : schema.getLinkTypes()) {
+                if (!objectType.equals(lt.getTargetType())) continue;
+                List<Map<String, Object>> incoming = queryIncomingLinkInstances(lt, instanceId);
+                if (incoming.isEmpty()) continue;
+                String canonicalKey = inferIncomingLinkKey(objectType, lt);
+                linkedData.put(canonicalKey, incoming);
+            }
+            // 规则/衍生属性中使用的 key 可能与 link type 名不一致（如 Path_has_split_details vs path_has_split_details）
+            addLinkedDataAliases(linkedData, objectType);
         }
 
-        // 查询入口交易，再从入口交易查询车辆和收费站
-        List<Map<String, Object>> entryTxList = queryLinkedInstances("Passage", passageId, "passage_has_entry");
-        if (!entryTxList.isEmpty()) {
-            Map<String, Object> entryTx = entryTxList.get(0);
-            String entryTxId = String.valueOf(entryTx.get("id"));
+        // Passage：补充出口/入口、_media、entry_involves_vehicle、entry_at_station
+        enrichEntryExitAndMedia(objectType, instanceId, instance, linkedData);
+        // Path：同样需要出口/入口和 _media，否则 is_single_province_etc / is_obu_billing_mode1 恒为 false，OBU 规则不会触发
+        enrichPathEntryExitAndMedia(objectType, instanceId, instance, linkedData);
 
-            // 从入口交易查车辆
-            List<Map<String, Object>> vehicles = queryLinkedInstances("EntryTransaction", entryTxId, "entry_involves_vehicle");
-            linkedData.put("entry_involves_vehicle", vehicles);
-
-            // 从入口交易查收费站
-            List<Map<String, Object>> stations = queryLinkedInstances("EntryTransaction", entryTxId, "entry_at_station");
-            linkedData.put("entry_at_station", stations);
-
-            // 从入口交易获取介质信息（EntryTransaction 表本身包含 MEDIATYPE/CARDNET 列）
-            Map<String, Object> mediaPseudo = new LinkedHashMap<>();
-            mediaPseudo.put("media_type", entryTx.get("media_type"));
-            mediaPseudo.put("card_net", entryTx.get("card_net"));
-            passage.put("_media", mediaPseudo);
-        } else {
-            linkedData.put("entry_involves_vehicle", List.of());
-            linkedData.put("entry_at_station", List.of());
-        }
-
-        // 3. 计算衍生属性
-        Map<String, Object> derivedValues = computeDerivedProperties(passage, linkedData);
-
-        // 4. 执行前向链推理
-        ForwardChainEngine engine = new ForwardChainEngine(functionRegistry, parsedRules);
-        return engine.infer(passage, linkedData, derivedValues);
+        Map<String, Object> derivedValues = computeDerivedProperties(objectType, instance, linkedData);
+        ForwardChainEngine engine = new ForwardChainEngine(functionRegistry, getParsedRules());
+        return engine.infer(instance, linkedData, derivedValues);
     }
 
     /**
-     * 批量推理
+     * 查询入边：给定 link（如 gantry_to_path，target=Path），按 targetId 查所有 source 实例（如该 Path 下的所有门架交易）
      */
-    public List<Map<String, Object>> inferBatch(int limit) throws Exception {
-        // 查询所有 Passage
+    private List<Map<String, Object>> queryIncomingLinkInstances(LinkType linkType, String targetId) {
+        DataSourceMapping linkDs = linkType.getDataSource();
+        if (linkDs == null || !linkDs.isConfigured()) return List.of();
+        String targetIdColumn = linkDs.getTargetIdColumn();
+        if (targetIdColumn == null) return List.of();
+        String sourceType = linkType.getSourceType();
+        String fkProperty = findPropertyForColumn(sourceType, targetIdColumn);
+        if (fkProperty == null) return List.of();
+        try {
+            Map<String, Object> queryMap = new HashMap<>();
+            queryMap.put("from", sourceType);
+            queryMap.put("select", List.of("*"));
+            queryMap.put("where", Map.of(fkProperty, targetId));
+            QueryExecutor.QueryResult result = queryService.executeQuery(queryMap);
+            return result.getRows();
+        } catch (Exception e) {
+            System.err.println("Failed to query incoming link " + linkType.getName() + ": " + e.getMessage());
+            return List.of();
+        }
+    }
+
+    /** 入边在 linkedData 中的 key：如 gantry_to_path(target=Path) -> path_has_gantry_transactions */
+    private String inferIncomingLinkKey(String targetType, LinkType linkType) {
+        String source = linkType.getSourceType();
+        String name = linkType.getName();
+        if (name != null && name.contains("_to_")) {
+            String stem = source.replaceAll("Transaction$", "").toLowerCase();
+            return targetType.toLowerCase() + "_has_" + stem + "_transactions";
+        }
+        return "incoming_" + name;
+    }
+
+    /**
+     * 为 linkedData 增加规则/衍生属性中使用的别名（如 Path_has_split_details 与 path_has_split_details）
+     * 规则和 CEL 中常用 PascalCase 的 link 名，而 link_types 定义为小写
+     */
+    private void addLinkedDataAliases(Map<String, List<Map<String, Object>>> linkedData, String objectType) {
+        Map<String, List<Map<String, Object>>> aliases = new HashMap<>();
+        for (String key : new ArrayList<>(linkedData.keySet())) {
+            List<Map<String, Object>> list = linkedData.get(key);
+            if (list == null) continue;
+            String pascal = toPascalLinkKey(key);
+            if (!key.equals(pascal)) aliases.put(pascal, list);
+            if ("path_has_path_details".equals(key)) aliases.put("Path_has_details", list);
+        }
+        linkedData.putAll(aliases);
+    }
+
+    /** 小写 link 名转成规则中使用的形式：path_has_split_details -> Path_has_split_details */
+    private static String toPascalLinkKey(String linkName) {
+        if (linkName == null || linkName.isEmpty()) return linkName;
+        StringBuilder sb = new StringBuilder();
+        boolean cap = true;
+        for (char c : linkName.toCharArray()) {
+            if (c == '_') { sb.append(c); cap = true; continue; }
+            sb.append(cap ? Character.toUpperCase(c) : c);
+            cap = false;
+        }
+        return sb.toString();
+    }
+
+    /**
+     * 为 Path 补充出口/入口交易和 _media，使 is_single_province_etc、is_obu_billing_mode1 能求值，
+     * 从而 in_obu_split_scope 可能为 true，OBU 规则才能触发。依赖 schema 中 exit_to_path、entry_to_path 的 data_source 配置。
+     */
+    private void enrichPathEntryExitAndMedia(String objectType, String instanceId,
+                                             Map<String, Object> instance,
+                                             Map<String, List<Map<String, Object>>> linkedData) {
+        if (!"Path".equals(objectType)) return;
+        OntologySchema schema = loader.getSchema();
+        if (schema == null || schema.getLinkTypes() == null) return;
+        for (LinkType lt : schema.getLinkTypes()) {
+            if (!"Path".equals(lt.getTargetType())) continue;
+            if ("exit_to_path".equals(lt.getName())) {
+                List<Map<String, Object>> list = queryIncomingLinkInstances(lt, instanceId);
+                if (!list.isEmpty()) instance.put("_exit_transaction", list.get(0));
+                break;
+            }
+        }
+        for (LinkType lt : schema.getLinkTypes()) {
+            if (!"Path".equals(lt.getTargetType())) continue;
+            if ("entry_to_path".equals(lt.getName())) {
+                List<Map<String, Object>> list = queryIncomingLinkInstances(lt, instanceId);
+                if (!list.isEmpty()) {
+                    Map<String, Object> entryTx = list.get(0);
+                    Map<String, Object> mediaPseudo = new LinkedHashMap<>();
+                    mediaPseudo.put("media_type", entryTx.get("media_type"));
+                    mediaPseudo.put("card_net", entryTx.get("card_net"));
+                    instance.put("_media", mediaPseudo);
+                    String entryTxId = String.valueOf(entryTx.get("id"));
+                    if (schema.getLinkTypes().stream().anyMatch(l -> "entry_involves_vehicle".equals(l.getName()) && "EntryTransaction".equals(l.getSourceType())))
+                        linkedData.put("entry_involves_vehicle", queryLinkedInstances("EntryTransaction", entryTxId, "entry_involves_vehicle"));
+                    if (schema.getLinkTypes().stream().anyMatch(l -> "entry_at_station".equals(l.getName()) && "EntryTransaction".equals(l.getSourceType())))
+                        linkedData.put("entry_at_station", queryLinkedInstances("EntryTransaction", entryTxId, "entry_at_station"));
+                }
+                break;
+            }
+        }
+    }
+
+    /**
+     * 兼容 toll 本体：为 Passage 补充出口/入口交易及 entry 侧的车辆、收费站、介质信息
+     */
+    private void enrichEntryExitAndMedia(String objectType, String instanceId,
+                                         Map<String, Object> instance,
+                                         Map<String, List<Map<String, Object>>> linkedData) {
+        if (!"Passage".equals(objectType)) return;
+        List<Map<String, Object>> exitTxList = queryLinkedInstances("Passage", instanceId, "passage_has_exit");
+        if (!exitTxList.isEmpty()) {
+            instance.put("_exit_transaction", exitTxList.get(0));
+        }
+        List<Map<String, Object>> entryTxList = queryLinkedInstances("Passage", instanceId, "passage_has_entry");
+        if (!entryTxList.isEmpty()) {
+            Map<String, Object> entryTx = entryTxList.get(0);
+            String entryTxId = String.valueOf(entryTx.get("id"));
+            linkedData.put("entry_involves_vehicle", queryLinkedInstances("EntryTransaction", entryTxId, "entry_involves_vehicle"));
+            linkedData.put("entry_at_station", queryLinkedInstances("EntryTransaction", entryTxId, "entry_at_station"));
+            Map<String, Object> mediaPseudo = new LinkedHashMap<>();
+            mediaPseudo.put("media_type", entryTx.get("media_type"));
+            mediaPseudo.put("card_net", entryTx.get("card_net"));
+            instance.put("_media", mediaPseudo);
+        } else {
+            linkedData.putIfAbsent("entry_involves_vehicle", List.of());
+            linkedData.putIfAbsent("entry_at_station", List.of());
+        }
+    }
+
+    /**
+     * 对单个 Passage 执行推理（兼容旧接口，等价于 inferInstance("Passage", passageId)）
+     */
+    public InferenceResult inferPassage(String passageId) throws Exception {
+        return inferInstance("Passage", passageId);
+    }
+
+    /**
+     * 批量推理：对当前本体模型下指定对象类型的一批实例执行推理
+     */
+    public List<Map<String, Object>> inferBatch(String objectType, int limit) throws Exception {
         Map<String, Object> queryMap = new HashMap<>();
-        queryMap.put("from", "Passage");
-        queryMap.put("select", List.of("id", "pass_id"));
+        queryMap.put("from", objectType);
+        queryMap.put("select", List.of("id"));
         queryMap.put("limit", limit);
 
         QueryExecutor.QueryResult result = queryService.executeQuery(queryMap);
         List<Map<String, Object>> results = new ArrayList<>();
 
         for (Map<String, Object> row : result.getRows()) {
-            String passageId = String.valueOf(row.get("id"));
+            String id = String.valueOf(row.get("id"));
             try {
-                InferenceResult ir = inferPassage(passageId);
+                InferenceResult ir = inferInstance(objectType, id);
                 Map<String, Object> entry = new LinkedHashMap<>();
-                entry.put("passage_id", passageId);
+                entry.put("object_type", objectType);
+                entry.put("instance_id", id);
                 entry.put("result", ir.toMap());
                 results.add(entry);
             } catch (Exception e) {
                 Map<String, Object> entry = new LinkedHashMap<>();
-                entry.put("passage_id", passageId);
+                entry.put("object_type", objectType);
+                entry.put("instance_id", id);
                 entry.put("error", e.getMessage());
                 results.add(entry);
             }
@@ -157,35 +300,33 @@ public class ReasoningService {
     }
 
     /**
-     * 计算衍生属性
+     * 计算指定对象类型的衍生属性（按当前 schema）
      */
-    private Map<String, Object> computeDerivedProperties(Map<String, Object> passage,
+    private Map<String, Object> computeDerivedProperties(String objectType,
+                                                          Map<String, Object> instance,
                                                           Map<String, List<Map<String, Object>>> linkedData) {
         Map<String, Object> derived = new LinkedHashMap<>();
-
         try {
             OntologySchema schema = loader.getSchema();
-            ObjectType passageType = schema.getObjectTypes().stream()
-                .filter(ot -> "Passage".equals(ot.getName()))
+            if (schema == null || schema.getObjectTypes() == null) return derived;
+            ObjectType ot = schema.getObjectTypes().stream()
+                .filter(t -> objectType.equals(t.getName()))
                 .findFirst()
                 .orElse(null);
-
-            if (passageType != null && passageType.getProperties() != null) {
-                for (Property prop : passageType.getProperties()) {
-                    if (prop.isDerived() && prop.getExpr() != null) {
-                        try {
-                            Object value = celEvaluator.evaluate(prop.getExpr(), passage, linkedData);
-                            derived.put(prop.getName(), value);
-                        } catch (Exception e) {
-                            System.err.println("Failed to evaluate derived property '" + prop.getName() + "': " + e.getMessage());
-                        }
+            if (ot == null || ot.getProperties() == null) return derived;
+            for (Property prop : ot.getProperties()) {
+                if (prop.isDerived() && prop.getExpr() != null) {
+                    try {
+                        Object value = celEvaluator.evaluate(prop.getExpr(), instance, linkedData);
+                        derived.put(prop.getName(), value);
+                    } catch (Exception e) {
+                        System.err.println("Failed to evaluate derived property '" + prop.getName() + "': " + e.getMessage());
                     }
                 }
             }
         } catch (Exception e) {
             System.err.println("Failed to compute derived properties: " + e.getMessage());
         }
-
         return derived;
     }
 
@@ -390,10 +531,32 @@ public class ReasoningService {
     }
 
     /**
-     * 获取已解析的规则数量
+     * 获取当前模型下已解析的规则数量
      */
     public int getParsedRuleCount() {
-        return parsedRules != null ? parsedRules.size() : 0;
+        return getParsedRules().size();
+    }
+
+    /**
+     * 获取当前本体中“有规则”的对象类型，供推理页按当前模型选择类型（如 Passage / Path）
+     */
+    public List<String> listInferenceRootTypes() {
+        OntologySchema schema = loader.getSchema();
+        if (schema == null || schema.getRules() == null || schema.getObjectTypes() == null) return List.of();
+        Set<String> typeNames = schema.getObjectTypes().stream().map(ObjectType::getName).collect(Collectors.toSet());
+        // 从规则 expr 中提取 Type(?var) 中的 Type，且该 Type 在当前 object_types 中存在
+        Pattern p = Pattern.compile("\\b([A-Za-z][A-Za-z0-9_]*)\\s*\\(");
+        Set<String> rootTypes = new LinkedHashSet<>();
+        for (Rule r : schema.getRules()) {
+            String expr = r.getExpr();
+            if (expr == null) continue;
+            Matcher m = p.matcher(expr);
+            while (m.find()) {
+                String name = m.group(1);
+                if (typeNames.contains(name)) rootTypes.add(name);
+            }
+        }
+        return new ArrayList<>(rootTypes);
     }
 
     /**

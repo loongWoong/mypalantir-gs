@@ -124,12 +124,12 @@ public class Loader {
         merged.setRules(mergedRules);
 
         // 合并函数：用户 schema 优先，然后添加系统 schema 中不存在同名的函数
-        List<Function> mergedFunctions = new ArrayList<>();
+        List<FunctionDef> mergedFunctions = new ArrayList<>();
         if (userSchema.getFunctions() != null) {
             mergedFunctions.addAll(userSchema.getFunctions());
         }
         if (systemSchema.getFunctions() != null) {
-            for (Function systemFn : systemSchema.getFunctions()) {
+            for (FunctionDef systemFn : systemSchema.getFunctions()) {
                 boolean exists = mergedFunctions.stream()
                     .anyMatch(f -> f.getName() != null && f.getName().equals(systemFn.getName()));
                 if (!exists) {
@@ -302,7 +302,7 @@ public class Loader {
             .toList();
     }
 
-    public List<Function> listFunctions() {
+    public List<FunctionDef> listFunctions() {
         OntologySchema currentSchema = getSchema();
         if (currentSchema == null) {
             return List.of();
@@ -310,12 +310,12 @@ public class Loader {
         return currentSchema.getFunctions() != null ? List.copyOf(currentSchema.getFunctions()) : List.of();
     }
 
-    public Function getFunction(String name) throws NotFoundException {
+    public FunctionDef getFunction(String name) throws NotFoundException {
         OntologySchema currentSchema = getSchema();
         if (currentSchema == null || currentSchema.getFunctions() == null) {
             throw new NotFoundException("schema not loaded");
         }
-        for (Function f : currentSchema.getFunctions()) {
+        for (FunctionDef f : currentSchema.getFunctions()) {
             if (name.equals(f.getName())) {
                 return f;
             }

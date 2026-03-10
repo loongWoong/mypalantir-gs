@@ -733,7 +733,17 @@ export interface ReasoningStatus {
 }
 
 export const reasoningApi = {
-  infer: async (passageId: string): Promise<InferenceResult> => {
+  /** 按当前本体模型对指定对象类型与实例执行推理 */
+  infer: async (objectType: string, instanceId: string): Promise<InferenceResult> => {
+    const response = await apiClient.post<ApiResponse<InferenceResult>>(
+      '/reasoning/infer',
+      { object_type: objectType, instance_id: instanceId }
+    );
+    return response.data.data;
+  },
+
+  /** 兼容旧接口：仅传 passageId 时等价于 object_type=Passage */
+  inferPassage: async (passageId: string): Promise<InferenceResult> => {
     const response = await apiClient.post<ApiResponse<InferenceResult>>(
       '/reasoning/infer',
       { passage_id: passageId }
@@ -741,11 +751,17 @@ export const reasoningApi = {
     return response.data.data;
   },
 
-  batch: async (limit = 10): Promise<Record<string, any>[]> => {
+  batch: async (objectType: string, limit = 10): Promise<Record<string, any>[]> => {
     const response = await apiClient.post<ApiResponse<Record<string, any>[]>>(
       '/reasoning/batch',
-      { limit }
+      { object_type: objectType, limit }
     );
+    return response.data.data;
+  },
+
+  /** 当前本体中有规则的对象类型（推理根类型），随右上角模型切换 */
+  rootTypes: async (): Promise<string[]> => {
+    const response = await apiClient.get<ApiResponse<string[]>>('/reasoning/root-types');
     return response.data.data;
   },
 

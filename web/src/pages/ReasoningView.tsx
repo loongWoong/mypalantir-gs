@@ -4,41 +4,55 @@ import type { InferenceResult, ReasoningStatus, Instance, CycleDetail } from '..
 
 export default function ReasoningView() {
   const [status, setStatus] = useState<ReasoningStatus | null>(null);
-  const [passages, setPassages] = useState<Instance[]>([]);
-  const [selectedPassageId, setSelectedPassageId] = useState('');
+  const [rootTypes, setRootTypes] = useState<string[]>([]);
+  const [selectedObjectType, setSelectedObjectType] = useState('');
+  const [instances, setInstances] = useState<Instance[]>([]);
+  const [selectedInstanceId, setSelectedInstanceId] = useState('');
+  const [instanceInput, setInstanceInput] = useState('');
   const [inferenceResult, setInferenceResult] = useState<InferenceResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [passageInput, setPassageInput] = useState('');
 
-  // 加载推理引擎状态和 Passage 列表
+  // 按当前本体模型加载：推理根类型 + 状态
   useEffect(() => {
-    const loadData = async () => {
+    const load = async () => {
       try {
-        const [statusData, passageData] = await Promise.all([
+        const [statusData, types] = await Promise.all([
           reasoningApi.status(),
-          instanceApi.list('Passage', 0, 200),
+          reasoningApi.rootTypes(),
         ]);
         setStatus(statusData);
-        setPassages(passageData.items);
+        setRootTypes(types);
+        if (types.length > 0 && !selectedObjectType) setSelectedObjectType(types[0]);
       } catch (err: any) {
-        console.error('Failed to load data:', err);
+        console.error('Failed to load reasoning data:', err);
       }
     };
-    loadData();
+    load();
   }, []);
 
-  // 执行推理
+  // 切换对象类型时加载该类型实例列表
+  useEffect(() => {
+    if (!selectedObjectType) {
+      setInstances([]);
+      return;
+    }
+    instanceApi.list(selectedObjectType, 0, 200)
+      .then((res) => setInstances(res.items))
+      .catch(() => setInstances([]));
+  }, [selectedObjectType]);
+
   const handleInfer = async () => {
-    const id = passageInput || selectedPassageId;
-    if (!id) return;
+    const objectType = selectedObjectType;
+    const id = instanceInput || selectedInstanceId;
+    if (!objectType || !id) return;
 
     setLoading(true);
     setError('');
     setInferenceResult(null);
 
     try {
-      const result = await reasoningApi.infer(id);
+      const result = await reasoningApi.infer(objectType, id);
       setInferenceResult(result);
     } catch (err: any) {
       setError(err.response?.data?.message || err.message || 'Inference failed');
@@ -87,40 +101,53 @@ export default function ReasoningView() {
         </div>
       )}
 
-      {/* 输入区域 */}
+      {/* 输入区域：按当前本体模型选择对象类型与实例 */}
       <div className="mb-6 bg-white rounded-lg border border-gray-200 p-4">
-        <h2 className="text-sm font-semibold text-gray-700 mb-3">Select Passage for Inference</h2>
-        <div className="flex gap-3">
-          <div className="flex-1">
+        <h2 className="text-sm font-semibold text-gray-700 mb-3">选择推理对象（随右上角本体模型变化）</h2>
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="min-w-[140px]">
+            <label className="block text-xs text-gray-500 mb-1">对象类型</label>
             <select
               className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              value={selectedPassageId}
-              onChange={(e) => { setSelectedPassageId(e.target.value); setPassageInput(''); }}
+              value={selectedObjectType}
+              onChange={(e) => { setSelectedObjectType(e.target.value); setSelectedInstanceId(''); setInstanceInput(''); }}
             >
-              <option value="">-- Select a Passage --</option>
-              {passages.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.pass_id || p.id}
-                </option>
+              <option value="">-- 选择类型 --</option>
+              {rootTypes.map((t) => (
+                <option key={t} value={t}>{t}</option>
               ))}
             </select>
           </div>
-          <div className="text-sm text-gray-400 self-center">or</div>
-          <div className="flex-1">
+          <div className="flex-1 min-w-[160px]">
+            <label className="block text-xs text-gray-500 mb-1">实例</label>
+            <select
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              value={selectedInstanceId}
+              onChange={(e) => { setSelectedInstanceId(e.target.value); setInstanceInput(''); }}
+            >
+              <option value="">-- 选择实例 --</option>
+              {instances.map((i) => (
+                <option key={i.id} value={i.id}>{i.pass_id ?? i.path_id ?? i.id}</option>
+              ))}
+            </select>
+          </div>
+          <div className="text-sm text-gray-400 self-center">或</div>
+          <div className="flex-1 min-w-[160px]">
+            <label className="block text-xs text-gray-500 mb-1">直接输入 ID</label>
             <input
               type="text"
               className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Enter Passage ID directly"
-              value={passageInput}
-              onChange={(e) => { setPassageInput(e.target.value); setSelectedPassageId(''); }}
+              placeholder="输入实例 ID"
+              value={instanceInput}
+              onChange={(e) => { setInstanceInput(e.target.value); setSelectedInstanceId(''); }}
             />
           </div>
           <button
             onClick={handleInfer}
-            disabled={loading || (!selectedPassageId && !passageInput)}
+            disabled={loading || !selectedObjectType || (!selectedInstanceId && !instanceInput)}
             className="px-6 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
           >
-            {loading ? 'Inferring...' : 'Run Inference'}
+            {loading ? '推理中...' : '执行推理'}
           </button>
         </div>
       </div>

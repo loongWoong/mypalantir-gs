@@ -26,7 +26,6 @@ import {
   ClipboardDocumentCheckIcon,
   WrenchScrewdriverIcon,
   ShieldCheckIcon,
-  CpuChipIcon,
   CpuChipIcon
 } from '@heroicons/react/24/outline';
 import type { ObjectType, LinkType, ModelInfo, CurrentModel } from '../api/client';
