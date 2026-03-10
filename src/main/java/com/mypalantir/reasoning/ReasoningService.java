@@ -364,14 +364,16 @@ public class ReasoningService {
     }
 
     /**
-     * 查询单个实例
+     * 查询单个实例，按 schema 定义的结构构建查询。
+     * - WHERE：使用 schema 中定义的实例标识属性（id 或 pass_id 等）
+     * - SELECT：使用 schema 中定义的非衍生属性列表，而非 SELECT *
      */
     public Map<String, Object> queryInstance(String objectType, String id) {
         try {
             Map<String, Object> queryMap = new HashMap<>();
             queryMap.put("from", objectType);
-            queryMap.put("select", List.of("*"));
-            queryMap.put("where", Map.of("id", id));
+            queryMap.put("select", getSchemaSelectProperties(objectType));
+            queryMap.put("where", Map.of(resolveInstanceIdProperty(objectType), id));
             queryMap.put("limit", 1);
 
             QueryExecutor.QueryResult result = queryService.executeQuery(queryMap);
@@ -380,6 +382,43 @@ public class ReasoningService {
             System.err.println("Failed to query instance: " + e.getMessage());
             return null;
         }
+    }
+
+    /**
+     * 解析对象类型的实例标识属性名。
+     * 按 schema 定义：若有 id 则用 id；若为 Path 等以 pass_id 为主键的，用 pass_id；否则用 id。
+     */
+    private String resolveInstanceIdProperty(String objectTypeName) {
+        OntologySchema schema = loader.getSchema();
+        if (schema == null || schema.getObjectTypes() == null) return "id";
+        ObjectType ot = schema.getObjectTypes().stream()
+            .filter(t -> objectTypeName.equals(t.getName()))
+            .findFirst()
+            .orElse(null);
+        if (ot == null || ot.getProperties() == null) return "id";
+        boolean hasId = ot.getProperties().stream().anyMatch(p -> "id".equals(p.getName()));
+        if (hasId) return "id";
+        boolean hasPassId = ot.getProperties().stream().anyMatch(p -> "pass_id".equals(p.getName()));
+        if (hasPassId) return "pass_id";
+        return "id";
+    }
+
+    /**
+     * 按 schema 定义获取 SELECT 属性列表（非衍生属性），保证按 schema 结构查询。
+     */
+    private List<String> getSchemaSelectProperties(String objectTypeName) {
+        OntologySchema schema = loader.getSchema();
+        if (schema == null || schema.getObjectTypes() == null) return List.of("*");
+        ObjectType ot = schema.getObjectTypes().stream()
+            .filter(t -> objectTypeName.equals(t.getName()))
+            .findFirst()
+            .orElse(null);
+        if (ot == null || ot.getProperties() == null) return List.of("*");
+        List<String> props = new ArrayList<>();
+        for (Property p : ot.getProperties()) {
+            if (!p.isDerived()) props.add(p.getName());
+        }
+        return props.isEmpty() ? List.of("*") : props;
     }
 
     /**

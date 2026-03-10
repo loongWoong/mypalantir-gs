@@ -67,6 +67,12 @@ object_types:
         required: false
         description: "通行介质类型"
       
+      - name: card_net
+        display_name: 卡网络号
+        data_type: string
+        required: false
+        description: "卡网络号(如3701=山东省)，用于is_single_province_etc判定"
+      
       - name: media_no
         display_name: OBU编号
         data_type: string
@@ -2739,6 +2745,16 @@ link_types:
     direction: directed
     property_mappings:
       pass_id: pass_id
+
+  - name: entry_at_station
+    display_name: 入口收费站
+    description: "路径的入口收费站（Path.en_toll_station_id -> TollSection.id）"
+    source_type: Path
+    target_type: TollSection
+    cardinality: many-to-one
+    direction: directed
+    property_mappings:
+      en_toll_station_id: id
 
   - name: path_to_clear_result
     display_name: 路径映射为清分结果

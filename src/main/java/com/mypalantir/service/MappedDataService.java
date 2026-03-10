@@ -438,6 +438,10 @@ public class MappedDataService {
         
         // 构建数据类型
         String dataType = buildDataType(sourceType, columnSize, decimalDigits);
+        // MySQL 不允许对 BLOB/TEXT 列建主键（需指定 key length）。主键 id 强制使用 VARCHAR(255)
+        if ("id".equals(propertyName) && isTextOrBlobType(dataType)) {
+            dataType = "VARCHAR(255)";
+        }
         def.append(dataType);
         
         // 添加NOT NULL约束
@@ -458,6 +462,16 @@ public class MappedDataService {
         }
         
         return def.toString();
+    }
+
+    /**
+     * 判断数据类型是否为 TEXT 或 BLOB 类型
+     * MySQL 不允许对 BLOB/TEXT 列建主键（需指定 key length）
+     */
+    private boolean isTextOrBlobType(String dataType) {
+        if (dataType == null) return false;
+        String upper = dataType.toUpperCase();
+        return upper.contains("TEXT") || upper.contains("BLOB");
     }
 
     /**

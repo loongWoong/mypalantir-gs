@@ -1,4 +1,4 @@
--- gsdb.clearreport definition
+-- gsdb310.clearreport definition
 
 CREATE TABLE `clearreport` (
   `id` varchar(255) NOT NULL,
@@ -47,7 +47,7 @@ CREATE TABLE `clearreport` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='清分报表同步表';
 
 
--- gsdb.clearresult definition
+-- gsdb310.clearresult definition
 
 CREATE TABLE `clearresult` (
   `id` varchar(255) NOT NULL,
@@ -69,12 +69,13 @@ CREATE TABLE `clearresult` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='清分结果同步表';
 
 
--- gsdb.entrytransaction definition
+-- gsdb310.entrytransaction definition
 
 CREATE TABLE `entrytransaction` (
   `vlpc` int DEFAULT NULL COMMENT '车牌颜色',
   `limit_weight` int DEFAULT NULL COMMENT '限载总重(kg)',
   `media_type` int DEFAULT NULL COMMENT '通行介质类型',
+  `card_net` varchar(20) DEFAULT NULL COMMENT '卡网络号(如3701=山东省)',
   `en_time` varchar(200) DEFAULT NULL COMMENT '入口时间',
   `en_toll_lane_id` varchar(200) DEFAULT NULL COMMENT '入口车道号(国标)',
   `oper_name` varchar(200) DEFAULT NULL COMMENT '操作员姓名',
@@ -106,122 +107,127 @@ CREATE TABLE `entrytransaction` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='入口车道流水同步表';
 
 
--- gsdb.exittransaction definition
+-- gsdb310.exittransaction definition
 
 CREATE TABLE `exittransaction` (
-  `ID` longtext,
-  `PASSID` longtext,
-  `SOURCEID` longtext,
-  `RETURNMONEYSN` longtext,
-  `LDATE` datetime DEFAULT NULL,
-  `EXTIME` datetime DEFAULT NULL,
-  `STATIONRECEIVETIME` datetime DEFAULT NULL,
-  `RECEIVETIME` datetime DEFAULT NULL,
-  `OPERID` longtext,
-  `OPERNAME` longtext,
-  `EXTOLLLANEID` longtext,
-  `EXTOLLSTATIONID` longtext,
-  `EXTOLLSTATIONNAME` longtext,
-  `MEDIATYPE` int DEFAULT NULL,
-  `MEDIANO` longtext,
-  `EXVLP` longtext,
-  `EXVLPC` int DEFAULT NULL,
-  `IDENTIFYVLP` longtext,
-  `IDENTIFYVLPC` int DEFAULT NULL,
-  `TRANSCODE` longtext,
-  `TRANSTYPE` longtext,
-  `MULTIPROVINCE` int DEFAULT NULL,
-  `PROVINCEGROUP` longtext,
-  `TOLLPROVINCEID` longtext,
-  `TRANSPAYTYPE` int DEFAULT NULL,
-  `PAYTYPE` int DEFAULT NULL,
-  `PAYCARDID` longtext,
-  `AXLECOUNT` int DEFAULT NULL,
-  `AXISINFO` longtext,
-  `EXWEIGHT` int DEFAULT NULL,
-  `LIMITWEIGHT` int DEFAULT NULL,
-  `OVERWEIGHTRATE` int DEFAULT NULL,
-  `DESCRIPTION` longtext,
-  `VSPEED` int DEFAULT NULL,
-  `SPECIALTYPE` longtext,
-  `LANESPINFO` longtext,
-  `SPINFO` longtext,
-  `MODIFYFLAG` int DEFAULT NULL,
-  `TOLLDISTANCE` int DEFAULT NULL,
-  `REALDISTANCE` int DEFAULT NULL,
-  `FREETYPE` int DEFAULT NULL,
-  `FREEMODE` int DEFAULT NULL,
-  `FREEINFO` longtext,
-  `TRANSFEE` bigint DEFAULT NULL,
-  `BALANCEBEFORE` bigint DEFAULT NULL,
-  `BALANCEAFTER` bigint DEFAULT NULL,
-  `FEE` bigint DEFAULT NULL,
-  `DISCOUNTFEE` bigint DEFAULT NULL,
-  `PAYFEE` bigint DEFAULT NULL,
-  `OBUPAYFEE` bigint DEFAULT NULL,
-  `OBUDISCOUNTFEE` bigint DEFAULT NULL,
-  `FEEMILEAGE` bigint DEFAULT NULL,
-  `COLLECTFEE` bigint DEFAULT NULL,
-  `REBATEMONEY` bigint DEFAULT NULL,
-  `CARDCOSTFEE` bigint DEFAULT NULL,
-  `UNPAYFEE` bigint DEFAULT NULL,
-  `UNPAYFLAG` longtext,
-  `UNPAYCARDCOST` bigint DEFAULT NULL,
-  `TICKETFEE` bigint DEFAULT NULL,
-  `ENTOLLMONEY` bigint DEFAULT NULL,
-  `ENFREEMONEY` bigint DEFAULT NULL,
-  `ENLASTMONEY` bigint DEFAULT NULL,
-  `EXITEXTLIST` longtext,
-  `ACTUALFEECLASS` int DEFAULT '1'
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  `modify_flag` int DEFAULT NULL COMMENT '修改标志',
+  `ticket_fee` bigint DEFAULT NULL COMMENT '次票代收',
+  `unpay_flag` text COMMENT '欠通行费标志',
+  `return_money_sn` text COMMENT '补费记录号',
+  `collect_fee` bigint DEFAULT NULL COMMENT '代收外省金额',
+  `oper_name` text COMMENT '操作员姓名',
+  `free_mode` int DEFAULT NULL COMMENT '免费方式',
+  `receive_time` datetime DEFAULT NULL COMMENT '接收时间',
+  `unpay_card_cost` bigint DEFAULT NULL COMMENT '欠卡成本金额(分）',
+  `ex_toll_station_name` text COMMENT '出口收费站名称',
+  `id` varchar(255) NOT NULL COMMENT '交易流水号',
+  `pay_card_id` text COMMENT '支付卡卡号',
+  `unpay_fee` bigint DEFAULT NULL COMMENT '欠通行费金额(分）',
+  `station_receive_time` datetime DEFAULT NULL COMMENT '站级接收时间',
+  `trans_type` text COMMENT '交易类型',
+  `over_weight_rate` int DEFAULT NULL COMMENT '超限率',
+  `obu_pay_fee` bigint DEFAULT NULL COMMENT 'OBU应收金额',
+  `pay_fee` bigint DEFAULT NULL COMMENT '应收金额',
+  `trans_code` text COMMENT '交易编码',
+  `sp_info` text COMMENT '业务分析特情状态',
+  `trans_fee` bigint DEFAULT NULL COMMENT '卡面扣费金额',
+  `en_last_money` bigint DEFAULT NULL COMMENT '本次最终支付通行费金额',
+  `en_free_money` bigint DEFAULT NULL COMMENT '通行费免收金额（分）',
+  `free_type` int DEFAULT NULL COMMENT '免费区间类型',
+  `identify_vlp` text COMMENT '识别车牌号',
+  `ex_toll_lane_id` text COMMENT '出口车道号(国标)',
+  `pay_type` int DEFAULT NULL COMMENT '支付类型',
+  `identify_vlpc` int DEFAULT NULL COMMENT '识别车牌颜色',
+  `special_type` text COMMENT '部特情类型',
+  `ex_vlp` text COMMENT '出口实际车牌号',
+  `l_date` datetime DEFAULT NULL COMMENT '逻辑日期',
+  `ex_time` datetime DEFAULT NULL COMMENT '出口时间',
+  `oper_id` text COMMENT '操作员工号',
+  `toll_province_id` text COMMENT '出口省中心 Id',
+  `limit_weight` int DEFAULT NULL COMMENT '限载总重(kg)',
+  `media_type` int DEFAULT NULL COMMENT '通行介质类型',
+  `source_id` text COMMENT '原始流水号',
+  `real_distance` int DEFAULT NULL COMMENT '实际里程(米)',
+  `axle_count` int DEFAULT NULL COMMENT '轴数',
+  `trans_pay_type` int DEFAULT NULL COMMENT '交易支付方式',
+  `pass_id` text COMMENT '通行标识ID',
+  `ex_weight` int DEFAULT NULL COMMENT '出口重量',
+  `rebate_money` bigint DEFAULT NULL COMMENT '折扣优惠金额(分)',
+  `description` text COMMENT '交易描述',
+  `axis_info` text COMMENT '轴组信息',
+  `media_no` text COMMENT '通行介质编码',
+  `balance_after` bigint DEFAULT NULL COMMENT '交易后余额（分）',
+  `fee_mileage` bigint DEFAULT NULL COMMENT '计费总里程数',
+  `en_toll_money` bigint DEFAULT NULL COMMENT '应收通行费金额(分)',
+  `discount_fee` bigint DEFAULT NULL COMMENT '优惠金额',
+  `ex_vlpc` int DEFAULT NULL COMMENT '出口实际车牌颜色',
+  `toll_distance` int DEFAULT NULL COMMENT '计费里程（米）',
+  `free_info` text COMMENT '免费区域信息',
+  `v_speed` int DEFAULT NULL COMMENT '特情处理类型',
+  `fee` bigint DEFAULT NULL COMMENT '总交易金额',
+  `province_group` text COMMENT '省中心编号组合',
+  `balance_before` bigint DEFAULT NULL COMMENT '交易前余额（分）',
+  `card_cost_fee` bigint DEFAULT NULL COMMENT '卡成本金额(分)',
+  `ex_toll_station_id` text COMMENT '出口站号(国标)',
+  `obu_discount_fee` bigint DEFAULT NULL COMMENT 'OBU优惠金额',
+  `lane_sp_info` text COMMENT '车道特情状态',
+  `multi_province` int DEFAULT NULL COMMENT '是否多省交易',
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='出口车道流水同步表';
 
 
--- gsdb.gantrytransaction definition
+-- gsdb310.gantrytransaction definition
 
 CREATE TABLE `gantrytransaction` (
-  `TRADEID` longtext,
-  `PASSID` longtext,
-  `TRANSTIME` datetime DEFAULT NULL,
-  `RECORDGENTIME` datetime DEFAULT NULL,
-  `RECEIVETIME` datetime DEFAULT NULL,
-  `GANTRYID` longtext,
-  `GANTRYTYPE` longtext,
-  `ORIGINALFLAG` int DEFAULT NULL,
-  `GANTRYHEX` longtext,
-  `LASTGANTRYHEX` longtext,
-  `LASTGANTRYTIME` datetime DEFAULT NULL,
-  `MEDIATYPE` int DEFAULT NULL,
-  `CPUCARDID` longtext,
-  `VLP` longtext,
-  `VLPC` int DEFAULT NULL,
-  `VEHICLETYPE` int DEFAULT NULL,
-  `IDENTIFYVEHICLETYPE` int DEFAULT NULL,
-  `TRADETYPE` int DEFAULT NULL,
-  `AXLECOUNT` int DEFAULT NULL,
-  `TOTALWEIGHT` int DEFAULT NULL,
-  `VEHICLELENGTH` int DEFAULT NULL,
-  `VEHICLEWIDTH` int DEFAULT NULL,
-  `VEHICLEHIGHT` int DEFAULT NULL,
-  `FEEMILEAGE` int DEFAULT NULL,
-  `TRANSFEE` bigint DEFAULT NULL,
-  `BALANCEBEFORE` bigint DEFAULT NULL,
-  `BALANCEAFTER` bigint DEFAULT NULL,
-  `PAYFEE` bigint DEFAULT NULL,
-  `FEE` bigint DEFAULT NULL,
-  `DISCOUNTFEE` bigint DEFAULT NULL,
-  `TOLLINTERVALID` longtext,
-  `TOLLINTERVALSIGN` longtext,
-  `PAYFEEGROUP` longtext,
-  `FEEGROUP` longtext,
-  `DISCOUNTFEEGROUP` longtext,
-  `DESCRIPTION` longtext,
-  `FEECALCSPECIAL` int DEFAULT NULL,
-  `CHARGESSPECIALTYPE` longtext,
-  `ISFIXDATA` int DEFAULT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  `id` varchar(255) NOT NULL,
+  `toll_interval_id` varchar(200) DEFAULT NULL COMMENT '收费单元编号组合',
+  `charges_special_type` varchar(200) DEFAULT NULL COMMENT '收费特情类型',
+  `gantry_type` varchar(200) DEFAULT NULL COMMENT '门架类型',
+  `vlpc` int DEFAULT NULL COMMENT '计费车牌颜色',
+  `media_type` int DEFAULT NULL COMMENT '通行介质类型',
+  `trans_time` datetime DEFAULT NULL COMMENT '计费交易时间',
+  `gantry_id` varchar(200) DEFAULT NULL COMMENT '门架编号',
+  `axle_count` int DEFAULT NULL COMMENT '车轴数',
+  `last_gantry_hex` varchar(200) DEFAULT NULL COMMENT '上个门架hex编码',
+  `total_weight` int DEFAULT NULL COMMENT '车货总重',
+  `pass_id` varchar(200) DEFAULT NULL COMMENT '通行标识 ID',
+  `receive_time` datetime DEFAULT NULL COMMENT '接收时间',
+  `fee_calc_special` int DEFAULT NULL COMMENT '计费接口特情值',
+  `pay_fee_group` varchar(200) DEFAULT NULL COMMENT '应收金额组合',
+  `fee_group` varchar(200) DEFAULT NULL COMMENT '交易金额组合',
+  `description` varchar(200) DEFAULT NULL COMMENT '对交易的文字解释',
+  `toll_interval_sign` varchar(200) DEFAULT NULL COMMENT '收费单元处理标识',
+  `vlp` varchar(200) DEFAULT NULL COMMENT '计费车牌号',
+  `fee_mileage` int DEFAULT NULL COMMENT '计费里程数',
+  `balance_after` bigint DEFAULT NULL COMMENT '交易后余额（分）',
+  `pay_fee` bigint DEFAULT NULL COMMENT '应收金额',
+  `discount_fee` bigint DEFAULT NULL COMMENT '优惠金额',
+  `trans_fee` bigint DEFAULT NULL COMMENT '卡面扣费金额',
+  `identify_vehicle_type` int DEFAULT NULL COMMENT '识别的车型',
+  `gantry_hex` varchar(200) DEFAULT NULL COMMENT '门架HEX值',
+  `fee` bigint DEFAULT NULL COMMENT '交易金额',
+  `vehicle_length` int DEFAULT NULL COMMENT '车辆长',
+  `record_gen_time` datetime DEFAULT NULL COMMENT '记录生成时间',
+  `last_gantry_time` datetime DEFAULT NULL COMMENT '通过上个门架的时间',
+  `vehicle_width` int DEFAULT NULL COMMENT '车辆宽',
+  `balance_before` bigint DEFAULT NULL COMMENT '交易前余额（分）',
+  `original_flag` int DEFAULT NULL COMMENT '数据来源',
+  `trade_id` varchar(200) NOT NULL COMMENT '计费交易编号',
+  `cpu_card_id` varchar(200) DEFAULT NULL COMMENT 'CPU卡编号',
+  `is_fix_data` int DEFAULT NULL COMMENT '是否修正过',
+  `trade_type` int DEFAULT NULL COMMENT '交易类型',
+  `vehicle_hight` int DEFAULT NULL COMMENT '车辆高',
+  `vehicle_type` int DEFAULT NULL COMMENT '计费车型',
+  `discount_fee_group` varchar(200) DEFAULT NULL COMMENT '优惠金额组合',
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='ETC门架计费流水同步表';
 
 
--- gsdb.`path` definition
+-- gsdb310.`path` definition
 
 CREATE TABLE `path` (
   `id` varchar(255) NOT NULL,
@@ -244,24 +250,27 @@ CREATE TABLE `path` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='车辆通行路径同步表';
 
 
--- gsdb.pathdetail definition
+-- gsdb310.pathdetail definition
 
 CREATE TABLE `pathdetail` (
-  `ID` longtext,
-  `PASSID` longtext,
-  `PLATENUM` longtext,
-  `PLATECOLOR` int DEFAULT NULL,
-  `IDENTIFYPOINTID` longtext,
-  `IDENTIFYPOINTHEX` longtext,
-  `INTERVALS` longtext,
-  `FEE` longtext,
-  `PAYFEE` longtext,
-  `DISCOUNTFEE` longtext,
-  `TRANSTIME` longtext
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  `pass_id` varchar(200) DEFAULT NULL COMMENT '通行标识',
+  `plate_num` varchar(200) DEFAULT NULL COMMENT '车牌号码',
+  `plate_color` int DEFAULT NULL COMMENT '车牌颜色',
+  `identify_point_hex` varchar(200) DEFAULT NULL COMMENT '标识点Hex码',
+  `fee` varchar(200) DEFAULT NULL COMMENT '收费单元费用，多个费用使用"|"隔开',
+  `trans_time` varchar(200) DEFAULT NULL COMMENT '交易时间',
+  `intervals` varchar(200) DEFAULT NULL COMMENT '收费单元编号，多个编号使用"|"隔开',
+  `id` varchar(200) NOT NULL COMMENT '交易标识',
+  `identify_point_id` varchar(200) DEFAULT NULL COMMENT '标识点标识',
+  `pay_fee` varchar(200) DEFAULT NULL COMMENT '收费单元支付费用，多个费用使用"|"隔开',
+  `discount_fee` varchar(200) DEFAULT NULL COMMENT '收费单元优惠费用，多个费用使用"|"隔开',
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='车辆通行路径明细同步表';
 
 
--- gsdb.splitdetail definition
+-- gsdb310.splitdetail definition
 
 CREATE TABLE `splitdetail` (
   `id` varchar(255) NOT NULL,
@@ -281,93 +290,7 @@ CREATE TABLE `splitdetail` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='拆分明细同步表';
 
 
--- gsdb.tollgantry definition
-
-CREATE TABLE `tollgantry` (
-  `veh_detector_uid` varchar(256) DEFAULT NULL COMMENT '车辆检测器管理唯一标识',
-  `snmp_version` varchar(8) DEFAULT NULL COMMENT 'SNMP协议版本',
-  `lng` varchar(20) NOT NULL COMMENT '门架地理位置经度',
-  `end_time` datetime NOT NULL COMMENT '门架停止运行时间',
-  `load_detection_model` varchar(256) DEFAULT NULL COMMENT '载重检测器设备型号',
-  `secret_key` varchar(256) DEFAULT NULL COMMENT 'SNMP秘钥',
-  `equipment_ip` varchar(64) DEFAULT NULL COMMENT '设备IP地址',
-  `vplr_id` varchar(512) NOT NULL COMMENT 'VPLR设备ID',
-  `weather_detector_uid` varchar(256) DEFAULT NULL COMMENT '天气检测器管理唯一标识',
-  `status` bigint NOT NULL COMMENT '门架运行状态',
-  `receive_time` datetime DEFAULT NULL COMMENT '数据接收时间',
-  `community` varchar(128) DEFAULT NULL COMMENT 'SNMP团体名',
-  `rsu_man_uid` varchar(256) NOT NULL COMMENT 'RSU(路侧单元)管理唯一标识',
-  `id` varchar(19) NOT NULL COMMENT '主键ID',
-  `veh_detector_model` varchar(256) DEFAULT NULL COMMENT '车辆检测器设备型号',
-  `load_detection_uid` varchar(256) DEFAULT NULL COMMENT '载重检测器管理唯一标识',
-  `security_name` varchar(128) DEFAULT NULL COMMENT 'SNMP安全名',
-  `type` bigint NOT NULL COMMENT '收费门架类型',
-  `operators` varchar(8) NOT NULL COMMENT '系统操作员信息',
-  `response_info` varchar(1024) DEFAULT NULL COMMENT '系统响应信息',
-  `batch_file_name` varchar(128) DEFAULT NULL COMMENT '数据处理批次文件名',
-  `line_type` varchar(8) NOT NULL COMMENT '通信线路类型',
-  `reetc_gantry_hex` varchar(10) DEFAULT NULL COMMENT '重ETC门架的十六进制标识',
-  `controller_id` varchar(256) NOT NULL COMMENT '控制器设备ID',
-  `snmp_port` bigint DEFAULT NULL COMMENT 'SNMP协议端口号',
-  `record_gen_time` datetime NOT NULL COMMENT '数据记录生成时间',
-  `power_controller_model` varchar(256) DEFAULT NULL COMMENT '电源控制器设备型号',
-  `veh_detector_id` varchar(256) DEFAULT NULL COMMENT '车辆检测器设备ID',
-  `name` varchar(150) DEFAULT NULL COMMENT '收费门架名称',
-  `class_detector_uid` varchar(256) DEFAULT NULL COMMENT '车型检测器管理唯一标识',
-  `use_status` bigint NOT NULL COMMENT '设备使用状态',
-  `pile_number` varchar(20) NOT NULL COMMENT '门架所在位置的桩号',
-  `temp_controller_id` varchar(256) DEFAULT NULL COMMENT '温度控制器设备ID',
-  `agency_gantry_ids` varchar(19) DEFAULT NULL COMMENT '关联的机构门架ID列表',
-  `start_time` datetime NOT NULL COMMENT '门架开始运行时间',
-  `lane_count` varchar(10) DEFAULT NULL COMMENT '门架覆盖的车道数量',
-  `etc_gantry_hex` varchar(512) NOT NULL COMMENT 'ETC门架的十六进制标识',
-  `weather_detector_id` varchar(256) DEFAULT NULL COMMENT '天气检测器设备ID',
-  `safe_equip_id` varchar(256) DEFAULT NULL COMMENT '安全设备设备ID',
-  `boundary_type` bigint DEFAULT NULL COMMENT '门架边界类型',
-  `server_db_ver` varchar(256) NOT NULL COMMENT '服务器数据库版本号',
-  `pro_time` datetime DEFAULT NULL COMMENT '数据处理完成时间',
-  `weather_detector_model` varchar(256) DEFAULT NULL COMMENT '天气检测器设备型号',
-  `response_code` bigint NOT NULL COMMENT '系统响应代码',
-  `vplr_uid` varchar(256) NOT NULL COMMENT 'VPLR(车牌识别设备)管理唯一标识',
-  `power_controller_uid` varchar(256) DEFAULT NULL COMMENT '电源控制器管理唯一标识',
-  `encryption` varchar(256) DEFAULT NULL COMMENT 'SNMP加密方式',
-  `toll_intervals` varchar(512) NOT NULL COMMENT '收费区间信息',
-  `gantry_sign` varchar(10) DEFAULT NULL COMMENT '门架标识信息',
-  `server_id` varchar(256) NOT NULL COMMENT '服务器设备ID',
-  `vplr_model` varchar(256) NOT NULL COMMENT 'VPLR设备型号',
-  `security_level` varchar(16) DEFAULT NULL COMMENT 'SNMP安全级别',
-  `authentication` varchar(256) DEFAULT NULL COMMENT 'SNMP认证方式',
-  `hdv_uid` varchar(256) NOT NULL COMMENT 'HDV(高清视频设备)管理唯一标识',
-  `auth_key` varchar(512) DEFAULT NULL COMMENT 'SNMP认证密钥',
-  `data_merge_point` varchar(64) NOT NULL COMMENT '数据合并点标识',
-  `controller_uid` varchar(256) NOT NULL COMMENT '控制器管理唯一标识',
-  `safe_equip_uid` varchar(256) DEFAULT NULL COMMENT '安全设备管理唯一标识',
-  `server_uid` varchar(256) NOT NULL COMMENT '服务器管理唯一标识',
-  `power_controller_id` varchar(256) DEFAULT NULL COMMENT '电源控制器设备ID',
-  `safe_equip_model` varchar(256) DEFAULT NULL COMMENT '安全设备设备型号',
-  `hdv_id` varchar(512) NOT NULL COMMENT 'HDV设备ID',
-  `rsu_id` varchar(512) NOT NULL COMMENT 'RSU设备ID',
-  `temp_controller_uid` varchar(256) DEFAULT NULL COMMENT '温度控制器管理唯一标识',
-  `rsu_model` varchar(256) NOT NULL COMMENT 'RSU设备型号',
-  `server_sys_ver` varchar(256) NOT NULL COMMENT '服务器系统版本号',
-  `load_detection_id` varchar(256) DEFAULT NULL COMMENT '载重检测器设备ID',
-  `controller_model` varchar(256) NOT NULL COMMENT '控制器设备型号',
-  `imei` varchar(64) DEFAULT NULL COMMENT '设备IMEI号码',
-  `hdv_model` varchar(256) NOT NULL COMMENT 'HDV设备型号',
-  `operation` bigint NOT NULL COMMENT '系统操作类型',
-  `class_detector_model` varchar(256) DEFAULT NULL COMMENT '车型检测器设备型号',
-  `temp_controller_model` varchar(256) DEFAULT NULL COMMENT '温度控制器设备型号',
-  `server_model` varchar(256) NOT NULL COMMENT '服务器设备型号',
-  `lat` varchar(20) NOT NULL COMMENT '门架地理位置纬度',
-  `controller_sys_ver` varchar(256) NOT NULL COMMENT '控制器系统版本号',
-  `class_detector_id` varchar(256) DEFAULT NULL COMMENT '车型检测器设备ID',
-  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
-  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='收费门架同步表';
-
-
--- gsdb.tollinterval definition
+-- gsdb310.tollinterval definition
 
 CREATE TABLE `tollinterval` (
   `response_code` bigint NOT NULL COMMENT '系统响应代码',
@@ -401,38 +324,31 @@ CREATE TABLE `tollinterval` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='收费单元同步表';
 
 
--- gsdb.tollsection definition
+-- gsdb310.tollsection definition
 
 CREATE TABLE `tollsection` (
-  `ID` longtext,
-  `ROADID` longtext,
-  `NAME` longtext,
-  `SECTIONOWNERID` longtext,
-  `TYPE` bigint DEFAULT NULL,
-  `LENGTH` bigint DEFAULT NULL,
-  `STARTSTAKENUM` longtext,
-  `STARTLAT` longtext,
-  `STARTLNG` longtext,
-  `ENDSTAKENUM` longtext,
-  `ENDLAT` longtext,
-  `ENDLNG` longtext,
-  `TAX` bigint DEFAULT NULL,
-  `TAXRATE` decimal(38,18) DEFAULT NULL,
-  `CHARGETYPE` bigint DEFAULT NULL,
-  `TOLLROADS` longtext,
-  `BUILTTIME` datetime DEFAULT NULL,
-  `STARTTIME` datetime DEFAULT NULL,
-  `ENDTIME` datetime DEFAULT NULL,
-  `OPERATION` bigint DEFAULT NULL,
-  `RECORDGENTIME` datetime DEFAULT NULL,
-  `STATUS` longtext,
-  `BATCHFILENAME` longtext,
-  `RESPONSECODE` bigint DEFAULT NULL,
-  `RESPONSEINFO` longtext,
-  `RECEIVETIME` datetime DEFAULT NULL,
-  `PROTIME` datetime DEFAULT NULL,
-  `NEXTTAXRATE` decimal(38,18) DEFAULT NULL,
-  `NEXTRATEDATE` datetime DEFAULT NULL,
-  `SECTIONLEVEL` bigint DEFAULT NULL,
-  `ONLINETYPE` bigint DEFAULT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  `start_lng` varchar(20) NOT NULL COMMENT '起点经度',
+  `end_lng` varchar(20) NOT NULL COMMENT '终点经度',
+  `start_stake_num` varchar(20) NOT NULL COMMENT '起点桩号',
+  `end_time` datetime NOT NULL COMMENT '结束时间',
+  `length` bigint NOT NULL COMMENT '长度',
+  `record_gen_time` datetime DEFAULT NULL COMMENT '记录生成时间',
+  `tax` bigint NOT NULL COMMENT '税费',
+  `end_stake_num` varchar(20) NOT NULL COMMENT '终点桩号',
+  `end_lat` varchar(20) NOT NULL COMMENT '终点纬度',
+  `name` varchar(150) NOT NULL COMMENT '名称',
+  `charge_type` bigint NOT NULL COMMENT '收费类型',
+  `status` varchar(1) DEFAULT NULL COMMENT '状态',
+  `section_owner_id` varchar(7) NOT NULL COMMENT '路段所有者ID',
+  `start_time` datetime NOT NULL COMMENT '开始时间',
+  `operation` bigint NOT NULL COMMENT '操作',
+  `id` varchar(11) NOT NULL COMMENT '路段ID（主键）',
+  `toll_roads` varchar(150) NOT NULL COMMENT '收费路段',
+  `type` bigint NOT NULL COMMENT '类型',
+  `road_id` varchar(12) NOT NULL COMMENT '道路ID',
+  `start_lat` varchar(20) NOT NULL COMMENT '起点纬度',
+  `tax_rate` varchar(16) NOT NULL COMMENT '税率',
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='收费路段同步表';
