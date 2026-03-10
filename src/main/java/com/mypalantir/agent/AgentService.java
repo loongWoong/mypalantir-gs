@@ -93,7 +93,7 @@ public class AgentService {
                 if (isDiagnosticMode && toolCallCount < MIN_TOOL_CALLS) {
                     logger.info("Step {}: LLM tried to answer early (toolCalls={}), rejecting", i + 1, toolCallCount);
                     String reject = "你还没有充分调查。请继续按诊断步骤调用工具排查：" +
-                            (toolCallCount == 0 ? "先用 query_instance 查询 Passage 基本信息。" :
+                            (toolCallCount == 0 ? "先用 query_instance 查询当前本体的推理对象（如 Path/Passage）基本信息。" :
                              toolCallCount == 1 ? "接下来用 query_links 查询门架交易和拆分明细。" :
                              "接下来用 call_function 调用诊断函数进一步排查。");
                     conversation.append(llmResponse).append("\nObservation: ").append(reject).append("\n\n");
@@ -248,7 +248,7 @@ public class AgentService {
 
             ## 诊断步骤（进入诊断模式后遵循）
 
-            1. query_instance 查Passage基本信息
+            1. query_instance 查推理对象（当前本体的类型+实例）基本信息
             2. query_links 查门架交易和拆分明细，对比数量
             3. call_function + check_route_consistency 检查路径一致性
             4. 根据结果深入排查：路径不一致→检查门架重复/HEX连续性/延迟上传；金额异常→检查费用一致性

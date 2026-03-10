@@ -28,6 +28,10 @@ import org.springframework.context.annotation.Lazy;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.regex.Pattern;
 
 @SpringBootApplication
 @EnableConfigurationProperties(Config.class)
@@ -37,7 +41,48 @@ public class MyPalantirApplication {
     private static final Logger logger = LoggerFactory.getLogger(MyPalantirApplication.class);
 
     public static void main(String[] args) {
+        loadEnvFile();
         SpringApplication.run(MyPalantirApplication.class, args);
+    }
+
+    /**
+     * 从项目根目录加载 .env 到系统属性，供 application.properties 中的 ${LLM_API_KEY} 等使用。
+     * Agent 与自然语言查询统一使用 .env 中的大模型 API 配置。
+     * 已存在的环境变量优先，不会被 .env 覆盖。
+     */
+    private static void loadEnvFile() {
+        Path[] candidates = {
+            Path.of(".env"),
+            Path.of("..", ".env")
+        };
+        for (Path p : candidates) {
+            if (Files.isRegularFile(p)) {
+                try {
+                    int count = 0;
+                    Pattern assign = Pattern.compile("^([A-Za-z_][A-Za-z0-9_]*)=(.*)$");
+                    for (String line : Files.readAllLines(p, StandardCharsets.UTF_8)) {
+                        line = line.trim();
+                        if (line.isEmpty() || line.startsWith("#")) continue;
+                        var m = assign.matcher(line);
+                        if (m.matches()) {
+                            String key = m.group(1).trim();
+                            String value = m.group(2).trim();
+                            if (value.startsWith("\"") && value.endsWith("\"") && value.length() >= 2)
+                                value = value.substring(1, value.length() - 1);
+                            else if (value.startsWith("'") && value.endsWith("'") && value.length() >= 2)
+                                value = value.substring(1, value.length() - 1);
+                            if (System.getenv(key) == null)
+                                System.setProperty(key, value);
+                            count++;
+                        }
+                    }
+                    logger.info("Loaded {} variables from .env: {}", count, p.toAbsolutePath().normalize());
+                } catch (IOException e) {
+                    logger.warn("Failed to read .env file: {}", e.getMessage());
+                }
+                return;
+            }
+        }
     }
 
     @Bean

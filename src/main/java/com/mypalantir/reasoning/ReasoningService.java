@@ -21,6 +21,7 @@ import java.util.stream.Collectors;
 /**
  * 推理服务：整合 CEL 求值器、函数框架、SWRL 解析器和前向链引擎。
  * 按当前加载的本体模型（Loader）动态解析规则与关联，支持 schema.yaml / toll.yaml 等任意模型。
+ * 规则在首次推理或获取规则时按当前 schema 懒解析，切换本体后自动使用新 schema 的规则。
  */
 @Service
 public class ReasoningService {
@@ -30,8 +31,10 @@ public class ReasoningService {
     private final FunctionRegistry functionRegistry;
     private final CelEvaluator celEvaluator;
 
-    private List<SWRLRule> parsedRules;
-    private Map<String, String> functionDisplayNames = Map.of();
+    /** 按当前本体文件路径缓存：切换 schema 后重新解析 */
+    private volatile String lastParsedSchemaPath;
+    private volatile List<SWRLRule> parsedRules = List.of();
+    private volatile Map<String, String> functionDisplayNames = Map.of();
 
     public ReasoningService(Loader loader, QueryService queryService, FunctionRegistry functionRegistry) {
         this.loader = loader;
@@ -43,33 +46,39 @@ public class ReasoningService {
     @PostConstruct
     public void initialize() {
         registerBuiltinFunctions();
+    }
 
-        // 解析 SWRL 规则
+    /**
+     * 按当前加载的 schema 懒解析规则与函数显示名；切换本体（右上角切换）后会自动用新 schema 重新解析。
+     */
+    private synchronized void ensureRulesParsedForCurrentSchema() {
+        OntologySchema schema = loader.getSchema();
+        String path = loader.getFilePath() != null ? loader.getFilePath() : "";
+        if (path.equals(lastParsedSchemaPath)) return;
+        lastParsedSchemaPath = path;
+        if (schema == null) {
+            parsedRules = List.of();
+            functionDisplayNames = Map.of();
+            return;
+        }
         try {
-            OntologySchema schema = loader.getSchema();
             SWRLParser parser = new SWRLParser(schema, functionRegistry);
-            this.parsedRules = parser.parseAll(schema);
-            System.out.println("Parsed " + parsedRules.size() + " SWRL rules");
-
-            // 构建函数显示名映射
+            parsedRules = parser.parseAll(schema);
+            Map<String, String> names = new HashMap<>();
             if (schema.getFunctions() != null) {
-                Map<String, String> names = new HashMap<>();
                 for (FunctionDef fd : schema.getFunctions()) {
-                    if (fd.getDisplayName() != null) {
+                    if (fd.getDisplayName() != null)
                         names.put(fd.getName(), fd.getDisplayName());
-                    }
                 }
-                this.functionDisplayNames = names;
             }
-
-            // 检查未注册的 builtin 函数
+            functionDisplayNames = names;
             List<String> missing = functionRegistry.getMissingBuiltins(schema);
-            if (!missing.isEmpty()) {
-                System.err.println("WARNING: Missing builtin functions: " + missing);
-            }
+            if (!missing.isEmpty())
+                System.err.println("WARNING: Missing builtin functions for current schema: " + missing);
         } catch (Exception e) {
-            System.err.println("Failed to initialize reasoning service: " + e.getMessage());
-            this.parsedRules = List.of();
+            System.err.println("Failed to parse rules for current schema: " + e.getMessage());
+            parsedRules = List.of();
+            functionDisplayNames = Map.of();
         }
     }
 
@@ -123,32 +132,65 @@ public class ReasoningService {
         enrichPathEntryExitAndMedia(objectType, instanceId, instance, linkedData);
 
         Map<String, Object> derivedValues = computeDerivedProperties(objectType, instance, linkedData);
-        ForwardChainEngine engine = new ForwardChainEngine(functionRegistry, getParsedRules());
+        ForwardChainEngine engine = new ForwardChainEngine(functionRegistry, getParsedRules(), getFunctionDisplayNames());
         return engine.infer(instance, linkedData, derivedValues);
     }
 
     /**
-     * 查询入边：给定 link（如 gantry_to_path，target=Path），按 targetId 查所有 source 实例（如该 Path 下的所有门架交易）
+     * 对指定通行路径（Passage）执行推理，供 Agent 工具 run_inference 调用。
+     */
+    public InferenceResult inferPassage(String passageId) throws Exception {
+        return inferInstance("Passage", passageId);
+    }
+
+    /**
+     * 查询入边：给定 link（如 gantry_to_path，target=Path），按 targetId 查所有 source 实例（如该 Path 下的所有门架交易）。
+     * 当 link 未配置 data_source 时，与自然语言查询一致：使用 .env 配置的默认数据源（dataSourceType=sync，表名=类型名小写）。
      */
     private List<Map<String, Object>> queryIncomingLinkInstances(LinkType linkType, String targetId) {
-        DataSourceMapping linkDs = linkType.getDataSource();
-        if (linkDs == null || !linkDs.isConfigured()) return List.of();
-        String targetIdColumn = linkDs.getTargetIdColumn();
-        if (targetIdColumn == null) return List.of();
         String sourceType = linkType.getSourceType();
-        String fkProperty = findPropertyForColumn(sourceType, targetIdColumn);
+        String fkProperty;
+        boolean useSyncDefault;
+
+        DataSourceMapping linkDs = linkType.getDataSource();
+        if (linkDs != null && linkDs.isConfigured()) {
+            String targetIdColumn = linkDs.getTargetIdColumn();
+            if (targetIdColumn == null) return List.of();
+            fkProperty = findPropertyForColumn(sourceType, targetIdColumn);
+            if (fkProperty == null) fkProperty = inferFkPropertyForIncomingLink(linkType);
+            useSyncDefault = false;
+        } else {
+            fkProperty = inferFkPropertyForIncomingLink(linkType);
+            useSyncDefault = true;
+        }
         if (fkProperty == null) return List.of();
         try {
             Map<String, Object> queryMap = new HashMap<>();
             queryMap.put("from", sourceType);
             queryMap.put("select", List.of("*"));
             queryMap.put("where", Map.of(fkProperty, targetId));
+            if (useSyncDefault) {
+                queryMap.put("dataSourceType", "sync");
+            }
             QueryExecutor.QueryResult result = queryService.executeQuery(queryMap);
             return result.getRows();
         } catch (Exception e) {
             System.err.println("Failed to query incoming link " + linkType.getName() + ": " + e.getMessage());
             return List.of();
         }
+    }
+
+    /**
+     * 当 link 未配置 data_source 或无法从映射解析外键属性时，推断源表指向目标的外键属性名（如 Path 的 pass_id）。
+     */
+    private String inferFkPropertyForIncomingLink(LinkType linkType) {
+        if (linkType.getPropertyMappings() != null && linkType.getPropertyMappings().containsKey("pass_id")) {
+            return "pass_id";
+        }
+        if ("Path".equals(linkType.getTargetType()) && linkType.getName() != null && linkType.getName().contains("path")) {
+            return "pass_id";
+        }
+        return null;
     }
 
     /** 入边在 linkedData 中的 key：如 gantry_to_path(target=Path) -> path_has_gantry_transactions */
@@ -193,7 +235,8 @@ public class ReasoningService {
 
     /**
      * 为 Path 补充出口/入口交易和 _media，使 is_single_province_etc、is_obu_billing_mode1 能求值，
-     * 从而 in_obu_split_scope 可能为 true，OBU 规则才能触发。依赖 schema 中 exit_to_path、entry_to_path 的 data_source 配置。
+     * 从而 in_obu_split_scope 可能为 true，OBU 规则才能触发。
+     * 当 exit_to_path、entry_to_path 未配置 data_source 时，使用 .env 默认数据源（与自然语言查询 sync 一致）。
      */
     private void enrichPathEntryExitAndMedia(String objectType, String instanceId,
                                              Map<String, Object> instance,
@@ -255,13 +298,6 @@ public class ReasoningService {
             linkedData.putIfAbsent("entry_involves_vehicle", List.of());
             linkedData.putIfAbsent("entry_at_station", List.of());
         }
-
-        // 3. 计算衍生属性
-        Map<String, Object> derivedValues = computeDerivedProperties(passage, linkedData);
-
-        // 4. 执行前向链推理
-        ForwardChainEngine engine = new ForwardChainEngine(functionRegistry, parsedRules, functionDisplayNames);
-        return engine.infer(passage, linkedData, derivedValues);
     }
 
     /**
@@ -528,6 +564,22 @@ public class ReasoningService {
     }
 
     /**
+     * 返回当前加载本体下已解析的 SWRL 规则列表（按 schema 懒解析，切换本体后自动更新）。
+     */
+    public List<SWRLRule> getParsedRules() {
+        ensureRulesParsedForCurrentSchema();
+        return parsedRules;
+    }
+
+    /**
+     * 返回当前加载本体下的函数显示名映射（与 getParsedRules 使用同一套懒解析缓存）。
+     */
+    public Map<String, String> getFunctionDisplayNames() {
+        ensureRulesParsedForCurrentSchema();
+        return functionDisplayNames != null ? functionDisplayNames : Map.of();
+    }
+
+    /**
      * 获取当前模型下已解析的规则数量
      */
     public int getParsedRuleCount() {
@@ -564,16 +616,17 @@ public class ReasoningService {
     }
 
     /**
-     * 按关键词搜索规则
+     * 按关键词搜索规则（使用当前加载本体的规则）
      */
     public List<Map<String, Object>> searchRules(String keyword) {
-        if (parsedRules == null) return List.of();
+        List<SWRLRule> rules = getParsedRules();
+        if (rules.isEmpty()) return List.of();
         String kw = keyword.toLowerCase();
         List<Map<String, Object>> results = new ArrayList<>();
         OntologySchema schema = loader.getSchema();
         List<com.mypalantir.meta.Rule> ruleDefs = schema.getRules();
 
-        for (SWRLRule rule : parsedRules) {
+        for (SWRLRule rule : rules) {
             String name = rule.getName() != null ? rule.getName() : "";
             String displayName = rule.getDisplayName() != null ? rule.getDisplayName() : "";
             // 查找 YAML 中的 description

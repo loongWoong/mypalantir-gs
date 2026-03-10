@@ -808,12 +808,10 @@ export default function OntologyBuilder() {
             onNodeClick={(_, node) => {
               setSelectedNode(node);
               setSelectedEdge(null);
-              setRightPanelMode('entity-relation');
             }}
             onEdgeClick={(_, edge) => {
               setSelectedEdge(edge);
               setSelectedNode(null);
-              setRightPanelMode('entity-relation');
             }}
             onPaneClick={() => {
               setSelectedNode(null);

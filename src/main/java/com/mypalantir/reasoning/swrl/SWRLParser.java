@@ -10,7 +10,7 @@ import java.util.regex.Pattern;
 
 /**
  * SWRL 表达式解析器。
- * 将 toll.yaml 中的 SWRL 字符串解析为可执行的 SWRLRule 结构。
+ * 将当前加载本体（schema）中的 SWRL 字符串解析为可执行的 SWRLRule 结构。
  *
  * 支持的语法：
  * - 类型断言: Type(?var)

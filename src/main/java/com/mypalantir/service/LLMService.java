@@ -64,7 +64,7 @@ public class LLMService {
         
         if (apiKey == null || apiKey.isEmpty()) {
             logger.error("✗ LLM API Key is NOT configured!");
-            logger.error("  Please set LLM_API_KEY in .env file or llm.api.key in application.properties");
+            logger.error("  Please set LLM_API_KEY in project root .env (see .env.example) or llm.api.key in application.properties");
             logger.warn("  Natural Language Query feature will not work without API key");
         } else {
             String maskedKey = apiKey.substring(0, Math.min(10, apiKey.length())) + "***";
@@ -87,7 +87,7 @@ public class LLMService {
      */
     public String chat(String systemPrompt, String userPrompt) throws LLMException {
         if (apiKey == null || apiKey.isEmpty()) {
-            throw new LLMException("LLM API key not configured. Please set llm.api.key in application.properties");
+            throw new LLMException("LLM API key not configured. Please set LLM_API_KEY in project root .env (or llm.api.key in application.properties)");
         }
         
         int retries = 0;

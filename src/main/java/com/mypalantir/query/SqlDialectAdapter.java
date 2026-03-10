@@ -90,22 +90,23 @@ public class SqlDialectAdapter {
         if (sql == null || sql.isEmpty()) {
             return sql;
         }
-        
-        switch (targetType) {
-            case MYSQL:
-                return adaptToMySQL(sql);
-            case POSTGRESQL:
-                return adaptToPostgreSQL(sql);
-            case ORACLE:
-                return adaptToOracle(sql);
-            case SQLSERVER:
-                return adaptToSQLServer(sql);
-            case H2:
-                return adaptToH2(sql);
-            default:
-                // 默认使用 MySQL 语法
-                return adaptToMySQL(sql);
+        // 使用 if-else 避免 switch-on-enum 生成合成内部类 ($1)，防止 NoClassDefFoundError
+        if (targetType == DatabaseType.MYSQL) {
+            return adaptToMySQL(sql);
         }
+        if (targetType == DatabaseType.POSTGRESQL) {
+            return adaptToPostgreSQL(sql);
+        }
+        if (targetType == DatabaseType.ORACLE) {
+            return adaptToOracle(sql);
+        }
+        if (targetType == DatabaseType.SQLSERVER) {
+            return adaptToSQLServer(sql);
+        }
+        if (targetType == DatabaseType.H2) {
+            return adaptToH2(sql);
+        }
+        return adaptToMySQL(sql);
     }
     
     /**

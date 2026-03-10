@@ -216,8 +216,17 @@ public class RelNodeBuilder {
                 continue;
             }
             
-            // 找到属性在行类型中的索引
-            int fieldIndex = findFieldIndex(propertyName, objectType, rowType);
+            // 优先按字段名在 rowType 中查找，避免与 objectType 属性顺序不一致时取错类型（如 pass_id 被当成 DATE）
+            int fieldIndex = findFieldIndexInRowType(propertyName, rowType);
+            if (fieldIndex < 0 && dataSourceMapping != null) {
+                String columnName = dataSourceMapping.getColumnName(propertyName);
+                if (columnName != null) {
+                    fieldIndex = findFieldIndexInRowType(columnName, rowType);
+                }
+            }
+            if (fieldIndex < 0) {
+                fieldIndex = findFieldIndex(propertyName, objectType, rowType);
+            }
             if (fieldIndex < 0) {
                 continue; // 跳过不存在的字段
             }
@@ -225,7 +234,7 @@ public class RelNodeBuilder {
             // 构建 RexInputRef（列引用）
             RexInputRef inputRef = rexBuilder.makeInputRef(rowType.getFieldList().get(fieldIndex).getType(), fieldIndex);
             
-            // 构建 RexNode（常量值）
+            // 构建 RexNode（常量值）：使用 rowType 中该字段的实际类型，避免字符串 ID 被误解析为日期
             RexNode literal = buildLiteral(rexBuilder, value, rowType.getFieldList().get(fieldIndex).getType());
             
             // 构建等值条件

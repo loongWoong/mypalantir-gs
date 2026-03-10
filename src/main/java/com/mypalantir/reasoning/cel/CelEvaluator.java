@@ -7,7 +7,7 @@ import java.util.stream.Collectors;
 
 /**
  * 轻量 CEL 表达式求值器。
- * 支持 toll.yaml 中使用的 CEL 子集：
+ * 支持当前加载本体中使用的 CEL 子集：
  * - size(collection)
  * - collection.map(v, expr).sum()
  * - 简单等值比较 a == b
