@@ -31,7 +31,7 @@ public class DetectLateUpload extends AbstractBuiltinFunction {
         for (Map<String, Object> tx : gantryTxs) {
             LocalDateTime receiveTime = parseDateTime(tx.get("receive_time"));
             if (receiveTime != null && receiveTime.isAfter(splitTime)) {
-                return true; // 接收时间晚于拆分时间
+                return true;
             }
         }
         return false;
@@ -40,10 +40,15 @@ public class DetectLateUpload extends AbstractBuiltinFunction {
     private LocalDateTime parseDateTime(Object value) {
         if (value == null) return null;
         if (value instanceof LocalDateTime) return (LocalDateTime) value;
+        if (value instanceof java.sql.Timestamp ts) return ts.toLocalDateTime();
+        if (value instanceof java.sql.Date d) return d.toLocalDate().atStartOfDay();
+        if (value instanceof java.time.LocalDate ld) return ld.atStartOfDay();
         String str = value.toString();
         for (DateTimeFormatter fmt : FORMATTERS) {
             try { return LocalDateTime.parse(str, fmt); } catch (DateTimeParseException ignored) {}
         }
+        // Try date-only format
+        try { return java.time.LocalDate.parse(str).atStartOfDay(); } catch (DateTimeParseException ignored) {}
         return null;
     }
 }

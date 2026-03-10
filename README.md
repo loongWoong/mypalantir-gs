@@ -410,14 +410,31 @@ src/main/java/com/mypalantir/
 │       ├── JdbcOntologyTable.java      # JDBC Table 实现
 │       └── OntologyTable.java          # Table 基类
 │
+├── reasoning/         # 推理引擎层
+│   ├── ReasoningService.java        # 推理服务
+│   ├── engine/
+│   │   └── ForwardChainingEngine.java  # 前向链推理引擎
+│   ├── function/
+│   │   └── FunctionRegistry.java    # 内置函数注册
+│   └── swrl/
+│       └── SWRLParser.java          # SWRL 规则解析器
+│
+├── agent/             # ReAct 诊断 Agent
+│   ├── AgentService.java      # ReAct 循环核心（Thought→Action→Observation）
+│   ├── AgentTools.java        # 工具注册与执行
+│   └── AgentResponse.java     # 响应数据类
+│
 ├── service/           # 业务逻辑层
 │   ├── QueryService.java      # 查询服务
 │   ├── SchemaService.java     # Schema 服务
+│   ├── LLMService.java        # LLM API 调用服务（OpenAI 兼容）
 │   └── DataValidator.java     # 数据验证服务
 │
 ├── controller/        # REST API 层
 │   ├── QueryController.java   # 查询 API
-│   └── SchemaController.java  # Schema API
+│   ├── SchemaController.java  # Schema API
+│   ├── ReasoningController.java  # 推理 API
+│   └── AgentController.java   # Agent 对话 API（SSE 流式）
 │
 └── config/            # 配置层
     └── WebConfig.java          # Web 配置

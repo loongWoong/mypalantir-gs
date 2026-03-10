@@ -113,10 +113,37 @@ public class InferenceResult {
     }
 
     /**
+     * 单条前件条件的匹配详情
+     */
+    public record MatchDetail(String condition, boolean matched, String actualValue, String description) {
+        public MatchDetail(String condition, boolean matched, String actualValue) {
+            this(condition, matched, actualValue, null);
+        }
+
+        public Map<String, Object> toMap() {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("condition", condition);
+            m.put("matched", matched);
+            if (actualValue != null) {
+                m.put("actualValue", actualValue);
+            }
+            if (description != null) {
+                m.put("description", description);
+            }
+            return m;
+        }
+    }
+
+    /**
      * 单条规则在某轮中的求值结果
      */
     public record RuleEvaluation(String ruleName, String displayName, boolean matched, Fact producedFact,
-                                  boolean factIsNew) {
+                                  boolean factIsNew, List<MatchDetail> matchDetails) {
+        public RuleEvaluation(String ruleName, String displayName, boolean matched, Fact producedFact,
+                              boolean factIsNew) {
+            this(ruleName, displayName, matched, producedFact, factIsNew, List.of());
+        }
+
         public Map<String, Object> toMap() {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("rule", ruleName);
@@ -125,6 +152,13 @@ public class InferenceResult {
             if (producedFact != null) {
                 m.put("fact", producedFact.toString());
                 m.put("factIsNew", factIsNew);
+            }
+            if (matchDetails != null && !matchDetails.isEmpty()) {
+                List<Map<String, Object>> details = new ArrayList<>();
+                for (MatchDetail detail : matchDetails) {
+                    details.add(detail.toMap());
+                }
+                m.put("matchDetails", details);
             }
             return m;
         }

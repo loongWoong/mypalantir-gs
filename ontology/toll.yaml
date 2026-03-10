@@ -12,9 +12,9 @@ data_sources:
     database: mypalantir
     username: sa
     password: ""
-    jdbc_url: jdbc:h2:file:./data/h2/mypalantir
+    jdbc_url: jdbc:h2:file:./data/h2/mypalantir;AUTO_SERVER=TRUE
     properties:
-      AUTO_SERVER: false
+      AUTO_SERVER: true
       DB_CLOSE_DELAY: -1
 
 # ============================================
@@ -1838,6 +1838,21 @@ rules:
         ∧ check_gantry_count_complete(
             links(?p, passage_has_gantry_transactions)) == false
         → obu_route_cause(?p, "CPC门架不完整")
+
+  # 根因：拆分侧路径错误（门架流水完整但拆分路径不一致）
+  - name: obu_route_cause_split_side_error
+    display_name: 根因-拆分侧路径错误
+    description: "门架流水无重复、HEX连续、数量完整，路径不一致的原因在拆分侧（如路径表配置错误）"
+    language: swrl
+    expr: >
+      Passage(?p) ∧ obu_split_status(?p, "路径不一致")
+        ∧ detect_duplicate_intervals(
+            links(?p, passage_has_gantry_transactions)) == false
+        ∧ check_gantry_hex_continuity(
+            links(?p, passage_has_gantry_transactions)) == true
+        ∧ check_gantry_count_complete(
+            links(?p, passage_has_gantry_transactions)) == true
+        → obu_route_cause(?p, "拆分侧路径错误")
 
   # 根因进一步：门架不完整是因为延迟上传
   - name: obu_route_cause_late_upload

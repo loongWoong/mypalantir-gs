@@ -75,4 +75,20 @@ public class WorkingMemory {
     public int size() {
         return facts.size();
     }
+
+    /**
+     * 检查是否包含某个事实（不添加）
+     */
+    public boolean containsFact(Fact fact) {
+        return facts.contains(fact);
+    }
+
+    /**
+     * 创建当前工作内存的只读快照（共享事实集合的副本，独立的绑定空间）
+     */
+    public WorkingMemory snapshot() {
+        WorkingMemory copy = new WorkingMemory();
+        copy.facts.addAll(this.facts);
+        return copy;
+    }
 }
