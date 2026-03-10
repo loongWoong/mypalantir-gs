@@ -17,6 +17,7 @@ import OntologyBuilder from './pages/OntologyBuilder';
 
 import RulesView from './pages/RulesView';
 import FunctionsView from './pages/FunctionsView';
+import ReasoningView from './pages/ReasoningView';
 
 function App() {
   return (
@@ -41,6 +42,7 @@ function App() {
 
           <Route path="/rules" element={<RulesView />} />
           <Route path="/functions" element={<FunctionsView />} />
+          <Route path="/reasoning" element={<ReasoningView />} />
         </Routes>
       </Layout>
     </BrowserRouter>

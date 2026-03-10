@@ -56,9 +56,20 @@ public class JdbcOntologyTable extends OntologyTable implements ScannableTable {
         );
         typeBuilder.add("id", idType);
 
-        // 添加所有属性字段
+        // 添加所有属性字段（排除衍生属性和已作为ID的属性）
+        String idCol = (mapping != null && mapping.getIdColumn() != null) ? mapping.getIdColumn().toUpperCase() : "";
         if (objectType.getProperties() != null) {
             for (Property prop : objectType.getProperties()) {
+                if (prop.isDerived()) {
+                    continue; // 衍生属性不在数据库中，跳过
+                }
+                // 跳过与ID列重复的id属性
+                if ("id".equals(prop.getName()) && mapping != null) {
+                    String colName = mapping.getColumnName(prop.getName());
+                    if (colName != null && colName.toUpperCase().equals(idCol)) {
+                        continue;
+                    }
+                }
                 SqlTypeName sqlType = mapPropertyTypeToSqlType(prop.getDataType());
                 RelDataType fieldType;
                 
@@ -213,16 +224,24 @@ public class JdbcOntologyTable extends OntologyTable implements ScannableTable {
         // H2 数据库默认将未加引号的标识符转换为大写
         // 但如果我们使用引号，则保持原始大小写
         // 为了兼容，我们使用大写列名（H2 的默认行为）
-        String idColumn = mapping.getIdColumn().toUpperCase();
+        String idColumn = mapping.getIdColumn();
         sql.append(quoteIdentifier(idColumn)).append(" AS id");
         
-        // 添加所有属性列
+        // 添加所有属性列（排除衍生属性和已作为ID的属性）
         if (objectType.getProperties() != null) {
             for (Property prop : objectType.getProperties()) {
+                if (prop.isDerived()) {
+                    continue; // 衍生属性不在数据库中，跳过
+                }
+                // 如果属性映射到的列就是ID列，且属性名也是id，跳过避免重复
                 String columnName = mapping.getColumnName(prop.getName());
+                if ("id".equals(prop.getName()) && columnName != null
+                    && columnName.toUpperCase().equals(idColumn)) {
+                    continue;
+                }
                 if (columnName != null) {
-                    // 使用大写列名（H2 的默认行为）
-                    sql.append(", ").append(quoteIdentifier(columnName.toUpperCase()))
+                    // 使用映射中指定的列名（保持原始大小写，因为H2使用引号时大小写敏感）
+                    sql.append(", ").append(quoteIdentifier(columnName))
                        .append(" AS ").append(quoteIdentifier(prop.getName()));
                 } else {
                     // 如果没有映射，直接使用属性名作为列名（用于外键列，如 vehicle_id, media_id）
@@ -239,13 +258,11 @@ public class JdbcOntologyTable extends OntologyTable implements ScannableTable {
         if (tableName.contains(".")) {
             // 包含 schema，分开处理
             String[] parts = tableName.split("\\.", 2);
-            String schemaName = parts[0].toUpperCase();
-            String actualTableName = parts[1].toUpperCase();
-            sql.append(" FROM ").append(quoteIdentifier(schemaName))
-               .append(".").append(quoteIdentifier(actualTableName));
+            sql.append(" FROM ").append(quoteIdentifier(parts[0]))
+               .append(".").append(quoteIdentifier(parts[1]));
         } else {
             // 不包含 schema，直接使用
-            sql.append(" FROM ").append(quoteIdentifier(tableName.toUpperCase()));
+            sql.append(" FROM ").append(quoteIdentifier(tableName));
         }
         
         return sql.toString();
@@ -263,9 +280,20 @@ public class JdbcOntologyTable extends OntologyTable implements ScannableTable {
         // 1. ID（索引 0）
         row.add(rs.getString("id"));
         
-        // 2. 属性（按 objectType.getProperties() 的顺序）
+        // 2. 属性（按 objectType.getProperties() 的顺序，排除衍生属性和已作为ID的属性）
+        String idColumnUpper = (mapping != null && mapping.getIdColumn() != null) ? mapping.getIdColumn().toUpperCase() : "";
         if (objectType.getProperties() != null) {
             for (Property prop : objectType.getProperties()) {
+                if (prop.isDerived()) {
+                    continue; // 衍生属性不在数据库中，跳过
+                }
+                // 跳过与ID列重复的id属性
+                if ("id".equals(prop.getName()) && mapping != null) {
+                    String colName = mapping.getColumnName(prop.getName());
+                    if (colName != null && colName.toUpperCase().equals(idColumnUpper)) {
+                        continue;
+                    }
+                }
                 String columnName = mapping.getColumnName(prop.getName());
                 Object value = null;
                 
@@ -284,15 +312,25 @@ public class JdbcOntologyTable extends OntologyTable implements ScannableTable {
                 }
                 
                 // 根据属性类型转换值
-                // 对于 TIMESTAMP 类型，Calcite 期望 Long（时间戳毫秒数）
-                if (value != null && ("datetime".equalsIgnoreCase(prop.getDataType()) || 
-                                     "timestamp".equalsIgnoreCase(prop.getDataType()))) {
-                    if (value instanceof java.sql.Timestamp) {
-                        // 转换为 Long（时间戳毫秒数）
-                        value = ((java.sql.Timestamp) value).getTime();
-                    } else if (value instanceof java.sql.Date) {
-                        // 转换为 Long（时间戳毫秒数）
-                        value = ((java.sql.Date) value).getTime();
+                // 对于日期/时间类型，Calcite 期望特定的数值类型
+                if (value != null) {
+                    String dataType = prop.getDataType() != null ? prop.getDataType().toLowerCase() : "";
+                    if ("datetime".equals(dataType) || "timestamp".equals(dataType)) {
+                        if (value instanceof java.sql.Timestamp) {
+                            value = ((java.sql.Timestamp) value).getTime();
+                        } else if (value instanceof java.sql.Date) {
+                            value = ((java.sql.Date) value).getTime();
+                        }
+                    } else if ("date".equals(dataType)) {
+                        // Calcite DATE 类型期望 int（从 epoch 开始的天数）
+                        if (value instanceof java.sql.Timestamp) {
+                            value = (int)(((java.sql.Timestamp) value).getTime() / 86400000L);
+                        } else if (value instanceof java.sql.Date) {
+                            value = (int)(((java.sql.Date) value).getTime() / 86400000L);
+                        } else if (value instanceof String) {
+                            // 如果是字符串类型的日期，直接返回字符串（交给前端处理）
+                            // 不做转换
+                        }
                     }
                 }
                 
@@ -306,6 +344,15 @@ public class JdbcOntologyTable extends OntologyTable implements ScannableTable {
                     if ("float".equalsIgnoreCase(dataType) || "double".equalsIgnoreCase(dataType)) {
                         // 转换为 Double
                         value = ((java.math.BigDecimal) value).doubleValue();
+                    }
+                }
+
+                // 对于 int/integer 类型，确保值为 Integer（数据库可能返回 Long/BigDecimal）
+                if (value != null && ("int".equalsIgnoreCase(prop.getDataType()) || "integer".equalsIgnoreCase(prop.getDataType()))) {
+                    if (value instanceof Long) {
+                        value = ((Long) value).intValue();
+                    } else if (value instanceof java.math.BigDecimal) {
+                        value = ((java.math.BigDecimal) value).intValue();
                     }
                 }
                 
