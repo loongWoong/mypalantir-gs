@@ -122,6 +122,22 @@ public class Loader {
             }
         }
         merged.setRules(mergedRules);
+
+        // 合并函数：用户 schema 优先，然后添加系统 schema 中不存在同名的函数
+        List<Function> mergedFunctions = new ArrayList<>();
+        if (userSchema.getFunctions() != null) {
+            mergedFunctions.addAll(userSchema.getFunctions());
+        }
+        if (systemSchema.getFunctions() != null) {
+            for (Function systemFn : systemSchema.getFunctions()) {
+                boolean exists = mergedFunctions.stream()
+                    .anyMatch(f -> f.getName() != null && f.getName().equals(systemFn.getName()));
+                if (!exists) {
+                    mergedFunctions.add(systemFn);
+                }
+            }
+        }
+        merged.setFunctions(mergedFunctions);
         
         return merged;
     }
@@ -284,6 +300,27 @@ public class Loader {
         return currentSchema.getRules().stream()
             .filter(r -> r.getExpr() != null && r.getExpr().contains(objectTypeName + "("))
             .toList();
+    }
+
+    public List<Function> listFunctions() {
+        OntologySchema currentSchema = getSchema();
+        if (currentSchema == null) {
+            return List.of();
+        }
+        return currentSchema.getFunctions() != null ? List.copyOf(currentSchema.getFunctions()) : List.of();
+    }
+
+    public Function getFunction(String name) throws NotFoundException {
+        OntologySchema currentSchema = getSchema();
+        if (currentSchema == null || currentSchema.getFunctions() == null) {
+            throw new NotFoundException("schema not loaded");
+        }
+        for (Function f : currentSchema.getFunctions()) {
+            if (name.equals(f.getName())) {
+                return f;
+            }
+        }
+        throw new NotFoundException("function '" + name + "' not found");
     }
 
     public static class NotFoundException extends Exception {

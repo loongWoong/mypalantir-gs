@@ -16,6 +16,7 @@ import DataComparison from './pages/DataComparison';
 import OntologyBuilder from './pages/OntologyBuilder';
 
 import RulesView from './pages/RulesView';
+import FunctionsView from './pages/FunctionsView';
 
 function App() {
   return (
@@ -39,6 +40,7 @@ function App() {
           <Route path="/ontology-builder" element={<OntologyBuilder />} />
 
           <Route path="/rules" element={<RulesView />} />
+          <Route path="/functions" element={<FunctionsView />} />
         </Routes>
       </Layout>
     </BrowserRouter>

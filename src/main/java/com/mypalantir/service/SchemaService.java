@@ -4,6 +4,7 @@ import com.mypalantir.meta.DataSourceConfig;
 import com.mypalantir.meta.LinkType;
 import com.mypalantir.meta.Loader;
 import com.mypalantir.meta.ObjectType;
+import com.mypalantir.meta.Function;
 import com.mypalantir.meta.Property;
 import com.mypalantir.meta.Rule;
 import org.springframework.stereotype.Service;
@@ -65,6 +66,14 @@ public class SchemaService {
 
     public List<Rule> getRulesForObjectType(String objectTypeName) {
         return loader.getRulesForObjectType(objectTypeName);
+    }
+
+    public List<Function> listFunctions() {
+        return loader.listFunctions();
+    }
+
+    public Function getFunction(String name) throws Loader.NotFoundException {
+        return loader.getFunction(name);
     }
 }
 

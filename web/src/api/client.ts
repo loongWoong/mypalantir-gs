@@ -212,12 +212,38 @@ export interface OntologyRulePayload {
   expr: string;
 }
 
+/** 函数入参定义 */
+export interface FunctionInputPayload {
+  name: string;
+  type: string;
+}
+
+/** 参数绑定：数据来源为 link 或衍生属性 */
+export interface ParameterBindingPayload {
+  parameter_name: string;
+  source_type: 'link' | 'derived_attribute';
+  link_name?: string;
+  object_type?: string;
+  attribute_name?: string;
+}
+
+export interface FunctionPayload {
+  name: string;
+  display_name?: string;
+  description?: string;
+  implementation: 'builtin' | 'external';
+  inputs?: FunctionInputPayload[];
+  output_type?: string;
+  parameter_bindings?: ParameterBindingPayload[];
+}
+
 export interface OntologyBuilderPayload {
   version: string;
   namespace: string;
   object_types: Array<Record<string, any>>;
   link_types: Array<Record<string, any>>;
   rules?: OntologyRulePayload[];
+  functions?: FunctionPayload[];
   data_sources?: Array<Record<string, any>>;
 }
 

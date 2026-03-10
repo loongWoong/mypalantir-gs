@@ -13,6 +13,17 @@ export interface Rule {
   expr: string;
 }
 
+/** 函数定义（与后端 Function 对应），供规则前件调用 */
+export interface FunctionDef {
+  name: string;
+  display_name?: string;
+  description?: string;
+  implementation: string;
+  inputs?: { name: string; type: string }[];
+  output_type?: string;
+  parameter_bindings?: { parameter_name: string; source_type: string; link_name?: string; object_type?: string; attribute_name?: string }[];
+}
+
 export interface OntologyModel {
   id: string;
   name: string;
@@ -21,6 +32,7 @@ export interface OntologyModel {
   entities: Entity[];
   relations: Relation[];
   rules?: Rule[];
+  functions?: FunctionDef[];
   metadata?: Record<string, any>;
 }
 
@@ -156,6 +168,17 @@ export function toApiFormat(model: OntologyModel): any {
           expr: r.expr,
         }))
       : [],
+    functions: (model.functions && model.functions.length > 0)
+      ? model.functions.map((f) => ({
+          name: f.name,
+          display_name: f.display_name,
+          description: f.description,
+          implementation: f.implementation,
+          inputs: f.inputs,
+          output_type: f.output_type,
+          parameter_bindings: f.parameter_bindings,
+        }))
+      : [],
     data_sources: [],
   };
 }
@@ -233,6 +256,16 @@ export function fromApiFormat(apiData: any): OntologyModel {
     expr: r.expr || '',
   }));
 
+  const functions: FunctionDef[] = (apiData.functions || []).map((f: any) => ({
+    name: f.name || '',
+    display_name: f.display_name,
+    description: f.description,
+    implementation: f.implementation || 'builtin',
+    inputs: f.inputs || [],
+    output_type: f.output_type,
+    parameter_bindings: f.parameter_bindings || [],
+  }));
+
   return {
     id: `model-${Date.now()}`,
     name: apiData.name || 'Untitled Model',
@@ -241,6 +274,7 @@ export function fromApiFormat(apiData: any): OntologyModel {
     entities,
     relations,
     rules,
+    functions: functions.length > 0 ? functions : undefined,
     metadata: apiData.metadata,
   };
 }

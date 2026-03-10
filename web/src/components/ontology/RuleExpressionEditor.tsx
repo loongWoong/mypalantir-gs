@@ -10,11 +10,11 @@ import {
   swrlVisualToExpr,
   swrlExprToVisual,
 } from '../../utils/ruleExprEditor';
-/** 供下拉使用的实体摘要 */
+/** 供下拉使用的实体摘要（属性可为衍生属性） */
 export interface EntityOption {
   name: string;
   display_name?: string;
-  attributes: { name: string; display_name?: string }[];
+  attributes: { name: string; display_name?: string; derived?: boolean }[];
 }
 
 /** 供下拉使用的关系摘要 */
@@ -25,16 +25,27 @@ export interface RelationOption {
   target_type: string;
 }
 
+/** 函数摘要（仅展示用，不可编辑实现） */
+export interface FunctionOption {
+  name: string;
+  display_name?: string;
+  description?: string;
+  inputs?: { name: string; type: string }[];
+  parameter_bindings?: { parameter_name: string; source_type: string; link_name?: string }[];
+}
+
 export interface RuleExpressionEditorProps {
   language: string;
   expr: string;
   onChange: (expr: string) => void;
   /** 实体类型名列表（仅用于无 entities 时的主体下拉） */
   entityTypeNames: string[];
-  /** 实体列表（含属性），用于属性下拉与自然语言展示 */
+  /** 实体列表（含属性，含衍生属性），用于属性下拉与自然语言展示 */
   entities?: EntityOption[];
   /** 关系列表，用于关系下拉与自然语言展示 */
   relations?: RelationOption[];
+  /** 函数列表（封装组件，仅展示不可改实现），用于规则前件中的函数条件 */
+  functions?: FunctionOption[];
   disabled?: boolean;
 }
 
@@ -50,8 +61,9 @@ function entityDisplay(e: EntityOption | undefined): string {
   return e?.display_name || e?.name || '';
 }
 
-function attrDisplay(a: { name: string; display_name?: string }): string {
-  return a.display_name || a.name;
+function attrDisplay(a: { name: string; display_name?: string; derived?: boolean }): string {
+  const base = a.display_name || a.name;
+  return a.derived ? `${base} (衍生)` : base;
 }
 
 function relationDisplay(r: RelationOption | undefined): string {
@@ -65,6 +77,7 @@ export function RuleExpressionEditor({
   entityTypeNames,
   entities = [],
   relations = [],
+  functions = [],
   disabled = false,
 }: RuleExpressionEditorProps) {
   const isSwrl = language === 'swrl';
@@ -149,6 +162,43 @@ export function RuleExpressionEditor({
     });
   };
 
+  /** 根据函数的 parameter_bindings 生成 argExprs（links(?var, link_name) 或 ?var） */
+  const buildArgExprsForFunction = useCallback(
+    (fn: FunctionOption): string[] => {
+      const subjectVar = visualRule.subjectVar;
+      const q = (v: string) => (v.startsWith('?') ? v : `?${v}`);
+      const bindings = fn.parameter_bindings ?? [];
+      if (fn.inputs?.length) {
+        return fn.inputs.map((inp) => {
+          const b = bindings.find((x) => x.parameter_name === inp.name);
+          if (b?.source_type === 'link' && b?.link_name)
+            return `links(${q(subjectVar)}, ${b.link_name})`;
+          return q(subjectVar);
+        });
+      }
+      if (bindings.length) {
+        return bindings.map((b) =>
+          b.source_type === 'link' && b.link_name
+            ? `links(${q(subjectVar)}, ${b.link_name})`
+            : q(subjectVar)
+        );
+      }
+      return [q(subjectVar)];
+    },
+    [visualRule.subjectVar]
+  );
+
+  const addFunctionCondition = (fn: FunctionOption) => {
+    const argExprs = buildArgExprsForFunction(fn);
+    setVisualRuleAndFlush({
+      ...visualRule,
+      conditions: [
+        ...visualRule.conditions,
+        { kind: 'function', funcName: fn.name, argExprs, expectedValue: true },
+      ],
+    });
+  };
+
   const updateCondition = (index: number, upd: Partial<SwrlCondition> | SwrlCondition) => {
     const next = [...visualRule.conditions];
     const cur = next[index];
@@ -163,6 +213,8 @@ export function RuleExpressionEditor({
       next[index] = { kind: 'relation', predicate: '', var1: visualRule.subjectVar, var2: newVar2 };
     } else if (cur.kind === 'relation' && 'kind' in upd && upd.kind === 'predicate') {
       next[index] = { kind: 'predicate', predicate: '', varName: visualRule.subjectVar, value: true };
+    } else if (cur.kind === 'function' && 'expectedValue' in upd) {
+      next[index] = { ...cur, expectedValue: upd.expectedValue as boolean };
     } else {
       next[index] = { ...cur, ...upd } as SwrlCondition;
     }
@@ -294,30 +346,79 @@ export function RuleExpressionEditor({
             </div>
           </div>
 
-          {/* 条件：自然语言 + 内联下拉 */}
+          {/* 条件：自然语言 + 内联下拉（衍生属性 / 函数，函数仅展示不可改实现） */}
           <div>
             <div className="flex items-center justify-between mb-2">
               <label className="block text-sm font-medium text-gray-700">条件（前件）</label>
-              <button
-                type="button"
-                onClick={addCondition}
-                disabled={disabled}
-                className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1"
-              >
-                <PlusIcon className="w-4 h-4" />
-                添加条件
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={addCondition}
+                  disabled={disabled}
+                  className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                >
+                  <PlusIcon className="w-4 h-4" />
+                  添加属性/衍生属性条件
+                </button>
+                {functions.length > 0 && (
+                  <select
+                    value=""
+                    onChange={(e) => {
+                      const name = e.target.value;
+                      if (!name) return;
+                      const fn = functions.find((f) => f.name === name);
+                      if (fn) addFunctionCondition(fn);
+                      e.target.value = '';
+                    }}
+                    disabled={disabled}
+                    className="text-xs border rounded px-2 py-1 text-blue-600 hover:text-blue-800"
+                  >
+                    <option value="">添加函数条件 ▼</option>
+                    {functions.map((f) => (
+                      <option key={f.name} value={f.name}>
+                        {f.display_name || f.name}（{f.name}）
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
             </div>
             <div className="space-y-3">
               {visualRule.conditions.length === 0 ? (
-                <div className="text-gray-500 text-sm py-2">暂无条件，可点击「添加条件」</div>
+                <div className="text-gray-500 text-sm py-2">暂无条件，可添加「属性/衍生属性条件」或「函数条件」</div>
               ) : (
                 visualRule.conditions.map((c, i) => (
                   <div key={i} className="flex items-start gap-2 p-3 bg-white border rounded-lg">
                     <span className="text-gray-500 text-sm shrink-0 pt-1.5">
                       {i === 0 ? '当' : '且'}
                     </span>
-                    {c.kind === 'predicate' ? (
+                    {c.kind === 'function' ? (
+                      <div className="flex flex-wrap items-center gap-2 flex-1">
+                        <div className="flex-1 min-w-0 rounded bg-gray-50 border border-gray-200 px-3 py-2">
+                          <div className="text-sm font-medium text-gray-800">
+                            函数：{functions.find((f) => f.name === c.funcName)?.display_name || c.funcName}
+                          </div>
+                          {functions.find((f) => f.name === c.funcName)?.description && (
+                            <div className="text-xs text-gray-500 mt-0.5">
+                              {functions.find((f) => f.name === c.funcName)?.description}
+                            </div>
+                          )}
+                          <div className="text-xs text-gray-400 mt-1 font-mono truncate">
+                            {c.funcName}({c.argExprs.join(', ')}) == {String(c.expectedValue)}
+                          </div>
+                        </div>
+                        <span className="text-gray-600 text-sm">为</span>
+                        <select
+                          value={String(c.expectedValue)}
+                          onChange={(e) => updateCondition(i, { expectedValue: e.target.value === 'true' })}
+                          disabled={disabled}
+                          className="border rounded px-2 py-1.5 text-sm"
+                        >
+                          <option value="true">是 (true)</option>
+                          <option value="false">否 (false)</option>
+                        </select>
+                      </div>
+                    ) : c.kind === 'predicate' ? (
                       <div className="flex flex-wrap items-center gap-1.5 flex-1">
                         <select
                           value={c.varName}

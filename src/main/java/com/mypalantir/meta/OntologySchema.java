@@ -23,6 +23,9 @@ public class OntologySchema {
     @JsonProperty("rules")
     private List<Rule> rules;
 
+    @JsonProperty("functions")
+    private List<Function> functions;
+
     @JsonIgnore
     public String getVersion() {
         return version;
@@ -75,6 +78,15 @@ public class OntologySchema {
 
     public void setRules(List<Rule> rules) {
         this.rules = rules;
+    }
+
+    @JsonIgnore
+    public List<Function> getFunctions() {
+        return functions;
+    }
+
+    public void setFunctions(List<Function> functions) {
+        this.functions = functions;
     }
 
     /**

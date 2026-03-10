@@ -25,7 +25,8 @@ import {
   CalculatorIcon,
   ClipboardDocumentCheckIcon,
   WrenchScrewdriverIcon,
-  ShieldCheckIcon
+  ShieldCheckIcon,
+  CpuChipIcon
 } from '@heroicons/react/24/outline';
 import type { ObjectType, LinkType, ModelInfo, CurrentModel } from '../api/client';
 import { schemaApi, modelApi } from '../api/client';
@@ -381,6 +382,18 @@ export default function Layout({ children }: LayoutProps) {
               Rules
             </Link>
 
+            <Link
+              to="/functions"
+              className={`flex items-center px-3 py-2 rounded-lg mb-2 ${
+                isActive('/functions')
+                  ? 'bg-blue-50 text-blue-700'
+                  : 'text-gray-700 hover:bg-gray-100'
+              }`}
+            >
+              <CpuChipIcon className="w-5 h-5 mr-3" />
+              Functions
+            </Link>
+
             {!loading && (
               <>
                 <div className="mt-6 mb-2">
@@ -466,6 +479,7 @@ export default function Layout({ children }: LayoutProps) {
               {location.pathname === '/data-comparison' && 'Data Comparison'}
               {location.pathname === '/ontology-builder' && 'Ontology Builder'}
               {location.pathname === '/rules' && 'Rules'}
+              {location.pathname === '/functions' && 'Functions'}
             </h2>
           </div>
           
