@@ -30,9 +30,8 @@ public class ReasoningService {
     private final FunctionRegistry functionRegistry;
     private final CelEvaluator celEvaluator;
 
-    /** 按当前模型路径缓存已解析规则，切换模型时自动失效 */
-    private volatile String cachedRulesPath;
-    private volatile List<SWRLRule> cachedParsedRules;
+    private List<SWRLRule> parsedRules;
+    private Map<String, String> functionDisplayNames = Map.of();
 
     public ReasoningService(Loader loader, QueryService queryService, FunctionRegistry functionRegistry) {
         this.loader = loader;
@@ -44,36 +43,34 @@ public class ReasoningService {
     @PostConstruct
     public void initialize() {
         registerBuiltinFunctions();
-    }
 
-    /**
-     * 获取当前模型下已解析的 SWRL 规则，切换模型后会自动重新解析
-     */
-    private List<SWRLRule> getParsedRules() {
-        OntologySchema schema = loader.getSchema();
-        if (schema == null) return List.of();
-        String path = loader.getFilePath();
-        if (path == null) path = "";
-        if (!path.equals(cachedRulesPath)) {
-            synchronized (this) {
-                if (!path.equals(cachedRulesPath)) {
-                    try {
-                        SWRLParser parser = new SWRLParser(schema, functionRegistry);
-                        cachedParsedRules = parser.parseAll(schema);
-                        cachedRulesPath = path;
-                        List<String> missing = functionRegistry.getMissingBuiltins(schema);
-                        if (!missing.isEmpty()) {
-                            System.err.println("WARNING: Missing builtin functions: " + missing);
-                        }
-                    } catch (Exception e) {
-                        System.err.println("Failed to parse SWRL rules: " + e.getMessage());
-                        cachedParsedRules = List.of();
-                        cachedRulesPath = path;
+        // 解析 SWRL 规则
+        try {
+            OntologySchema schema = loader.getSchema();
+            SWRLParser parser = new SWRLParser(schema, functionRegistry);
+            this.parsedRules = parser.parseAll(schema);
+            System.out.println("Parsed " + parsedRules.size() + " SWRL rules");
+
+            // 构建函数显示名映射
+            if (schema.getFunctions() != null) {
+                Map<String, String> names = new HashMap<>();
+                for (FunctionDef fd : schema.getFunctions()) {
+                    if (fd.getDisplayName() != null) {
+                        names.put(fd.getName(), fd.getDisplayName());
                     }
                 }
+                this.functionDisplayNames = names;
             }
+
+            // 检查未注册的 builtin 函数
+            List<String> missing = functionRegistry.getMissingBuiltins(schema);
+            if (!missing.isEmpty()) {
+                System.err.println("WARNING: Missing builtin functions: " + missing);
+            }
+        } catch (Exception e) {
+            System.err.println("Failed to initialize reasoning service: " + e.getMessage());
+            this.parsedRules = List.of();
         }
-        return cachedParsedRules != null ? cachedParsedRules : List.of();
     }
 
     private void registerBuiltinFunctions() {
@@ -258,13 +255,13 @@ public class ReasoningService {
             linkedData.putIfAbsent("entry_involves_vehicle", List.of());
             linkedData.putIfAbsent("entry_at_station", List.of());
         }
-    }
 
-    /**
-     * 对单个 Passage 执行推理（兼容旧接口，等价于 inferInstance("Passage", passageId)）
-     */
-    public InferenceResult inferPassage(String passageId) throws Exception {
-        return inferInstance("Passage", passageId);
+        // 3. 计算衍生属性
+        Map<String, Object> derivedValues = computeDerivedProperties(passage, linkedData);
+
+        // 4. 执行前向链推理
+        ForwardChainEngine engine = new ForwardChainEngine(functionRegistry, parsedRules, functionDisplayNames);
+        return engine.infer(passage, linkedData, derivedValues);
     }
 
     /**
@@ -333,7 +330,7 @@ public class ReasoningService {
     /**
      * 查询单个实例
      */
-    private Map<String, Object> queryInstance(String objectType, String id) {
+    public Map<String, Object> queryInstance(String objectType, String id) {
         try {
             Map<String, Object> queryMap = new HashMap<>();
             queryMap.put("from", objectType);
@@ -355,7 +352,7 @@ public class ReasoningService {
      * @param sourceId 源对象ID
      * @param linkName 关联关系名称
      */
-    private List<Map<String, Object>> queryLinkedInstances(String sourceType, String sourceId, String linkName) {
+    public List<Map<String, Object>> queryLinkedInstances(String sourceType, String sourceId, String linkName) {
         try {
             OntologySchema schema = loader.getSchema();
             LinkType linkType = schema.getLinkTypes().stream()
@@ -564,5 +561,52 @@ public class ReasoningService {
      */
     public Set<String> getRegisteredFunctions() {
         return functionRegistry.getFunctionNames();
+    }
+
+    /**
+     * 按关键词搜索规则
+     */
+    public List<Map<String, Object>> searchRules(String keyword) {
+        if (parsedRules == null) return List.of();
+        String kw = keyword.toLowerCase();
+        List<Map<String, Object>> results = new ArrayList<>();
+        OntologySchema schema = loader.getSchema();
+        List<com.mypalantir.meta.Rule> ruleDefs = schema.getRules();
+
+        for (SWRLRule rule : parsedRules) {
+            String name = rule.getName() != null ? rule.getName() : "";
+            String displayName = rule.getDisplayName() != null ? rule.getDisplayName() : "";
+            // 查找 YAML 中的 description
+            String description = "";
+            String expr = "";
+            if (ruleDefs != null) {
+                for (com.mypalantir.meta.Rule rd : ruleDefs) {
+                    if (name.equals(rd.getName())) {
+                        description = rd.getDescription() != null ? rd.getDescription() : "";
+                        expr = rd.getExpr() != null ? rd.getExpr() : "";
+                        break;
+                    }
+                }
+            }
+            if (name.toLowerCase().contains(kw) ||
+                displayName.toLowerCase().contains(kw) ||
+                description.toLowerCase().contains(kw)) {
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("name", name);
+                m.put("displayName", displayName);
+                m.put("description", description);
+                m.put("expr", expr);
+                results.add(m);
+            }
+        }
+        return results;
+    }
+
+    public FunctionRegistry getFunctionRegistry() {
+        return functionRegistry;
+    }
+
+    public Loader getLoader() {
+        return loader;
     }
 }

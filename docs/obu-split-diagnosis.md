@@ -179,9 +179,9 @@ fee_matched:           "路径费用合计 == 拆分费用合计"
 
 #### 第三层：根因诊断
 
-**路径不一致的根因**（3 条规则，互斥并列）：
+**路径不一致的根因**（4 条规则，互斥并列，完全覆盖）：
 
-以下 3 条规则都以 `obu_split_status(?p, "路径不一致")` 为前件。通过函数返回值的不同组合实现互斥：
+以下 4 条规则都以 `obu_split_status(?p, "路径不一致")` 为前件。通过函数返回值的不同组合实现互斥，且完全覆盖所有可能的组合：
 
 ```
 规则 obu_route_cause_duplicate_gantry:
@@ -207,13 +207,24 @@ fee_matched:           "路径费用合计 == 拆分费用合计"
     ∧ check_gantry_count_complete(
         links(?p, passage_has_gantry_transactions)) == false
     → obu_route_cause(?p, "CPC门架不完整")
+
+规则 obu_route_cause_split_side_error:
+  Passage(?p) ∧ obu_split_status(?p, "路径不一致")
+    ∧ detect_duplicate_intervals(
+        links(?p, passage_has_gantry_transactions)) == false
+    ∧ check_gantry_hex_continuity(
+        links(?p, passage_has_gantry_transactions)) == true
+    ∧ check_gantry_count_complete(
+        links(?p, passage_has_gantry_transactions)) == true
+    → obu_route_cause(?p, "拆分侧路径错误")
 ```
 
-互斥关系分析：
+互斥关系分析（完全覆盖）：
 
 - `duplicate==true` → 只匹配 `duplicate_gantry`
 - `duplicate==false ∧ hex_continuous==false` → 只匹配 `etc_incomplete`
 - `duplicate==false ∧ hex_continuous==true ∧ count_complete==false` → 只匹配 `cpc_incomplete`
+- `duplicate==false ∧ hex_continuous==true ∧ count_complete==true` → 只匹配 `split_side_error`
 
 **延迟上传检测**（1 条规则，依赖上面的推导结论形成前后链）：
 
@@ -341,119 +352,203 @@ fee_matched:           "路径费用合计 == 拆分费用合计"
 - 同一循环中可以有多条规则同时触发（如循环4中的传播规则）
 - 衍生属性在初始化时一次性计算完毕，不参与循环
 
-### 3.2 智能体模式：按需交互推理
+### 3.2 智能体模式：ReAct + 规则知识库
 
-#### 策略依据：规则即知识
+#### 核心理念
 
-智能体的诊断策略**不是大模型的即兴发挥**，而是来自 toll.yaml 中的两类定义：
+智能体采用 **ReAct**（Reasoning + Acting）模式：大模型在每一步自主决定下一个动作，而不是按预定义路径执行。SWRL 规则作为**可检索的知识库**参与推理，而非硬编码的执行脚本。
 
-1. **SWRL 规则 → 诊断知识**：规则的前件结构编码了"什么条件下该做什么检查"。大模型将规则定义作为 system prompt 或知识库加载后，从中提取出依赖关系：
-   - `in_obu_split_scope` 是所有诊断规则的前提 → 先判断范围
-   - `obu_split_status` 的前件包含 `in_obu_split_scope` → 范围确认后再检测异常类型
-   - `obu_route_cause` 的前件包含 `obu_split_status("路径不一致")` → 确认路径异常后再查根因
-   - `obu_incomplete_reason` 的前件包含 `obu_route_cause(...)` → 确认根因后再查进一步原因
+```
+┌──────────────────────────────────────────────────────┐
+│                  Agent 架构                           │
+│                                                      │
+│   ┌────────────┐   ┌──────────────┐   ┌───────────┐  │
+│   │ 工具 Tools  │   │ 知识库        │   │ 上下文     │  │
+│   │            │   │ Knowledge    │   │ Context   │  │
+│   │ - 11个诊断  │   │              │   │           │  │
+│   │   函数      │   │ - SWRL规则   │   │ - 对话历史 │  │
+│   │ - 数据查询  │   │   (toll.yaml)│   │ - 中间结果 │  │
+│   │ - 规则检索  │   │ - 函数签名   │   │ - 已产生   │  │
+│   │            │   │ - 对象模型   │   │   的事实   │  │
+│   └─────┬──────┘   └──────┬───────┘   └─────┬─────┘  │
+│         │                 │                 │        │
+│         └─────────────────┼─────────────────┘        │
+│                           ▼                          │
+│                  ┌─────────────────┐                  │
+│                  │    LLM Agent    │                  │
+│                  │  Thought → Act  │                  │
+│                  │  → Observation  │                  │
+│                  │  → Thought → …  │                  │
+│                  └─────────────────┘                  │
+└──────────────────────────────────────────────────────┘
+```
 
-2. **函数定义 → 工具清单**：functions 部分的每个函数直接映射为 Agent 的 tool schema。大模型从规则前件中知道当前状态下哪些函数相关，而不是盲目遍历所有工具。
+关键设计：
+- **规则不是执行计划**：agent 不按 `scope → status → cause → reason` 的固定路径走
+- **规则是可查阅的知识**：agent 在 Thought 步骤中主动检索相关规则，理解当前状态下有哪些可能的检查方向
+- **函数是可调用的工具**：agent 根据自身推理决定调用哪个函数，而非被规则驱动
 
-**规则引擎和智能体使用的是同一套规则定义，区别仅在于执行方式：**
+#### Agent 的工具集
 
-| | 规则引擎 | 智能体 |
+| 工具 | 说明 |
+| --- | --- |
+| `query_instance(type, id)` | 查询实例数据 |
+| `query_links(instance, link_type)` | 查询关联数据 |
+| `search_rules(keyword)` | 从规则知识库中检索相关规则 |
+| `call_function(name, args)` | 调用诊断函数 |
+| `run_inference(instance_id)` | 调用规则引擎执行完整推理 |
+
+其中 `search_rules` 是关键——它让 agent 能够按需查阅 SWRL 规则，而不是将全部规则塞入 system prompt。
+
+#### 诊断过程示例（ReAct 模式）
+
+```
+用户："帮我查一下 pass_id=PASS_LATE_001 这笔交易为什么拆分异常"
+
+─── Thought 1 ───
+用户想知道拆分异常的原因。我先查看这笔交易的基本数据。
+
+─── Act 1 ───
+Tool: query_instance("Passage", "PASS_LATE_001")
+
+─── Observation 1 ───
+{ pass_id: "PASS_LATE_001", en_station: "鲁A01", ex_station: "鲁B05",
+  path_detail_count: 5, split_detail_count: 4,
+  detail_count_matched: false, ... }
+
+─── Thought 2 ───
+path_detail_count=5 但 split_detail_count=4，数量不一致。
+我查一下规则库，看看系统定义了哪些关于拆分异常的诊断规则。
+
+─── Act 2 ───
+Tool: search_rules("obu_split")
+
+─── Observation 2 ───
+找到以下规则：
+- obu_split_scope: Passage(?p) ∧ is_single_province_etc(?p)==true
+    ∧ is_obu_billing_mode1(?p)==true → in_obu_split_scope(?p, true)
+- obu_split_route_mismatch: ... ∧ check_route_consistency(...)==false
+    → obu_split_status(?p, "路径不一致")
+- obu_split_fee_mismatch: ... ∧ check_fee_detail_consistency(...)==false
+    → obu_split_status(?p, "金额不一致")
+- ...（其他规则）
+
+─── Thought 3 ───
+根据规则 obu_split_scope，诊断的前提是 is_single_province_etc 和
+is_obu_billing_mode1 都为 true。我先确认这个前提条件。
+
+─── Act 3 ───
+Tool: call_function("is_single_province_etc", passage)
+Tool: call_function("is_obu_billing_mode1", passage)
+
+─── Observation 3 ───
+is_single_province_etc → true
+is_obu_billing_mode1 → true
+
+─── Thought 4 ───
+在诊断范围内。根据刚才检索到的规则，异常类型取决于
+check_route_consistency 和 check_fee_detail_consistency 的结果。
+先检查路径一致性。
+
+─── Act 4 ───
+Tool: query_links("PASS_LATE_001", "passage_has_split_details")
+Tool: query_links("PASS_LATE_001", "passage_has_gantry_transactions")
+Tool: call_function("check_route_consistency", split_details, gantry_txs)
+
+─── Observation 4 ───
+split_details: 4条记录
+gantry_transactions: 5条记录（其中1条 receive_time 晚于 pro_split_time）
+check_route_consistency → false
+
+─── Thought 5 ───
+路径不一致。我注意到门架交易比拆分明细多1条，且有1条接收时间
+较晚。让我检索路径不一致的根因诊断规则。
+
+─── Act 5 ───
+Tool: search_rules("obu_route_cause")
+
+─── Observation 5 ───
+找到以下规则：
+- obu_route_cause_duplicate_gantry: ... ∧ detect_duplicate_intervals==true
+    → obu_route_cause(?p, "门架收费单元重复")
+- obu_route_cause_etc_incomplete: ... ∧ detect_duplicate_intervals==false
+    ∧ check_gantry_hex_continuity==false
+    → obu_route_cause(?p, "ETC门架不完整")
+- obu_route_cause_late_upload: ... ∧ (obu_route_cause=="ETC门架不完整"
+    ∨ obu_route_cause=="CPC门架不完整")
+    ∧ detect_late_upload==true → obu_incomplete_reason(?p, "门架延迟上传")
+- ...
+
+─── Thought 6 ───
+根据这些规则，我需要先排查门架重复，再检查 HEX 连续性。
+同时我注意到有个 late_upload 规则——刚才数据里确实有条交易
+接收时间异常，这可能相关。
+
+─── Act 6 ───
+Tool: call_function("detect_duplicate_intervals", gantry_txs)
+Tool: call_function("check_gantry_hex_continuity", gantry_txs)
+
+─── Observation 6 ───
+detect_duplicate_intervals → false
+check_gantry_hex_continuity → false
+
+─── Thought 7 ───
+不重复但 HEX 不连续，匹配规则 obu_route_cause_etc_incomplete，
+根因是"ETC门架不完整"。规则 obu_route_cause_late_upload 的前件
+要求 obu_route_cause 为"ETC门架不完整"（满足），且
+detect_late_upload==true。我来验证。
+
+─── Act 7 ───
+Tool: call_function("detect_late_upload", gantry_txs, pro_split_time)
+
+─── Observation 7 ───
+detect_late_upload → true
+（门架5的 receive_time 2024-03-15 10:45 晚于 pro_split_time 2024-03-15 10:30）
+
+─── Thought 8 ───
+完整诊断链已清晰。根据规则知识库：
+1. obu_split_scope 满足 → 在诊断范围内
+2. obu_split_route_mismatch 触发 → 路径不一致
+3. obu_route_cause_etc_incomplete 触发 → ETC门架不完整
+4. obu_route_cause_late_upload 触发 → 门架延迟上传
+我可以给用户完整的诊断结论了。
+
+─── 最终回答 ───
+这笔交易 PASS_LATE_001 的拆分异常诊断结果：
+
+1. **异常类型**：拆分路径与门架流水路径不一致
+   - 拆分明细 4 条，门架交易 5 条，路径不匹配
+2. **根因**：ETC 门架路径不完整
+   - 门架 HEX 编码不连续，存在缺失门架
+3. **进一步原因**：门架延迟上传
+   - 门架5的接收时间（10:45）晚于拆分处理时间（10:30）15分钟
+   - 拆分时该门架数据尚未到达，导致路径不完整
+
+**建议**：等待延迟门架数据到达后重新执行拆分。
+```
+
+#### 与脚本式 agent 的对比
+
+上述 ReAct 过程与预定义路径的关键区别：
+
+| 维度 | 脚本式（旧方案） | ReAct（新方案） |
 | --- | --- | --- |
-| 策略来源 | 规则前件的模式匹配（自动） | 大模型阅读规则后理解依赖关系（推理） |
-| 执行方式 | 盲扫所有规则，匹配即触发 | 根据中间结果选择性调用下一个函数 |
-| 等价性 | 对同一数据，两种模式得出相同结论 | |
+| 规则的角色 | 提前编码为执行路径 | 运行时按需检索的知识 |
+| 决策主体 | 预定义的分支逻辑 | LLM 每步自主推理 |
+| 灵活性 | 只能走固定的诊断树 | 可根据观察到的异常信号灵活调整 |
+| 规则使用 | 隐式（嵌入流程） | 显式（Thought 中引用规则名和前件） |
+| 可解释性 | "按步骤执行" | "我查阅了规则 X，发现需要检查 Y" |
 
-#### 诊断过程示例
-
-以一个具体案例展示智能体如何基于规则知识进行推理：
-
-```
-用户："帮我查一下 pass_id=ABC123 这笔交易为什么拆分异常"
-                    │
-                    ▼
-            ┌──────────────────────────────────────────────────┐
-            │   LLM Agent 加载诊断知识                          │
-            │                                                  │
-            │   System Prompt 包含：                            │
-            │   - 20 条 SWRL 规则定义（依赖关系）                │
-            │   - 11 个函数的 tool schema（可调用工具）           │
-            │                                                  │
-            │   从规则中提取诊断路径：                            │
-            │   scope → status → cause → reason                │
-            └──────────────────┬────────────��──────────────────┘
-                               │
-       ┌───────────────────────┼──────────────────────────────┐
-       │  依据: obu_split_scope 规则                           │
-       │  前件需要 is_single_province_etc ∧ is_obu_billing_mode1│
-       │  → 调用这两个函数确认范围                              │
-       └───────────────────────┼──────────────────────────────┘
-                               ▼
-            ┌──────────────┐
-            │  Tool Call 1  │  is_single_province_etc → true
-            │  Tool Call 2  │  is_obu_billing_mode1 → true
-            │               │  → 在诊断范围内
-            └──────┬───────┘
-                   │
-       ┌───────────┼──────────────────────────────────────────┐
-       │  依据: obu_split_route_mismatch 规则                  │
-       │  前件需要 check_route_consistency == false             │
-       │  → 调用该函数检测路径一致性                            │
-       └───────────┼──────────────────────────────────────────┘
-                   ▼
-            ┌──────────────┐
-            │  Tool Call 3  │  check_route_consistency → false
-            │               │  → 路径不一致
-            └──────┬───────┘
-                   │
-       ┌───────────┼──────────────────────────────────────────┐
-       │  依据: obu_route_cause 的 3 条互斥规则                 │
-       │  需要依次检查 duplicate / hex / count                 │
-       │  → 按条件组合逐步调用                                 │
-       └───────────┼──────────────────────────────────────────┘
-                   ▼
-            ┌──────────────┐
-            │  Tool Call 4  │  detect_duplicate_intervals → false
-            │  Tool Call 5  │  check_gantry_hex_continuity → false
-            │               │  → 匹配 obu_route_cause_etc_incomplete
-            │               │  → 根因：ETC门架不完整
-            └──────┬───────┘
-                   │
-       ┌───────────┼──────────────────────────────────────────┐
-       │  依据: obu_route_cause_late_upload 规则                │
-       │  前件需要 obu_route_cause == "ETC门架不完整"（已确认）  │
-       │  ∧ detect_late_upload == true                         │
-       │  → 调用该函数进一步探查                                │
-       └───────────┼──────────────────────────────────────────┘
-                   ▼
-            ┌──────────────┐
-            │  Tool Call 6  │  detect_late_upload → true
-            │               │  → 存在延迟上传
-            └──────┬───────┘
-                   │ 所有相关规则链已走完，综合输出
-                   ▼
-            ┌──────────────────────────────────────────┐
-            │  Agent 回答：                             │
-            │  该笔交易拆分异常的原因是：                │
-            │  1. 拆分路径与门架流水路径不一致            │
-            │  2. 根因：ETC门架路径不完整（HEX不连续）    │
-            │  3. 进一步原因：存在门架流水延迟上传        │
-            │     （门架3的接收时间晚于拆分时间15分钟）    │
-            │  建议：等待延迟门架数据到达后重新拆分        │
-            └──────────────────────────────────────────┘
-```
-
-每一步 Tool Call 前的"依据"框标注了对应的规则名称和前件条件。大模型的推理链与规则引擎的前向链在逻辑上等价，区别在于：
-
-- **规则引擎**盲扫所有规则，由匹配结果驱动，无需"理解"
-- **智能体**阅读规则后理解依赖结构，根据中间结果**选择性**调用下一个函数，跳过不相关的分支（如 `duplicate==false` 后不需要调用 `check_gantry_count_complete`，因为 `hex==false` 已经足够匹配 `etc_incomplete`）
+注意 Thought 5 中 agent 观察到"有1条接收时间较晚"，这是 agent 自主发现的线索，而非规则驱动的。在脚本式方案中，agent 不会注意到这个信号——它只会机械地按 scope→status→cause 走。ReAct 模式下，agent 可以同时利用规则知识和数据观察来推理。
 
 #### 智能体模式的优势
 
-- **按需调用**：不必执行所有函数，根据中间结果决定下一步（如检测到重复就不再检查连续性）
+- **规则即知识，非脚本**：SWRL 规则作为可检索的知识库，agent 在推理过程中主动查阅，而非被动执行
+- **自主推理**：agent 根据每步观察自主决定下一步行动，可以跳过不相关的检查，也可以深入追查可疑信号
+- **数据驱动 + 知识辅助**：agent 既能从数据中发现异常模式（如接收时间异常），又能从规则中获得系统化的诊断框架
 - **自然语言交互**：用户不需要了解规则定义，直接用自然语言提问
-- **解释能力**：大模型可以用自然语言解释每一步推理的**规则依据**
 - **灵活追问**：用户可以追问"门架3延迟了多久？""历史上这个门架延迟频率高吗？"
-- **策略可审计**：诊断策略来源于可读的 YAML 规则定义，而非黑盒模型权重
+- **可审计**：每步 Thought 显式引用了所依据的规则，推理过程透明
 
 ### 3.3 两种模式的对比与协作
 
@@ -587,15 +682,15 @@ rules:
 
 ## 5. 完整规则清单
 
-以下是 OBU 拆分异常诊断的全部 20 条 SWRL 规则。每条规则独立声明，引擎通过前向链推理自动确定执行顺序。
+以下是 OBU 拆分异常诊断的全部 21 条 SWRL 规则。每条规则独立声明，引擎通过前向链推理自动确定执行顺序。
 
 ### 范围界定（1 条）
 
 ```
 obu_split_scope:
   Passage(?p)
-    ∧ is_single_province_etc(links(?p, passage_has_path_details)) == true
-    ∧ is_obu_billing_mode1(links(?p, passage_has_split_details)) == true
+    ∧ is_single_province_etc(?p) == true
+    ∧ is_obu_billing_mode1(?p) == true
     → in_obu_split_scope(?p, true)
 ```
 
@@ -604,53 +699,85 @@ obu_split_scope:
 ```
 obu_split_route_mismatch:
   Passage(?p) ∧ in_obu_split_scope(?p, true)
-    ∧ check_route_consistency(...) == false
+    ∧ check_route_consistency(
+        links(?p, passage_has_split_details),
+        links(?p, passage_has_gantry_transactions)) == false
     → obu_split_status(?p, "路径不一致")
 
 obu_split_fee_mismatch:
   Passage(?p) ∧ in_obu_split_scope(?p, true)
-    ∧ detail_count_matched(?p, true) ∧ interval_set_matched(?p, true)
-    ∧ check_fee_detail_consistency(...) == false
+    ∧ check_route_consistency(
+        links(?p, passage_has_split_details),
+        links(?p, passage_has_gantry_transactions)) == true
+    ∧ check_fee_detail_consistency(
+        links(?p, passage_has_split_details),
+        links(?p, passage_has_gantry_transactions)) == false
     → obu_split_status(?p, "金额不一致")
 
-obu_split_route_deviation:
+obu_split_actual_route_mismatch:
   Passage(?p) ∧ in_obu_split_scope(?p, true)
-    ∧ detail_count_matched(?p, true) ∧ interval_set_matched(?p, true)
-    ∧ fee_matched(?p, true) ∧ fit_actual_route(?p) == false
+    ∧ check_route_consistency(
+        links(?p, passage_has_split_details),
+        links(?p, passage_has_gantry_transactions)) == true
+    ∧ check_fee_detail_consistency(
+        links(?p, passage_has_split_details),
+        links(?p, passage_has_gantry_transactions)) == true
+    ∧ fit_actual_route(?p) == false
     → obu_split_status(?p, "实际路径偏差")
 
 obu_split_normal:
   Passage(?p) ∧ in_obu_split_scope(?p, true)
-    ∧ detail_count_matched(?p, true) ∧ interval_set_matched(?p, true)
-    ∧ fee_matched(?p, true) ∧ fit_actual_route(?p) == true
+    ∧ check_route_consistency(
+        links(?p, passage_has_split_details),
+        links(?p, passage_has_gantry_transactions)) == true
+    ∧ check_fee_detail_consistency(
+        links(?p, passage_has_split_details),
+        links(?p, passage_has_gantry_transactions)) == true
+    ∧ fit_actual_route(?p) == true
     → obu_split_status(?p, "正常")
 ```
 
-互斥性由条件组合保证：`check_route_consistency` 为 false 时只匹配第一条；为 true 时衍生属性 `detail_count_matched` 和 `interval_set_matched` 为 true，再按 `fee_matched` 和 `fit_actual_route` 结果分流到后三条。
+互斥性由条件组合保证：`check_route_consistency` 为 false 时只匹配第一条；为 true 时再按 `check_fee_detail_consistency` 和 `fit_actual_route` 结果依次分流到后三条。
 
-### 路径不一致的根因（3 条，互斥）
+### 路径不一致的根因（4 条，互斥）
 
 ```
 obu_route_cause_duplicate_gantry:
   Passage(?p) ∧ obu_split_status(?p, "路径不一致")
-    ∧ detect_duplicate_intervals(...) == true
+    ∧ detect_duplicate_intervals(
+        links(?p, passage_has_gantry_transactions)) == true
     → obu_route_cause(?p, "门架收费单元重复")
 
 obu_route_cause_etc_incomplete:
   Passage(?p) ∧ obu_split_status(?p, "路径不一致")
-    ∧ detect_duplicate_intervals(...) == false
-    ∧ check_gantry_hex_continuity(...) == false
+    ∧ detect_duplicate_intervals(
+        links(?p, passage_has_gantry_transactions)) == false
+    ∧ check_gantry_hex_continuity(
+        links(?p, passage_has_gantry_transactions)) == false
     → obu_route_cause(?p, "ETC门架不完整")
 
 obu_route_cause_cpc_incomplete:
   Passage(?p) ∧ obu_split_status(?p, "路径不一致")
-    ∧ detect_duplicate_intervals(...) == false
-    ∧ check_gantry_hex_continuity(...) == true
-    ∧ check_gantry_count_complete(...) == false
+    ∧ detect_duplicate_intervals(
+        links(?p, passage_has_gantry_transactions)) == false
+    ∧ check_gantry_hex_continuity(
+        links(?p, passage_has_gantry_transactions)) == true
+    ∧ check_gantry_count_complete(
+        links(?p, passage_has_gantry_transactions)) == false
     → obu_route_cause(?p, "CPC门架不完整")
+
+obu_route_cause_split_side_error:
+  Passage(?p) ∧ obu_split_status(?p, "路径不一致")
+    ∧ detect_duplicate_intervals(
+        links(?p, passage_has_gantry_transactions)) == false
+    ∧ check_gantry_hex_continuity(
+        links(?p, passage_has_gantry_transactions)) == true
+    ∧ check_gantry_count_complete(
+        links(?p, passage_has_gantry_transactions)) == true
+    → obu_route_cause(?p, "拆分侧路径错误")
 ```
 
-互斥性：`duplicate==true` → 第一条；`duplicate==false ∧ hex==false` → 第二条；`duplicate==false ∧ hex==true ∧ count==false` → 第三条。
+互斥性完全覆盖：`duplicate==true` → 第一条；`duplicate==false ∧ hex==false` → 第二条；`duplicate==false ∧ hex==true ∧ count==false` → 第三条；`duplicate==false ∧ hex==true ∧ count==true` → 第四条。
 
 ### 延迟上传检测（1 条，链式依赖上层结论）
 
@@ -701,13 +828,13 @@ station_has_obu_split_abnormal:
 ### 原有基础规则（7 条）
 
 ```
-basic_fee_mismatch:        fee_matched(?p, false) → abnormal_flag(?p, true)
-basic_count_mismatch:      detail_count_matched(?p, false) → abnormal_flag(?p, true)
-basic_interval_mismatch:   interval_set_matched(?p, false) → abnormal_flag(?p, true)
-basic_high_fee_passage:    path_fee_total(?p) > 10000 → high_fee_flag(?p, true)
-basic_high_fee_vehicle:    high_fee_flag(?p, true) ∧ entry_involves_vehicle(?p, ?v) → needs_review(?v, true)
-basic_station_has_mismatch: abnormal_flag(?p, true) ∧ entry_at_station(?p, ?s) → has_mismatch(?s, true)
-basic_vehicle_has_mismatch: abnormal_flag(?p, true) ∧ entry_involves_vehicle(?p, ?v) → has_mismatch(?v, true)
+passage_integrity_normal:      detail_count_matched(?p, true) ∧ interval_set_matched(?p, true) ∧ fee_matched(?p, true) → check_status(?p, "正常")
+passage_count_mismatch:        detail_count_matched(?p, false) → check_status(?p, "不正常")
+passage_interval_mismatch:     detail_count_matched(?p, true) ∧ interval_set_matched(?p, false) → check_status(?p, "不正常")
+passage_fee_mismatch:          detail_count_matched(?p, true) ∧ interval_set_matched(?p, true) ∧ fee_matched(?p, false) → check_status(?p, "费用异常")
+vehicle_has_abnormal_passage:  check_status(?p, "不正常") ∧ entry_involves_vehicle(?p, ?v) → has_abnormal_passage(?v, true)
+vehicle_has_fee_abnormal_passage: check_status(?p, "费用异常") ∧ entry_involves_vehicle(?p, ?v) → has_fee_abnormal_passage(?v, true)
+station_has_abnormal_traffic:  check_status(?p, "不正常") ∧ entry_at_station(?p, ?s) → has_abnormal_traffic(?s, true)
 ```
 
-**总计 20 条规则**：1（范围）+ 4（检测）+ 3（路径根因）+ 1（延迟上传）+ 2（金额根因）+ 2（传播）+ 7（基础）。全部独立声明，由推理引擎通过前向链自动编排执行。
+**总计 21 条规则**：1（范围）+ 4（检测）+ 4（路径根因）+ 1（延迟上传）+ 2（金额根因）+ 2（传播）+ 7（基础）。全部独立声明，由推理引擎通过前向链自动编排执行。

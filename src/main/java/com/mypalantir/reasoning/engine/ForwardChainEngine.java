@@ -17,10 +17,17 @@ public class ForwardChainEngine {
 
     private final FunctionRegistry functionRegistry;
     private final List<SWRLRule> rules;
+    private final Map<String, String> functionDisplayNames;
 
     public ForwardChainEngine(FunctionRegistry functionRegistry, List<SWRLRule> rules) {
+        this(functionRegistry, rules, Map.of());
+    }
+
+    public ForwardChainEngine(FunctionRegistry functionRegistry, List<SWRLRule> rules,
+                               Map<String, String> functionDisplayNames) {
         this.functionRegistry = functionRegistry;
         this.rules = rules;
+        this.functionDisplayNames = functionDisplayNames;
     }
 
     /**
@@ -37,6 +44,9 @@ public class ForwardChainEngine {
         WorkingMemory memory = new WorkingMemory();
         InferenceResult result = new InferenceResult();
 
+        // 函数调用缓存：同一次推理中相同函数+相同参数只调用一次
+        Map<String, Object> functionCallCache = new HashMap<>();
+
         // 主变量名（约定为 ?p）
         String mainVar = "?p";
 
@@ -47,26 +57,32 @@ public class ForwardChainEngine {
             }
         }
 
-        // 前向链循环
+        // 前向链循环（严格分层：新事实在下一 cycle 才可见）
         int cycle = 0;
         boolean newFactsProduced;
         do {
             cycle++;
             newFactsProduced = false;
             InferenceResult.CycleDetail cycleDetail = new InferenceResult.CycleDetail(cycle);
+            List<Fact> pendingFacts = new ArrayList<>();
+
+            // 对当前工作内存做快照，本轮规则只匹配快照中的事实
+            WorkingMemory snapshot = memory.snapshot();
 
             for (SWRLRule rule : rules) {
-                memory.clearBindings();
-                memory.bind(mainVar, instanceData);
+                snapshot.clearBindings();
+                snapshot.bind(mainVar, instanceData);
 
-                boolean matched = matchAntecedents(rule.getAntecedents(), memory, instanceData, linkedData, mainVar);
+                List<InferenceResult.MatchDetail> matchDetails = matchAntecedents(rule.getAntecedents(), snapshot, instanceData, linkedData, mainVar, functionCallCache, rule.getName());
+                boolean matched = matchDetails != null;
                 if (matched) {
-                    // 触发规则：产生后件事实
-                    Fact newFact = fireConsequent(rule.getConsequent(), memory, mainVar);
-                    boolean isNew = newFact != null && memory.addFact(newFact);
+                    // 触发规则：产生后件事实（暂存，不立即加入工作内存）
+                    Fact newFact = fireConsequent(rule.getConsequent(), snapshot, mainVar);
+                    boolean isNew = newFact != null && !memory.containsFact(newFact) && !pendingFacts.contains(newFact);
                     cycleDetail.addEvaluation(new InferenceResult.RuleEvaluation(
-                        rule.getName(), rule.getDisplayName(), true, newFact, isNew));
+                        rule.getName(), rule.getDisplayName(), true, newFact, isNew, matchDetails));
                     if (isNew) {
+                        pendingFacts.add(newFact);
                         result.addTraceEntry(cycle, rule.getName(), newFact);
                         newFactsProduced = true;
                     }
@@ -74,6 +90,11 @@ public class ForwardChainEngine {
                     cycleDetail.addEvaluation(new InferenceResult.RuleEvaluation(
                         rule.getName(), rule.getDisplayName(), false, null, false));
                 }
+            }
+
+            // 轮次结束后，将本轮新事实合并到工作内存
+            for (Fact fact : pendingFacts) {
+                memory.addFact(fact);
             }
 
             cycleDetail.setNewFactsProduced(newFactsProduced);
@@ -85,42 +106,137 @@ public class ForwardChainEngine {
     }
 
     /**
-     * 检查规则的所有前件是否满足
+     * 检查规则的所有前件是否满足。
+     * @return 匹配详情列表；若任一前件不满足返回 null
      */
-    private boolean matchAntecedents(List<Atom> antecedents, WorkingMemory memory,
+    private List<InferenceResult.MatchDetail> matchAntecedents(List<Atom> antecedents, WorkingMemory memory,
                                       Map<String, Object> instanceData,
                                       Map<String, List<Map<String, Object>>> linkedData,
-                                      String mainVar) {
+                                      String mainVar,
+                                      Map<String, Object> functionCallCache,
+                                      String ruleName) {
+        List<InferenceResult.MatchDetail> details = new ArrayList<>();
         for (Atom atom : antecedents) {
-            if (!matchAtom(atom, memory, instanceData, linkedData, mainVar)) {
-                return false;
-            }
+            // TYPE_ASSERTION 总是满足，无需记录
+            if (atom.getType() == Atom.Type.TYPE_ASSERTION) continue;
+
+            AtomMatchResult amr = matchAtomWithDetail(atom, memory, instanceData, linkedData, mainVar, functionCallCache);
+            details.add(new InferenceResult.MatchDetail(amr.condition, amr.matched, amr.actualValue, amr.description));
+            if (!amr.matched) return null;
         }
-        return true;
+        return details;
+    }
+
+    private record AtomMatchResult(String condition, boolean matched, String actualValue, String description) {
+        AtomMatchResult(String condition, boolean matched, String actualValue) {
+            this(condition, matched, actualValue, null);
+        }
     }
 
     /**
-     * 匹配单个原子
+     * 匹配单个原子并返回详情
+     */
+    private AtomMatchResult matchAtomWithDetail(Atom atom, WorkingMemory memory,
+                                                 Map<String, Object> instanceData,
+                                                 Map<String, List<Map<String, Object>>> linkedData,
+                                                 String mainVar,
+                                                 Map<String, Object> functionCallCache) {
+        return switch (atom.getType()) {
+            case TYPE_ASSERTION -> new AtomMatchResult(atom.toString(), true, null);
+
+            case PROPERTY_MATCH -> {
+                boolean result = matchPropertyAtom(atom, memory, mainVar);
+                String condition = atom.getPredicate() + "(" + atom.getSubject() + ") == " +
+                    (atom.getValueVariable() != null ? atom.getValueVariable() : atom.getValue());
+                String actual = null;
+                if (atom.getValueVariable() != null) {
+                    List<Object> vals = memory.getValues(atom.getPredicate(), atom.getSubject());
+                    actual = vals.isEmpty() ? "无" : String.valueOf(vals.get(0));
+                } else {
+                    actual = result ? String.valueOf(atom.getValue()) : "不匹配";
+                }
+                String desc = describePropertyMatch(atom, result);
+                yield new AtomMatchResult(condition, result, actual, desc);
+            }
+
+            case FUNCTION_CALL -> {
+                String funcName = atom.getFunctionName();
+                if (!functionRegistry.hasFunction(funcName)) {
+                    yield new AtomMatchResult(funcName + "(...) [未注册]", true, "跳过");
+                }
+                List<Object> resolvedArgs = resolveArguments(atom.getArguments(), instanceData, linkedData);
+                String cacheKey = funcName + ":" + resolvedArgs.size();
+                Object actualResult = functionCallCache.computeIfAbsent(cacheKey,
+                        k -> functionRegistry.call(funcName, resolvedArgs));
+                boolean result = Objects.equals(actualResult, atom.getExpectedValue());
+                String condition = funcName + "(...) == " + atom.getExpectedValue();
+                String desc = functionDisplayNames.getOrDefault(funcName, funcName);
+                if (result) {
+                    desc += Objects.equals(atom.getExpectedValue(), true) ? " — 是" : " — 否";
+                } else {
+                    desc += Objects.equals(atom.getExpectedValue(), true) ? " — 否" : " — 是";
+                }
+                yield new AtomMatchResult(condition, result, String.valueOf(actualResult), desc);
+            }
+
+            case DISJUNCTION -> {
+                StringBuilder condition = new StringBuilder();
+                boolean anyMatched = false;
+                String matchedBranch = null;
+                for (Atom disjunct : atom.getDisjuncts()) {
+                    if (condition.length() > 0) condition.append(" | ");
+                    condition.append(disjunct.toString());
+                    if (!anyMatched && matchAtom(disjunct, memory, instanceData, linkedData, mainVar, functionCallCache)) {
+                        anyMatched = true;
+                        matchedBranch = disjunct.toString();
+                    }
+                }
+                String desc = anyMatched ? "满足条件: " + matchedBranch : "所有分支均不满足";
+                yield new AtomMatchResult(condition.toString(), anyMatched, matchedBranch, desc);
+            }
+
+            case INEQUALITY -> {
+                boolean result = matchInequality(atom, memory);
+                Object boundValue = memory.getBinding(atom.getInequalityVar());
+                String condition = atom.getInequalityVar() + " != " + atom.getInequalityValue();
+                String desc = result ? boundValue + " ≠ " + atom.getInequalityValue() : boundValue + " = " + atom.getInequalityValue();
+                yield new AtomMatchResult(condition, result, String.valueOf(boundValue), desc);
+            }
+
+            case LINK_TRAVERSAL -> {
+                boolean result = matchLinkTraversal(atom, memory, linkedData);
+                String condition = atom.getLinkName() + "(" + atom.getSourceVar() + ", " + atom.getTargetVar() + ")";
+                List<Map<String, Object>> targets = linkedData != null ? linkedData.get(atom.getLinkName()) : null;
+                String actual = (targets != null ? targets.size() + "条记录" : "无数据");
+                String desc = result ? "关联" + actual : "无关联数据";
+                yield new AtomMatchResult(condition, result, actual, desc);
+            }
+
+            default -> new AtomMatchResult(atom.toString(), false, null);
+        };
+    }
+
+    /**
+     * 为属性匹配生成语义描述
+     */
+    private String describePropertyMatch(Atom atom, boolean matched) {
+        String predicate = atom.getPredicate();
+        if (atom.getValueVariable() != null) {
+            return matched ? "绑定变量 " + atom.getValueVariable() : "无匹配事实";
+        }
+        Object value = atom.getValue();
+        return matched ? predicate + " = " + value : predicate + " ≠ " + value;
+    }
+
+    /**
+     * 匹配单个原子（简单版本，用于析取内部）
      */
     private boolean matchAtom(Atom atom, WorkingMemory memory,
                                Map<String, Object> instanceData,
                                Map<String, List<Map<String, Object>>> linkedData,
-                               String mainVar) {
-        return switch (atom.getType()) {
-            case TYPE_ASSERTION -> true; // 类型断言总是满足（实例已确定类型）
-
-            case PROPERTY_MATCH -> matchPropertyAtom(atom, memory, mainVar);
-
-            case FUNCTION_CALL -> matchFunctionCall(atom, instanceData, linkedData, mainVar);
-
-            case DISJUNCTION -> matchDisjunction(atom, memory, instanceData, linkedData, mainVar);
-
-            case INEQUALITY -> matchInequality(atom, memory);
-
-            case LINK_TRAVERSAL -> matchLinkTraversal(atom, memory, linkedData);
-
-            default -> false;
-        };
+                               String mainVar,
+                               Map<String, Object> functionCallCache) {
+        return matchAtomWithDetail(atom, memory, instanceData, linkedData, mainVar, functionCallCache).matched;
     }
 
     /**
@@ -140,30 +256,6 @@ public class ForwardChainEngine {
 
         // 值匹配模式: prop(?p, "value")
         return memory.hasFact(predicate, subject, atom.getValue());
-    }
-
-    /**
-     * 匹配函数调用
-     */
-    private boolean matchFunctionCall(Atom atom, Map<String, Object> instanceData,
-                                       Map<String, List<Map<String, Object>>> linkedData,
-                                       String mainVar) {
-        String funcName = atom.getFunctionName();
-
-        if (!functionRegistry.hasFunction(funcName)) {
-            // 未注册的函数（如 external），跳过（视为满足）
-            System.err.println("Function not registered, skipping: " + funcName);
-            return true;
-        }
-
-        // 解析参数
-        List<Object> resolvedArgs = resolveArguments(atom.getArguments(), instanceData, linkedData);
-
-        // 调用函数
-        Object actualResult = functionRegistry.call(funcName, resolvedArgs);
-
-        // 比较结果
-        return Objects.equals(actualResult, atom.getExpectedValue());
     }
 
     /**
@@ -200,21 +292,6 @@ public class ForwardChainEngine {
             }
         }
         return resolved;
-    }
-
-    /**
-     * 匹配析取 (OR)
-     */
-    private boolean matchDisjunction(Atom atom, WorkingMemory memory,
-                                      Map<String, Object> instanceData,
-                                      Map<String, List<Map<String, Object>>> linkedData,
-                                      String mainVar) {
-        for (Atom disjunct : atom.getDisjuncts()) {
-            if (matchAtom(disjunct, memory, instanceData, linkedData, mainVar)) {
-                return true;
-            }
-        }
-        return false;
     }
 
     /**

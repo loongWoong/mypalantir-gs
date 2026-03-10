@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { reasoningApi, instanceApi } from '../api/client';
-import type { InferenceResult, ReasoningStatus, Instance, CycleDetail } from '../api/client';
+import type { InferenceResult, ReasoningStatus, Instance, CycleDetail, MatchDetail } from '../api/client';
 
 export default function ReasoningView() {
   const [status, setStatus] = useState<ReasoningStatus | null>(null);
@@ -69,14 +69,6 @@ export default function ReasoningView() {
     if (ruleName.includes('vehicle') || ruleName.includes('station')) return 'bg-red-500';
     if (ruleName.includes('integrity') || ruleName.includes('count') || ruleName.includes('interval') || ruleName.includes('fee_mismatch')) return 'bg-indigo-500';
     return 'bg-purple-500';
-  };
-
-  // 根据事实值确定标签颜色
-  const getFactBadgeColor = (value: any) => {
-    if (value === '正常' || value === true) return 'bg-green-100 text-green-800';
-    if (value === '不正常' || value === false) return 'bg-red-100 text-red-800';
-    if (typeof value === 'string' && (value.includes('不一致') || value.includes('异常') || value.includes('偏差'))) return 'bg-red-100 text-red-800';
-    return 'bg-yellow-100 text-yellow-800';
   };
 
   return (
@@ -161,86 +153,69 @@ export default function ReasoningView() {
 
       {/* 推理结果 */}
       {inferenceResult && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* 左侧：推理轨迹 */}
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
-            <h2 className="text-sm font-semibold text-gray-700 mb-4">
-              Inference Trace
-              <span className="ml-2 text-xs font-normal text-gray-400">
-                {inferenceResult.cycleCount} cycles, {inferenceResult.trace.length} rules fired
-              </span>
-            </h2>
-            <div className="space-y-4">
-              {inferenceResult.cycles && inferenceResult.cycles.length > 0 ? (
-                inferenceResult.cycles.filter((c: CycleDetail) => c.newFactsProduced).map((cycle: CycleDetail) => {
-                  const matched = cycle.rules.filter(r => r.matched);
-                  return (
-                    <div key={cycle.cycle} className="border border-gray-200 rounded-lg overflow-hidden">
-                      {/* Cycle 标题栏 */}
-                      <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border-b border-gray-200">
-                        <div className="w-6 h-6 rounded-full bg-blue-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-                          {cycle.cycle}
-                        </div>
-                        <span className="text-xs font-semibold text-gray-600">
-                          Cycle {cycle.cycle}
-                        </span>
-                        <span className="text-xs text-gray-400">
-                          {matched.length} rule{matched.length > 1 ? 's' : ''} fired
-                        </span>
+        <div className="bg-white rounded-lg border border-gray-200 p-4">
+          <h2 className="text-sm font-semibold text-gray-700 mb-4">
+            Inference Trace
+            <span className="ml-2 text-xs font-normal text-gray-400">
+              {inferenceResult.cycleCount} cycles, {inferenceResult.trace.length} rules fired
+            </span>
+          </h2>
+          <div className="space-y-4">
+            {inferenceResult.cycles && inferenceResult.cycles.length > 0 ? (
+              inferenceResult.cycles.filter((c: CycleDetail) => c.newFactsProduced).map((cycle: CycleDetail) => {
+                const matched = cycle.rules.filter(r => r.matched && r.factIsNew);
+                return (
+                  <div key={cycle.cycle} className="border border-gray-200 rounded-lg overflow-hidden">
+                    {/* Cycle 标题栏 */}
+                    <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border-b border-gray-200">
+                      <div className="w-6 h-6 rounded-full bg-blue-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                        {cycle.cycle}
                       </div>
-                      {/* 匹配的规则 */}
-                      <div className="divide-y divide-gray-50">
-                        {matched.map((entry, idx) => (
-                          <div key={idx} className="flex items-start gap-3 px-3 py-2 bg-green-50/50">
+                      <span className="text-xs font-semibold text-gray-600">
+                        Cycle {cycle.cycle}
+                      </span>
+                      <span className="text-xs text-gray-400">
+                        {matched.length} rule{matched.length > 1 ? 's' : ''} fired
+                      </span>
+                    </div>
+                    {/* 匹配的规则 */}
+                    <div className="divide-y divide-gray-100">
+                      {matched.map((entry, idx) => (
+                        <div key={idx} className="px-3 py-2 bg-green-50/50">
+                          <div className="flex items-start gap-3">
                             <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${getRuleColor(entry.rule)}`} />
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2">
                                 <span className="text-sm font-medium text-gray-900">{entry.displayName || entry.rule}</span>
-                                {entry.factIsNew && (
-                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-100 text-green-700 font-medium">NEW</span>
-                                )}
-                                {entry.matched && !entry.factIsNew && entry.fact && (
-                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 font-medium">DUP</span>
-                                )}
                               </div>
-                              <div className="text-xs text-gray-400 font-mono">{entry.rule}</div>
                               {entry.fact && (
-                                <div className="text-xs text-green-700 font-mono mt-0.5 truncate">{entry.fact}</div>
+                                <div className="text-xs text-green-700 font-mono mt-0.5">{entry.fact}</div>
+                              )}
+                              {/* 匹配原因 */}
+                              {entry.matchDetails && entry.matchDetails.length > 0 && (
+                                <div className="mt-1.5 ml-1 space-y-0.5">
+                                  {entry.matchDetails.map((detail: MatchDetail, didx: number) => (
+                                    <div key={didx} className="flex items-start gap-2 text-[11px]">
+                                      <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1 ${detail.matched ? 'bg-green-400' : 'bg-red-400'}`} />
+                                      <div className="min-w-0">
+                                        <span className="text-gray-700">{detail.description || detail.condition}</span>
+                                        <span className="font-mono text-gray-400 ml-1.5">({detail.condition}{detail.actualValue ? ` = ${detail.actualValue}` : ''})</span>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
                               )}
                             </div>
                           </div>
-                        ))}
-                      </div>
+                        </div>
+                      ))}
                     </div>
-                  );
-                })
-              ) : (
-                <div className="text-sm text-gray-400 text-center py-4">No rules were triggered</div>
-              )}
-            </div>
-          </div>
-
-          {/* 右侧：产生的事实 */}
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
-            <h2 className="text-sm font-semibold text-gray-700 mb-4">
-              Produced Facts
-              <span className="ml-2 text-xs font-normal text-gray-400">
-                {Object.keys(inferenceResult.facts).length} facts
-              </span>
-            </h2>
-            <div className="space-y-2">
-              {Object.entries(inferenceResult.facts).map(([predicate, value]) => (
-                <div key={predicate} className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-lg">
-                  <span className="text-sm font-mono text-gray-700">{predicate}</span>
-                  <span className={`px-2 py-0.5 rounded text-xs font-medium ${getFactBadgeColor(value)}`}>
-                    {String(value)}
-                  </span>
-                </div>
-              ))}
-              {Object.keys(inferenceResult.facts).length === 0 && (
-                <div className="text-sm text-gray-400 text-center py-4">No facts produced</div>
-              )}
-            </div>
+                  </div>
+                );
+              })
+            ) : (
+              <div className="text-sm text-gray-400 text-center py-4">No rules were triggered</div>
+            )}
           </div>
         </div>
       )}

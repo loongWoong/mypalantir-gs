@@ -706,12 +706,20 @@ export interface TraceEntry {
   fact: string;
 }
 
+export interface MatchDetail {
+  condition: string;
+  matched: boolean;
+  actualValue?: string;
+  description?: string;
+}
+
 export interface RuleEvaluation {
   rule: string;
   displayName: string;
   matched: boolean;
   fact?: string;
   factIsNew?: boolean;
+  matchDetails?: MatchDetail[];
 }
 
 export interface CycleDetail {
@@ -768,6 +776,62 @@ export const reasoningApi = {
   status: async (): Promise<ReasoningStatus> => {
     const response = await apiClient.get<ApiResponse<ReasoningStatus>>('/reasoning/status');
     return response.data.data;
+  },
+};
+
+// Agent API
+export interface AgentStep {
+  thought?: string;
+  tool?: string;
+  args?: Record<string, any>;
+  observation?: string;
+}
+
+export interface AgentChatResponse {
+  answer: string;
+  steps: AgentStep[];
+}
+
+export interface AgentSSEEvent {
+  type: 'step' | 'answer' | 'error';
+  data: any;
+}
+
+export const agentApi = {
+  chat: async (message: string): Promise<AgentChatResponse> => {
+    const response = await apiClient.post<ApiResponse<AgentChatResponse>>(
+      '/agent/chat',
+      { message }
+    );
+    return response.data.data;
+  },
+
+  chatStream: (message: string, onEvent: (event: AgentSSEEvent) => void, onDone: () => void) => {
+    const url = `${API_BASE_URL}/agent/chat/stream?message=${encodeURIComponent(message)}`;
+    const eventSource = new EventSource(url);
+
+    eventSource.addEventListener('step', (e) => {
+      onEvent({ type: 'step', data: JSON.parse(e.data) });
+    });
+
+    eventSource.addEventListener('answer', (e) => {
+      onEvent({ type: 'answer', data: JSON.parse(e.data) });
+      eventSource.close();
+      onDone();
+    });
+
+    eventSource.addEventListener('error', (e) => {
+      if ((e as MessageEvent).data) {
+        onEvent({ type: 'error', data: JSON.parse((e as MessageEvent).data) });
+      }
+      eventSource.close();
+      onDone();
+    });
+
+    return () => {
+      eventSource.close();
+      onDone();
+    };
   },
 };
 

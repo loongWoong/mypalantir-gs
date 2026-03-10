@@ -6,6 +6,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.client.RestClientException;
@@ -39,12 +40,18 @@ public class LLMService {
     
     @Value("${llm.timeout:30000}")
     private int timeout;
+
+    @Value("${llm.max.tokens:1024}")
+    private int maxTokens;
     
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
     
     public LLMService() {
-        this.restTemplate = new RestTemplate();
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(5000);
+        factory.setReadTimeout(300000); // 5分钟，Qwen 3.5 reasoning 输出较慢
+        this.restTemplate = new RestTemplate(factory);
         this.objectMapper = new ObjectMapper();
     }
     
@@ -117,6 +124,9 @@ public class LLMService {
             Map<String, Object> request = new HashMap<>();
             request.put("model", model);
             request.put("temperature", temperature);
+            request.put("max_tokens", maxTokens);
+            // 关闭 Qwen 3.5 的 reasoning/thinking 模式，避免多轮调用时每步都产生大量思维链 token
+            request.put("enable_thinking", false);
             request.put("messages", Arrays.asList(
                 Map.of("role", "system", "content", systemPrompt),
                 Map.of("role", "user", "content", userPrompt)
