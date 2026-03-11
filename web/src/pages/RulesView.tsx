@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import type { OntologyBuilderPayload, OntologyRulePayload } from '../api/client';
-import { ontologyBuilderApi } from '../api/client';
+import { ontologyBuilderApi, modelApi } from '../api/client';
 import { RuleExpressionEditor } from '../components/ontology/RuleExpressionEditor';
 import {
   ShieldCheckIcon,
@@ -11,6 +11,9 @@ import {
   ArrowDownTrayIcon,
   DocumentArrowUpIcon,
   FolderOpenIcon,
+  MagnifyingGlassIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
 } from '@heroicons/react/24/outline';
 
 const DEFAULT_RULE: OntologyRulePayload = {
@@ -41,16 +44,44 @@ export default function RulesView() {
   const [loadingSchema, setLoadingSchema] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
   const rules = schema?.rules ?? [];
   const selectedRule = selectedRuleIndex !== null && rules[selectedRuleIndex] ? rules[selectedRuleIndex] : null;
 
+  const toggleGroupCollapse = (groupName: string) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(groupName)) {
+        next.delete(groupName);
+      } else {
+        next.add(groupName);
+      }
+      return next;
+    });
+  };
+
+  /** 从路径中取文件名（兼容 / 与 \） */
+  const getBasename = (filePath: string) => {
+    const normalized = filePath.replace(/\\/g, '/');
+    const last = normalized.lastIndexOf('/');
+    return last >= 0 ? normalized.slice(last + 1) : filePath;
+  };
+
   const loadFileList = useCallback(async () => {
     try {
-      const files = await ontologyBuilderApi.listFiles();
+      const [files, currentModel] = await Promise.all([
+        ontologyBuilderApi.listFiles(),
+        modelApi.getCurrentModel().catch(() => null),
+      ]);
       setFileList(files);
-      if (files.length > 0 && !selectedFilename) {
-        setSelectedFilename(files[0]);
+      if (files.length > 0) {
+        const pathToUse = currentModel?.filePath;
+        const match = pathToUse
+          ? files.find((f) => f === getBasename(pathToUse) || pathToUse.endsWith(f) || pathToUse === f)
+          : undefined;
+        setSelectedFilename((prev) => (prev ? prev : match ?? files[0]));
       }
     } catch (e) {
       console.error('Failed to list ontology files:', e);
@@ -58,11 +89,11 @@ export default function RulesView() {
     } finally {
       setLoading(false);
     }
-  }, [selectedFilename]);
+  }, []);
 
   useEffect(() => {
     loadFileList();
-  }, []);
+  }, [loadFileList]);
 
   useEffect(() => {
     if (!selectedFilename) {
@@ -226,7 +257,7 @@ export default function RulesView() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* 规则列表 */}
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-gray-900 mb-3 flex items-center justify-between">
               <span className="flex items-center">
                 <ShieldCheckIcon className="w-5 h-5 mr-2" />
                 Rules ({rules.length})
@@ -240,29 +271,99 @@ export default function RulesView() {
                 添加
               </button>
             </h2>
-            <div className="space-y-2">
+            {/* 搜索框 */}
+            <div className="relative mb-3">
+              <MagnifyingGlassIcon className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="搜索规则..."
+                className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+            <div className="space-y-1 max-h-[calc(100vh-380px)] overflow-y-auto">
               {rules.length === 0 ? (
                 <p className="text-sm text-gray-500 py-4">暂无规则，点击「添加」创建</p>
               ) : (
-                rules.map((rule, idx) => (
-                  <button
-                    key={`${rule.name}-${idx}`}
-                    onClick={() => setSelectedRuleIndex(idx)}
-                    className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
-                      selectedRuleIndex === idx
-                        ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                        : 'hover:bg-gray-50 text-gray-700 border border-transparent'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="font-medium text-sm truncate">{rule.display_name || rule.name || '(未命名)'}</div>
-                      <span className="text-xs px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded-full shrink-0 ml-1">
-                        {rule.language}
-                      </span>
+                (() => {
+                  const colors = ['bg-blue-500', 'bg-yellow-500', 'bg-red-500', 'bg-green-500', 'bg-purple-500', 'bg-indigo-500', 'bg-pink-500', 'bg-teal-500'];
+                  const filteredRules = rules.filter((r) => {
+                    if (!searchQuery.trim()) return true;
+                    const q = searchQuery.toLowerCase();
+                    return (
+                      (r.name ?? '').toLowerCase().includes(q) ||
+                      (r.display_name ?? '').toLowerCase().includes(q) ||
+                      (r.description ?? '').toLowerCase().includes(q)
+                    );
+                  });
+                  const rulesByScope = objectTypes
+                    .map((ot: Record<string, any>, idx: number) => ({
+                      name: ot.name ?? '',
+                      displayName: ot.display_name ?? ot.name ?? '',
+                      color: colors[idx % colors.length],
+                      rules: filteredRules.filter((r) => getScope(getRuleExpr(r)) === ot.name),
+                    }))
+                    .filter((group) => group.rules.length > 0);
+                  const unknownRules = filteredRules.filter((r) => {
+                    const scope = getScope(getRuleExpr(r));
+                    return scope === 'Unknown' || !objectTypes.some((ot: Record<string, any>) => ot.name === scope);
+                  });
+                  if (unknownRules.length > 0) {
+                    rulesByScope.push({
+                      name: 'Unknown',
+                      displayName: '未分类',
+                      color: 'bg-gray-400',
+                      rules: unknownRules,
+                    });
+                  }
+                  if (rulesByScope.length === 0 && searchQuery.trim()) {
+                    return <p className="text-sm text-gray-500 py-4 text-center">未找到匹配的规则</p>;
+                  }
+                  return rulesByScope.map((group) => (
+                    <div key={group.name} className="border border-gray-100 rounded-lg overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => toggleGroupCollapse(group.name)}
+                        className="w-full flex items-center gap-2 px-3 py-2 bg-gray-50 hover:bg-gray-100 transition-colors text-left"
+                      >
+                        {collapsedGroups.has(group.name) ? (
+                          <ChevronRightIcon className="w-4 h-4 text-gray-500 shrink-0" />
+                        ) : (
+                          <ChevronDownIcon className="w-4 h-4 text-gray-500 shrink-0" />
+                        )}
+                        <span className={`w-2 h-2 rounded-full shrink-0 ${group.color}`} />
+                        <span className="text-sm font-medium text-gray-700 truncate">{group.displayName}</span>
+                        <span className="text-xs text-gray-400 ml-auto shrink-0">({group.rules.length})</span>
+                      </button>
+                      {!collapsedGroups.has(group.name) && (
+                        <div className="divide-y divide-gray-50">
+                          {group.rules.map((rule, i) => {
+                            const ruleIndex = rules.indexOf(rule);
+                            return (
+                              <button
+                                key={`${rule.name}-${i}`}
+                                onClick={() => setSelectedRuleIndex(ruleIndex)}
+                                className={`w-full text-left px-3 py-2 transition-colors ${
+                                  selectedRuleIndex === ruleIndex
+                                    ? 'bg-blue-50 text-blue-700'
+                                    : 'hover:bg-gray-50 text-gray-700'
+                                }`}
+                              >
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="font-medium text-sm truncate">{rule.display_name || rule.name || '(未命名)'}</div>
+                                  <span className="text-xs px-1.5 py-0.5 bg-indigo-100 text-indigo-700 rounded shrink-0">
+                                    {rule.language}
+                                  </span>
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
-                    <div className="text-xs text-gray-500 mt-1">Scope: {getScope(getRuleExpr(rule))}</div>
-                  </button>
-                ))
+                  ));
+                })()
               )}
             </div>
           </div>
@@ -351,38 +452,45 @@ export default function RulesView() {
               )}
             </div>
 
-            {/* 推理链展示（只读） */}
+            {/* 推理链展示（只读） - 动态根据本体模型中的 object_types 和规则的 getScope() 归类 */}
             {rules.length > 0 && (
               <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
                 <h2 className="text-lg font-semibold text-gray-900 mb-4">推理链</h2>
                 <div className="space-y-4">
-                  {[
-                    { label: 'Passage (通行路径)', color: 'bg-blue-600', rules: rules.filter((r) => { const e = getRuleExpr(r); return getScope(e) === 'Passage' && !e.includes('entry_involves_vehicle') && !e.includes('entry_at_station'); }) },
-                    { label: 'Vehicle (车辆)', color: 'bg-yellow-500', rules: rules.filter((r) => getRuleExpr(r).includes('entry_involves_vehicle')) },
-                    { label: 'TollStation (收费站)', color: 'bg-red-500', rules: rules.filter((r) => getRuleExpr(r).includes('entry_at_station')) },
-                  ].map((level, idx) => (
-                    <div key={level.label}>
-                      <div className="flex items-center">
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold ${level.color}`}>
-                          {idx + 1}
-                        </div>
-                        <div className="ml-3 font-semibold text-gray-900">{level.label}</div>
-                        <span className="ml-2 text-xs text-gray-500">({level.rules.length} rules)</span>
-                      </div>
-                      <div className="ml-11 mt-2 space-y-1">
-                        {level.rules.map((r, i) => (
-                          <div
-                            key={`${r.name}-${i}`}
-                            className={`text-sm cursor-pointer hover:text-blue-600 ${selectedRule?.name === r.name ? 'text-blue-700 font-medium' : 'text-gray-600'}`}
-                            onClick={() => setSelectedRuleIndex(rules.indexOf(r))}
-                          >
-                            {r.display_name || r.name}
+                  {(() => {
+                    const colors = ['bg-blue-600', 'bg-yellow-500', 'bg-red-500', 'bg-green-600', 'bg-purple-600', 'bg-indigo-600', 'bg-pink-500', 'bg-teal-500'];
+                    const rulesByScope = objectTypes
+                      .map((ot: Record<string, any>, idx: number) => ({
+                        name: ot.name ?? '',
+                        label: ot.display_name ? `${ot.name} (${ot.display_name})` : ot.name,
+                        color: colors[idx % colors.length],
+                        rules: rules.filter((r) => getScope(getRuleExpr(r)) === ot.name),
+                      }))
+                      .filter((group) => group.rules.length > 0);
+                    return rulesByScope.map((level, idx) => (
+                      <div key={level.name}>
+                        <div className="flex items-center">
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold ${level.color}`}>
+                            {idx + 1}
                           </div>
-                        ))}
+                          <div className="ml-3 font-semibold text-gray-900">{level.label}</div>
+                          <span className="ml-2 text-xs text-gray-500">({level.rules.length} rules)</span>
+                        </div>
+                        <div className="ml-11 mt-2 space-y-1">
+                          {level.rules.map((r, i) => (
+                            <div
+                              key={`${r.name}-${i}`}
+                              className={`text-sm cursor-pointer hover:text-blue-600 ${selectedRule?.name === r.name ? 'text-blue-700 font-medium' : 'text-gray-600'}`}
+                              onClick={() => setSelectedRuleIndex(rules.indexOf(r))}
+                            >
+                              {r.display_name || r.name}
+                            </div>
+                          ))}
+                        </div>
+                        {idx < rulesByScope.length - 1 && <div className="ml-3.5 my-1 border-l-2 border-gray-300 h-4" />}
                       </div>
-                      {idx < 2 && <div className="ml-3.5 my-1 border-l-2 border-gray-300 h-4" />}
-                    </div>
-                  ))}
+                    ));
+                  })()}
                 </div>
               </div>
             )}

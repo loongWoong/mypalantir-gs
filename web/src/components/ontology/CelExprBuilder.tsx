@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import type { CelVisualExpr, CelOperand, CelExprMode } from '../../utils/celExprEditor';
 import {
   celVisualToExpr,
@@ -48,7 +48,13 @@ export function CelExprBuilder({
     return parsed ?? { ...DEFAULT_CEL_VISUAL };
   });
 
+  // 跟踪本组件最后一次生成的 expr，避免把自己 onChange 触发的 prop 更新再次解析回来造成循环
+  const lastGeneratedExprRef = useRef<string>('');
+
   useEffect(() => {
+    // 如果这次 expr 是本组件自己生成的，跳过解析（避免循环）
+    if (expr === lastGeneratedExprRef.current) return;
+
     if (!expr.trim()) {
       setVisual({ ...DEFAULT_CEL_VISUAL });
       return;
@@ -57,10 +63,12 @@ export function CelExprBuilder({
     if (parsed) setVisual(parsed);
   }, [expr]);
 
-  useEffect(() => {
-    const generated = celVisualToExpr(visual);
-    if (generated !== expr) onChange(generated || '');
-  }, [visual]);
+  // 统一的 visual → expr 同步出口，直接调用 onChange，不再使用 useEffect 监听 visual
+  const flushVisual = useCallback((next: CelVisualExpr) => {
+    const generated = celVisualToExpr(next);
+    lastGeneratedExprRef.current = generated || '';
+    onChange(generated || '');
+  }, [onChange]);
 
   const getEntity = (name: string) => entities.find((e) => e.name === name);
   const getAttributesForLinkType = (linkTypeName: string) => {
@@ -71,13 +79,26 @@ export function CelExprBuilder({
   };
 
   const setLeft = (upd: Partial<CelVisualExpr['left']>) =>
-    setVisual((v) => ({ ...v, left: { ...v.left, ...upd } }));
+    setVisual((v) => {
+      const next = { ...v, left: { ...v.left, ...upd } };
+      flushVisual(next);
+      return next;
+    });
   const setRight = (upd: Partial<CelVisualExpr['right']>) =>
-    setVisual((v) => ({ ...v, right: { ...v.right, ...upd } }));
-  const setMode = (mode: CelExprMode) => setVisual((v) => ({ ...v, mode }));
+    setVisual((v) => {
+      const next = { ...v, right: { ...v.right, ...upd } };
+      flushVisual(next);
+      return next;
+    });
+  const setMode = (mode: CelExprMode) =>
+    setVisual((v) => {
+      const next = { ...v, mode };
+      flushVisual(next);
+      return next;
+    });
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 min-w-0 overflow-hidden">
       <div className="flex items-center gap-2">
         <span className="text-xs text-gray-500">表达式类型：</span>
         <select
@@ -95,7 +116,7 @@ export function CelExprBuilder({
           ? '选择取值方式与关系，生成单个 CEL 表达式（如 size(links.关系名)）'
           : '选择左右两侧的取值方式与关系，生成 CEL 比较表达式'}
       </p>
-      <div className="flex flex-wrap items-end gap-3">
+      <div className="flex flex-wrap items-start gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-gray-600 text-sm">{visual.mode === 'single' ? '取值' : '左侧'}</span>
           <select
@@ -158,7 +179,11 @@ export function CelExprBuilder({
           <>
             <select
               value={visual.operator}
-              onChange={(e) => setVisual((v) => ({ ...v, operator: e.target.value as CelVisualExpr['operator'] }))}
+              onChange={(e) => setVisual((v) => {
+                const next = { ...v, operator: e.target.value as CelVisualExpr['operator'] };
+                flushVisual(next);
+                return next;
+              })}
               disabled={disabled}
               className="border rounded px-2 py-1.5 text-sm"
             >
@@ -231,7 +256,7 @@ export function CelExprBuilder({
         )}
       </div>
       {celVisualToExpr(visual) && (
-        <div className="p-2 bg-gray-50 border rounded text-xs font-mono text-gray-700 break-all">
+        <div className="p-2 bg-gray-50 border rounded text-xs font-mono text-gray-700 break-all whitespace-pre-wrap overflow-x-auto max-h-32 overflow-y-auto">
           {celVisualToExpr(visual)}
         </div>
       )}

@@ -4,6 +4,8 @@ import {
   TrashIcon,
   CodeBracketIcon,
   Squares2X2Icon,
+  ClipboardDocumentIcon,
+  ExclamationTriangleIcon,
 } from '@heroicons/react/24/outline';
 import type { SwrlVisualRule, SwrlCondition, SwrlConclusion } from '../../utils/ruleExprEditor';
 import {
@@ -90,42 +92,50 @@ export function RuleExpressionEditor({
   /** 额外变量（如 ?v）对应的实体类型，用于下拉与自然语言 */
   const [extraVarEntityTypes, setExtraVarEntityTypes] = useState<Record<string, string>>({});
   const [parseWarning, setParseWarning] = useState<string | null>(null);
+  const [showSwitchConfirm, setShowSwitchConfirm] = useState(false);
+  const [copiedPreview, setCopiedPreview] = useState(false);
 
   const entityList = entities.length > 0 ? entities : entityTypeNames.map((n) => ({ name: n, attributes: [] }));
   const getEntity = useCallback((name: string) => entityList.find((e) => e.name === name), [entityList]);
 
+  // 仅当 expr 从外部发生变化时（如加载/切换规则），才将其解析同步到 visualRule。
+  // 使用 ref 跟踪"本组件最后一次生成的 expr"，避免把自己 onChange 触发的 prop 更新再次解析回来，造成循环。
+  const lastGeneratedExprRef = React.useRef<string>('');
+
   useEffect(() => {
-    if (!isSwrl) setEditMode('advanced');
-    if (isSwrl) {
-      if (!expr.trim()) {
-        setVisualRule({ ...DEFAULT_VISUAL_RULE });
-        setExtraVarEntityTypes({});
-        setParseWarning(null);
-        return;
-      }
-      const parsed = swrlExprToVisual(expr);
-      if (parsed) {
-        setVisualRule(parsed);
-        setParseWarning(null);
-      } else {
-        setParseWarning('当前表达式无法解析为可视化形式，请使用「高级」模式编辑。');
-      }
+    if (!isSwrl) {
+      setEditMode('advanced');
+      return;
+    }
+    // 如果这次 expr 就是本组件上次生成的，跳过解析（避免循环）
+    if (expr === lastGeneratedExprRef.current) return;
+
+    if (!expr.trim()) {
+      setVisualRule({ ...DEFAULT_VISUAL_RULE });
+      setExtraVarEntityTypes({});
+      setParseWarning(null);
+      return;
+    }
+    const parsed = swrlExprToVisual(expr);
+    if (parsed) {
+      // 结论 predicate 固定为 check_status，解析后统一规范化
+      setVisualRule({
+        ...parsed,
+        conclusion: { ...parsed.conclusion, predicate: 'check_status' },
+      });
+      setParseWarning(null);
+    } else {
+      setParseWarning('当前表达式无法解析为可视化形式，请使用「高级」模式编辑。');
     }
   }, [expr, language, isSwrl]);
 
-  const flushVisualToExpr = useCallback(() => {
-    const generated = swrlVisualToExpr(visualRule);
-    if (generated !== expr) onChange(generated);
-  }, [visualRule, expr, onChange]);
-
-  useEffect(() => {
-    if (editMode === 'visual' && isSwrl) flushVisualToExpr();
-  }, [visualRule, editMode, isSwrl, flushVisualToExpr]);
-
-  const setVisualRuleAndFlush = (next: SwrlVisualRule) => {
+  // 唯一的 visual → expr 同步出口，避免 useEffect 监听 visualRule 造成的双重触发。
+  const setVisualRuleAndFlush = useCallback((next: SwrlVisualRule) => {
     setVisualRule(next);
-    onChange(swrlVisualToExpr(next));
-  };
+    const generated = swrlVisualToExpr(next);
+    lastGeneratedExprRef.current = generated;
+    onChange(generated);
+  }, [onChange]);
 
   /** 变量选项：主体 + 所有额外变量，用于下拉；每个选项对应“本体变量”的展示（实体类型） */
   const variableOptions = React.useMemo(() => {
@@ -226,30 +236,49 @@ export function RuleExpressionEditor({
     setVisualRuleAndFlush({ ...visualRule, conditions: next });
   };
 
+  /** 结论（后件）的 predicate 固定为 check_status，不作为本体属性选择 */
+  const CONCLUSION_PREDICATE = 'check_status';
   const setConclusion = (upd: Partial<SwrlConclusion>) => {
     setVisualRuleAndFlush({
       ...visualRule,
-      conclusion: { ...visualRule.conclusion, ...upd },
+      conclusion: { ...visualRule.conclusion, predicate: CONCLUSION_PREDICATE, ...upd },
     });
   };
 
-  const switchToVisual = () => {
+  const switchToVisual = (force = false) => {
     if (!expr.trim()) {
       setVisualRule({ ...DEFAULT_VISUAL_RULE });
       setExtraVarEntityTypes({});
       setParseWarning(null);
       setEditMode('visual');
+      setShowSwitchConfirm(false);
       onChange(swrlVisualToExpr(DEFAULT_VISUAL_RULE));
       return;
     }
     const parsed = swrlExprToVisual(expr);
     if (parsed) {
-      setVisualRule(parsed);
+      setVisualRule({
+        ...parsed,
+        conclusion: { ...parsed.conclusion, predicate: 'check_status' },
+      });
       setParseWarning(null);
       setEditMode('visual');
+      setShowSwitchConfirm(false);
+    } else if (!force) {
+      setShowSwitchConfirm(true);
     } else {
-      setParseWarning('无法解析为可视化，请先简化表达式或清空后使用可视化。');
+      setParseWarning('当前表达式包含高级语法，部分内容可能无法在可视化模式中编辑。');
+      setVisualRule({ ...DEFAULT_VISUAL_RULE });
+      setEditMode('visual');
+      setShowSwitchConfirm(false);
     }
+  };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedPreview(true);
+      setTimeout(() => setCopiedPreview(false), 2000);
+    });
   };
 
   /** 某变量对应的实体类型 */
@@ -305,7 +334,40 @@ export function RuleExpressionEditor({
         </div>
       )}
 
-      {parseWarning && (
+      {/* 模式切换确认对话框 */}
+      {showSwitchConfirm && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+          <div className="flex items-start gap-3">
+            <ExclamationTriangleIcon className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-amber-800">
+                当前表达式包含高级语法（如析取、不等式）
+              </p>
+              <p className="text-sm text-amber-700 mt-1">
+                切换到可视化模式将清空当前表达式，部分语法无法在可视化编辑器中表示。
+              </p>
+              <div className="flex gap-2 mt-3">
+                <button
+                  type="button"
+                  onClick={() => switchToVisual(true)}
+                  className="px-3 py-1.5 text-sm bg-amber-600 text-white rounded hover:bg-amber-700"
+                >
+                  仍然切换
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowSwitchConfirm(false)}
+                  className="px-3 py-1.5 text-sm bg-white border border-gray-300 text-gray-700 rounded hover:bg-gray-50"
+                >
+                  取消
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {parseWarning && !showSwitchConfirm && (
         <div className="text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2 text-sm">
           {parseWarning}
         </div>
@@ -388,13 +450,13 @@ export function RuleExpressionEditor({
                 <div className="text-gray-500 text-sm py-2">暂无条件，可添加「属性/衍生属性条件」或「函数条件」</div>
               ) : (
                 visualRule.conditions.map((c, i) => (
-                  <div key={i} className="flex items-start gap-2 p-3 bg-white border rounded-lg">
+                  <div key={i} className="flex items-start gap-2 p-3 bg-white border rounded-lg min-w-0 overflow-hidden">
                     <span className="text-gray-500 text-sm shrink-0 pt-1.5">
                       {i === 0 ? '当' : '且'}
                     </span>
                     {c.kind === 'function' ? (
-                      <div className="flex flex-wrap items-center gap-2 flex-1">
-                        <div className="flex-1 min-w-0 rounded bg-gray-50 border border-gray-200 px-3 py-2">
+                      <div className="flex flex-wrap items-start gap-2 flex-1 min-w-0">
+                        <div className="flex-1 min-w-0 rounded bg-gray-50 border border-gray-200 px-3 py-2 overflow-hidden">
                           <div className="text-sm font-medium text-gray-800">
                             函数：{functions.find((f) => f.name === c.funcName)?.display_name || c.funcName}
                           </div>
@@ -403,7 +465,7 @@ export function RuleExpressionEditor({
                               {functions.find((f) => f.name === c.funcName)?.description}
                             </div>
                           )}
-                          <div className="text-xs text-gray-400 mt-1 font-mono truncate">
+                          <div className="text-xs text-gray-400 mt-1 font-mono break-all whitespace-pre-wrap">
                             {c.funcName}({c.argExprs.join(', ')}) == {String(c.expectedValue)}
                           </div>
                         </div>
@@ -562,7 +624,7 @@ export function RuleExpressionEditor({
             </div>
           </div>
 
-          {/* 结论：自然语言 + 内联下拉 */}
+          {/* 结论（后件）：check_status 为默认控件，不绑定本体属性选择 */}
           <div className="border-t pt-4">
             <label className="block text-sm font-medium text-gray-700 mb-2">结论（后件）</label>
             <div className="flex flex-wrap items-center gap-1.5 p-3 bg-white border rounded-lg">
@@ -580,19 +642,9 @@ export function RuleExpressionEditor({
                 ))}
               </select>
               <span className="text-gray-600 text-sm">的</span>
-              <select
-                value={visualRule.conclusion.predicate}
-                onChange={(e) => setConclusion({ predicate: e.target.value })}
-                disabled={disabled}
-                className="border rounded px-2 py-1.5 text-sm min-w-[140px]"
-              >
-                <option value="">请选择属性</option>
-                {getAttributesForVar(visualRule.conclusion.varName).map((a) => (
-                  <option key={a.name} value={a.name}>
-                    {attrDisplay(a)}
-                  </option>
-                ))}
-              </select>
+              <span className="inline-flex items-center px-2 py-1.5 text-sm font-medium text-gray-800 bg-gray-100 border border-gray-200 rounded">
+                check_status
+              </span>
               <span className="text-gray-600 text-sm">设为</span>
               <select
                 value={

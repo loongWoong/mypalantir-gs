@@ -380,7 +380,7 @@ export default function Layout({ children }: LayoutProps) {
               }`}
             >
               <ShieldCheckIcon className="w-5 h-5 mr-3" />
-              Rules
+              规则
             </Link>
 
             <Link
@@ -392,7 +392,7 @@ export default function Layout({ children }: LayoutProps) {
               }`}
             >
               <CpuChipIcon className="w-5 h-5 mr-3" />
-              Reasoning
+              推理
             </Link>
 
             <Link
@@ -404,7 +404,7 @@ export default function Layout({ children }: LayoutProps) {
               }`}
             >
               <ChatBubbleLeftRightIcon className="w-5 h-5 mr-3" />
-              Agent
+              Agent助手
             </Link>
 
             <Link
@@ -416,7 +416,7 @@ export default function Layout({ children }: LayoutProps) {
               }`}
             >
               <CpuChipIcon className="w-5 h-5 mr-3" />
-              Functions
+              Functions|开发中
             </Link>
 
             {!loading && (
