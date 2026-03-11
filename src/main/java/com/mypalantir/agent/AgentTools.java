@@ -5,8 +5,6 @@ import com.mypalantir.meta.*;
 import com.mypalantir.reasoning.ReasoningService;
 import com.mypalantir.reasoning.engine.InferenceResult;
 import com.mypalantir.reasoning.function.FunctionRegistry;
-import com.mypalantir.service.QueryService;
-import com.mypalantir.query.QueryExecutor;
 import org.springframework.stereotype.Component;
 
 import java.util.*;
@@ -19,13 +17,11 @@ import java.util.*;
 public class AgentTools {
 
     private final ReasoningService reasoningService;
-    private final QueryService queryService;
     private final Loader loader;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public AgentTools(ReasoningService reasoningService, QueryService queryService, Loader loader) {
+    public AgentTools(ReasoningService reasoningService, Loader loader) {
         this.reasoningService = reasoningService;
-        this.queryService = queryService;
         this.loader = loader;
     }
 
@@ -92,6 +88,10 @@ public class AgentTools {
      * 调用诊断函数（object_type、instance_id 为当前本体的类型与实例，与 query_instance 一致）
      * args: { "object_type": "Path", "instance_id": "PASS_LATE_001", "function": "check_route_consistency" }
      * 兼容: { "passage_id": "PASS_LATE_001", "function": "..." } 视为 Passage + instance_id
+     *
+     * 数据准备逻辑与 ReasoningService.inferInstance 完全一致：
+     * 通过 buildInstanceContext 获取 instance、linkedData（出边+入边+别名+enriched）、derivedValues，
+     * 确保函数调用与推理引擎使用相同的 schema 和数据。
      */
     private String callFunction(Map<String, Object> args) throws Exception {
         String objectType = (String) args.get("object_type");
@@ -108,48 +108,43 @@ public class AgentTools {
         FunctionRegistry registry = reasoningService.getFunctionRegistry();
         if (!registry.hasFunction(funcName)) return "函数 " + funcName + " 未注册";
 
-        Map<String, Object> instance = reasoningService.queryInstance(objectType, instanceId);
-        if (instance == null) return objectType + " " + instanceId + " 不存在";
-
-        // 按当前本体的出边查询关联数据，用于函数参数
-        List<Map<String, Object>> gantryTxs = new ArrayList<>();
-        List<Map<String, Object>> splitDetails = new ArrayList<>();
-        List<Map<String, Object>> exitTxList = new ArrayList<>();
-        List<Map<String, Object>> entryTxList = new ArrayList<>();
-        if (loader.getSchema() != null && loader.getSchema().getLinkTypes() != null) {
-            for (LinkType lt : loader.getSchema().getLinkTypes()) {
-                if (!objectType.equals(lt.getSourceType())) continue;
-                List<Map<String, Object>> list = reasoningService.queryLinkedInstances(objectType, instanceId, lt.getName());
-                String target = lt.getTargetType() != null ? lt.getTargetType() : "";
-                if (target.contains("GantryTransaction")) gantryTxs = list;
-                else if (target.contains("SplitDetail")) splitDetails = list;
-                else if (target.contains("ExitTransaction")) exitTxList = list;
-                else if (target.contains("EntryTransaction")) entryTxList = list;
-            }
-        }
-        if (!exitTxList.isEmpty()) instance.put("_exit_transaction", exitTxList.get(0));
-        if (!entryTxList.isEmpty()) {
-            Map<String, Object> entryTx = entryTxList.get(0);
-            Map<String, Object> mediaPseudo = new LinkedHashMap<>();
-            mediaPseudo.put("media_type", entryTx.get("media_type"));
-            mediaPseudo.put("card_net", entryTx.get("card_net"));
-            instance.put("_media", mediaPseudo);
+        // 使用与推理引擎完全一致的数据准备逻辑（出边+入边+别名+enrich+衍生属性）
+        ReasoningService.InstanceContext ctx;
+        try {
+            ctx = reasoningService.buildInstanceContext(objectType, instanceId);
+        } catch (IllegalArgumentException e) {
+            return objectType + " " + instanceId + " 不存在";
         }
 
-        List<Object> funcArgs = buildFunctionArgs(funcName, instance, gantryTxs, splitDetails);
+        List<Object> funcArgs = buildFunctionArgsFromContext(funcName, ctx, objectType);
         Object result = registry.call(funcName, funcArgs);
         return funcName + " → " + result;
     }
 
     /**
-     * 根据函数名构建参数列表
+     * 根据函数名和 InstanceContext 动态构建参数列表。
+     * 通过 schema 的 LinkType 定义识别关联数据类型，避免硬编码目标类型名称字符串。
      */
-    private List<Object> buildFunctionArgs(String funcName, Map<String, Object> passage,
-                                            List<Map<String, Object>> gantryTxs,
-                                            List<Map<String, Object>> splitDetails) {
+    private List<Object> buildFunctionArgsFromContext(String funcName,
+                                                       ReasoningService.InstanceContext ctx,
+                                                       String objectType) {
+        Map<String, Object> instance = ctx.instance;
+        Map<String, List<Map<String, Object>>> linkedData = ctx.linkedData;
+
+        // 从 schema 动态识别各类关联数据（按目标类型名后缀匹配，而非硬编码字符串）
+        List<Map<String, Object>> gantryTxs = resolveLinkedByTargetSuffix(linkedData, objectType, "GantryTransaction");
+        List<Map<String, Object>> splitDetails = resolveLinkedByTargetSuffix(linkedData, objectType, "SplitDetail");
+
+        // 衍生属性中的 pro_split_time 优先从 derivedValues 取，其次从 splitDetails 取
+        Object proSplitTime = ctx.derivedValues.get("pro_split_time");
+        if (proSplitTime == null && !splitDetails.isEmpty()) {
+            proSplitTime = splitDetails.get(0).get("pro_split_time");
+        }
+
+        // 按函数签名构建参数（函数签名由 schema 中 functions 定义，此处按已注册的内置函数约定）
         return switch (funcName) {
             case "is_single_province_etc", "is_obu_billing_mode1" ->
-                List.of(passage);
+                List.of(instance);
             case "check_route_consistency", "check_fee_detail_consistency" ->
                 List.of(splitDetails, gantryTxs);
             case "detect_duplicate_intervals", "check_gantry_hex_continuity",
@@ -157,16 +152,50 @@ public class AgentTools {
                 List.of(gantryTxs);
             case "check_rounding_mismatch" ->
                 List.of(gantryTxs, 0.95);
-            case "detect_late_upload" -> {
-                // 需要 pro_split_time 参数
-                Object proSplitTime = null;
-                if (!splitDetails.isEmpty()) {
-                    proSplitTime = splitDetails.get(0).get("pro_split_time");
-                }
-                yield List.of(gantryTxs, proSplitTime != null ? proSplitTime : "");
-            }
-            default -> List.of(passage);
+            case "detect_late_upload" ->
+                List.of(gantryTxs, proSplitTime != null ? proSplitTime : "");
+            default -> List.of(instance);
         };
+    }
+
+    /**
+     * 从 linkedData 中按目标类型名后缀动态查找对应的关联列表。
+     * 遍历当前 schema 的 LinkType，找到 sourceType=objectType 且 targetType 以 suffix 结尾的关联，
+     * 再从 linkedData 中取对应数据（支持 snake_case 与 PascalCase 两种 key 形式）。
+     */
+    private List<Map<String, Object>> resolveLinkedByTargetSuffix(
+            Map<String, List<Map<String, Object>>> linkedData,
+            String objectType,
+            String targetTypeSuffix) {
+        OntologySchema schema = loader.getSchema();
+        if (schema == null || schema.getLinkTypes() == null) return List.of();
+
+        for (LinkType lt : schema.getLinkTypes()) {
+            if (!objectType.equals(lt.getSourceType())) continue;
+            String target = lt.getTargetType();
+            if (target == null || !target.endsWith(targetTypeSuffix)) continue;
+            // 尝试 snake_case 和 PascalCase 两种 key
+            List<Map<String, Object>> list = linkedData.get(lt.getName());
+            if (list != null && !list.isEmpty()) return list;
+            // 尝试 PascalCase 别名
+            String pascal = toPascalLinkKey(lt.getName());
+            list = linkedData.get(pascal);
+            if (list != null && !list.isEmpty()) return list;
+        }
+        return List.of();
+    }
+
+    /** 小写 link 名转 PascalCase（与 ReasoningService.toPascalLinkKey 保持一致） */
+    private static String toPascalLinkKey(String linkName) {
+        if (linkName == null || linkName.isEmpty()) return linkName;
+        StringBuilder sb = new StringBuilder();
+        boolean cap = true;
+        for (char c : linkName.toCharArray()) {
+            if (c == '_') { sb.append(c); cap = true; continue; }
+            sb.append(cap ? Character.toUpperCase(c) : c);
+            cap = false;
+        }
+        return sb.toString();
     }
 
     /**

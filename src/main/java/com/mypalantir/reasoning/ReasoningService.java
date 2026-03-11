@@ -144,6 +144,59 @@ public class ReasoningService {
     }
 
     /**
+     * 获取推理所需的完整实例上下文：instance 属性、linkedData（出边+入边+别名）、derivedValues。
+     * 与 inferInstance 使用完全相同的数据准备逻辑，供 Agent callFunction 工具复用，
+     * 确保 Agent 的函数调用与推理引擎使用一致的 schema 和数据。
+     */
+    public InstanceContext buildInstanceContext(String objectType, String instanceId) throws Exception {
+        Map<String, Object> instance = queryInstance(objectType, instanceId);
+        if (instance == null) {
+            throw new IllegalArgumentException("Instance not found: " + objectType + " id=" + instanceId);
+        }
+
+        Map<String, List<Map<String, Object>>> linkedData = new LinkedHashMap<>();
+        OntologySchema schema = loader.getSchema();
+        if (schema != null && schema.getLinkTypes() != null) {
+            for (LinkType lt : schema.getLinkTypes()) {
+                if (!objectType.equals(lt.getSourceType())) continue;
+                List<Map<String, Object>> list = queryLinkedInstances(objectType, instanceId, lt.getName());
+                linkedData.put(lt.getName(), list);
+            }
+            for (LinkType lt : schema.getLinkTypes()) {
+                if (!objectType.equals(lt.getTargetType())) continue;
+                List<Map<String, Object>> incoming = queryIncomingLinkInstances(lt, instanceId);
+                if (incoming.isEmpty()) continue;
+                String canonicalKey = inferIncomingLinkKey(objectType, lt);
+                linkedData.put(canonicalKey, incoming);
+            }
+            addLinkedDataAliases(linkedData, objectType);
+        }
+
+        enrichEntryExitAndMedia(objectType, instanceId, instance, linkedData);
+        enrichPathEntryExitAndMedia(objectType, instanceId, instance, linkedData);
+
+        Map<String, Object> derivedValues = computeDerivedProperties(objectType, instance, linkedData);
+        return new InstanceContext(instance, linkedData, derivedValues);
+    }
+
+    /**
+     * 推理所需的完整实例上下文容器
+     */
+    public static class InstanceContext {
+        public final Map<String, Object> instance;
+        public final Map<String, List<Map<String, Object>>> linkedData;
+        public final Map<String, Object> derivedValues;
+
+        public InstanceContext(Map<String, Object> instance,
+                               Map<String, List<Map<String, Object>>> linkedData,
+                               Map<String, Object> derivedValues) {
+            this.instance = instance;
+            this.linkedData = linkedData;
+            this.derivedValues = derivedValues;
+        }
+    }
+
+    /**
      * 查询入边：给定 link（如 gantry_to_path，target=Path），按 targetId 查所有 source 实例（如该 Path 下的所有门架交易）。
      * 当 link 未配置 data_source 时，与自然语言查询一致：使用 .env 配置的默认数据源（dataSourceType=sync，表名=类型名小写）。
      */
