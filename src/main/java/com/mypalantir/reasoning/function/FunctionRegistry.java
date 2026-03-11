@@ -10,32 +10,49 @@ import java.util.Map;
 
 /**
  * 函数注册中心。
- * 启动时扫描 OntologySchema 中的 function 定义，注册 builtin 实现。
+ * 启动时注册 builtin 实现；按当前 schema 动态注册 script 实现（从 functions/script/ 加载）。
  */
 @Component
 public class FunctionRegistry {
 
     private final Map<String, OntologyFunction> functions = new HashMap<>();
+    private final Map<String, OntologyFunction> scriptFunctions = new HashMap<>();
 
     /**
-     * 注册一个函数实现
+     * 注册一个函数实现（builtin 等常驻）
      */
     public void register(OntologyFunction function) {
         functions.put(function.getName(), function);
     }
 
     /**
-     * 获取函数
+     * 注册脚本函数（按 schema 加载时调用，切换 schema 前会先 clearScriptFunctions）
+     */
+    public void registerScript(OntologyFunction function) {
+        scriptFunctions.put(function.getName(), function);
+    }
+
+    /**
+     * 清除所有脚本函数（切换 schema 时调用）
+     */
+    public void clearScriptFunctions() {
+        scriptFunctions.clear();
+    }
+
+    /**
+     * 获取函数（先查 builtin，再查 script）
      */
     public OntologyFunction getFunction(String name) {
-        return functions.get(name);
+        OntologyFunction fn = functions.get(name);
+        if (fn != null) return fn;
+        return scriptFunctions.get(name);
     }
 
     /**
      * 调用函数
      */
     public Object call(String name, List<Object> args) {
-        OntologyFunction fn = functions.get(name);
+        OntologyFunction fn = getFunction(name);
         if (fn == null) {
             throw new IllegalArgumentException("Function not found: " + name);
         }
@@ -43,17 +60,19 @@ public class FunctionRegistry {
     }
 
     /**
-     * 是否已注册
+     * 是否已注册（builtin 或 script）
      */
     public boolean hasFunction(String name) {
-        return functions.containsKey(name);
+        return functions.containsKey(name) || scriptFunctions.containsKey(name);
     }
 
     /**
-     * 获取所有已注册的函数名
+     * 获取所有已注册的函数名（builtin + script）
      */
     public java.util.Set<String> getFunctionNames() {
-        return functions.keySet();
+        java.util.Set<String> out = new java.util.HashSet<>(functions.keySet());
+        out.addAll(scriptFunctions.keySet());
+        return out;
     }
 
     /**

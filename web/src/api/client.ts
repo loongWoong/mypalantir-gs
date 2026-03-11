@@ -212,10 +212,17 @@ export interface OntologyRulePayload {
   expr: string;
 }
 
-/** 函数入参定义 */
+/** 函数入参定义（与 ontology parameters/inputs 兼容） */
 export interface FunctionInputPayload {
   name: string;
   type: string;
+  description?: string;
+}
+
+/** 函数出参（ontology 可能为 output: { type } 或直接 return_type） */
+export interface FunctionOutputPayload {
+  type?: string;
+  description?: string;
 }
 
 /** 参数绑定：数据来源为 link 或衍生属性 */
@@ -227,13 +234,25 @@ export interface ParameterBindingPayload {
   attribute_name?: string;
 }
 
+/** 合并后的函数配置：兼容 ontology 的 parameters/return_type/implementation_type 与既有 inputs/output_type/implementation */
 export interface FunctionPayload {
   name: string;
   display_name?: string;
   description?: string;
-  implementation: 'builtin' | 'external';
+  /** 实现类型（兼容 implementation_type / implementation） */
+  implementation?: 'builtin' | 'external' | 'script';
+  implementation_type?: string;
+  implementation_ref?: string;
+  published?: boolean;
+  script_configured?: boolean;
+  script_path?: string;
+  /** 入参（兼容 parameters / inputs） */
+  parameters?: FunctionInputPayload[];
   inputs?: FunctionInputPayload[];
+  /** 出参类型（兼容 return_type / output_type / output.type） */
+  return_type?: string;
   output_type?: string;
+  output?: FunctionOutputPayload;
   parameter_bindings?: ParameterBindingPayload[];
 }
 
@@ -775,6 +794,39 @@ export const reasoningApi = {
 
   status: async (): Promise<ReasoningStatus> => {
     const response = await apiClient.get<ApiResponse<ReasoningStatus>>('/reasoning/status');
+    return response.data.data;
+  },
+
+  /** CEL 表达式校验（查询验证、脚本编辑） */
+  validateCel: async (expr: string): Promise<{ valid: boolean; message: string }> => {
+    const response = await apiClient.post<ApiResponse<Record<string, unknown>>>(
+      '/reasoning/cel/validate',
+      { expr: expr ?? '' }
+    );
+    const data = response.data.data as { valid?: boolean; message?: string };
+    return { valid: !!data?.valid, message: data?.message ?? '' };
+  },
+
+  /** CEL 表达式求值（脚本测试，传入样本上下文） */
+  evaluateCel: async (
+    expr: string,
+    properties?: Record<string, unknown>,
+    linkedData?: Record<string, unknown[]>
+  ): Promise<unknown> => {
+    const response = await apiClient.post<ApiResponse<unknown>>('/reasoning/cel/evaluate', {
+      expr: expr ?? '',
+      properties: properties ?? {},
+      linked_data: linkedData ?? {},
+    });
+    return response.data.data;
+  },
+
+  /** 函数测试：使用给定参数调用已注册函数 */
+  testFunction: async (name: string, args: unknown[]): Promise<unknown> => {
+    const response = await apiClient.post<ApiResponse<unknown>>('/reasoning/functions/test', {
+      name,
+      args: args ?? [],
+    });
     return response.data.data;
   },
 };

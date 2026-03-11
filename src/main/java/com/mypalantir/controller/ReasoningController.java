@@ -78,4 +78,71 @@ public class ReasoningController {
         status.put("registeredFunctions", reasoningService.getRegisteredFunctions());
         return ApiResponse.success(status);
     }
+
+    /**
+     * CEL 表达式校验（用于前端查询验证、脚本编辑）
+     * POST /api/v1/reasoning/cel/validate
+     * Body: { "expr": "size(links.xxx) == 1" }
+     */
+    @PostMapping("/cel/validate")
+    public ApiResponse<Map<String, Object>> validateCel(@RequestBody Map<String, Object> request) {
+        String expr = request != null && request.get("expr") != null ? String.valueOf(request.get("expr")) : null;
+        try {
+            Map<String, Object> result = reasoningService.validateCel(expr);
+            return ApiResponse.success(result);
+        } catch (Exception e) {
+            return ApiResponse.error(500, "校验失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * CEL 表达式求值（用于脚本编辑、测试，传入样本上下文）
+     * POST /api/v1/reasoning/cel/evaluate
+     * Body: { "expr": "...", "properties": {}, "linked_data": {} }
+     */
+    @PostMapping("/cel/evaluate")
+    @SuppressWarnings("unchecked")
+    public ApiResponse<Object> evaluateCel(@RequestBody Map<String, Object> request) {
+        if (request == null) return ApiResponse.error(400, "请求体不能为空");
+        String expr = request.get("expr") != null ? String.valueOf(request.get("expr")) : null;
+        Map<String, Object> properties = request.get("properties") instanceof Map
+            ? (Map<String, Object>) request.get("properties") : Map.of();
+        Map<String, List<Map<String, Object>>> linkedData = new java.util.LinkedHashMap<>();
+        if (request.get("linked_data") instanceof Map) {
+            for (Map.Entry<String, Object> e : ((Map<String, Object>) request.get("linked_data")).entrySet()) {
+                if (e.getValue() instanceof List) {
+                    List<?> list = (List<?>) e.getValue();
+                    List<Map<String, Object>> maps = new java.util.ArrayList<>();
+                    for (Object item : list) {
+                        if (item instanceof Map) maps.add((Map<String, Object>) item);
+                    }
+                    linkedData.put(e.getKey(), maps);
+                }
+            }
+        }
+        try {
+            Object result = reasoningService.evaluateCel(expr, properties, linkedData);
+            return ApiResponse.success(result);
+        } catch (Exception e) {
+            return ApiResponse.error(500, "求值失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 函数测试：使用给定参数调用已注册函数
+     * POST /api/v1/reasoning/functions/test
+     * Body: { "name": "is_single_province_etc", "args": [ {...}, [...] ] }
+     */
+    @PostMapping("/functions/test")
+    public ApiResponse<Object> testFunction(@RequestBody Map<String, Object> request) {
+        if (request == null) return ApiResponse.error(400, "请求体不能为空");
+        String name = request.get("name") != null ? String.valueOf(request.get("name")) : null;
+        List<Object> args = request.get("args") instanceof List ? (List<Object>) request.get("args") : List.of();
+        try {
+            Object result = reasoningService.testFunction(name, args);
+            return ApiResponse.success(result);
+        } catch (Exception e) {
+            return ApiResponse.error(400, "调用失败: " + e.getMessage());
+        }
+    }
 }

@@ -19,6 +19,7 @@ import RulesView from './pages/RulesView';
 import FunctionsView from './pages/FunctionsView';
 import ReasoningView from './pages/ReasoningView';
 import AgentChat from './pages/AgentChat';
+import CelPlayground from './pages/CelPlayground';
 
 function App() {
   return (
@@ -43,6 +44,7 @@ function App() {
 
           <Route path="/rules" element={<RulesView />} />
           <Route path="/functions" element={<FunctionsView />} />
+          <Route path="/cel-playground" element={<CelPlayground />} />
           <Route path="/reasoning" element={<ReasoningView />} />
           <Route path="/agent" element={<AgentChat />} />
         </Routes>

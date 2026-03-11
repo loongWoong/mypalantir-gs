@@ -2,10 +2,15 @@ package com.mypalantir.reasoning;
 
 import com.mypalantir.meta.*;
 import com.mypalantir.reasoning.cel.CelEvaluator;
+import com.mypalantir.reasoning.cel.CelFunctionAdapter;
 import com.mypalantir.reasoning.engine.ForwardChainEngine;
 import com.mypalantir.reasoning.engine.InferenceResult;
 import com.mypalantir.reasoning.function.FunctionRegistry;
 import com.mypalantir.reasoning.function.builtin.*;
+import com.mypalantir.reasoning.function.script.ScriptFunctionRunner;
+import com.mypalantir.reasoning.function.script.ScriptOntologyFunction;
+
+import java.nio.file.Paths;
 import com.mypalantir.reasoning.swrl.SWRLParser;
 import com.mypalantir.reasoning.swrl.SWRLRule;
 import com.mypalantir.service.QueryService;
@@ -30,17 +35,20 @@ public class ReasoningService {
     private final QueryService queryService;
     private final FunctionRegistry functionRegistry;
     private final CelEvaluator celEvaluator;
+    private final ScriptFunctionRunner scriptFunctionRunner;
 
     /** 按当前本体文件路径缓存：切换 schema 后重新解析 */
     private volatile String lastParsedSchemaPath;
     private volatile List<SWRLRule> parsedRules = List.of();
     private volatile Map<String, String> functionDisplayNames = Map.of();
 
-    public ReasoningService(Loader loader, QueryService queryService, FunctionRegistry functionRegistry) {
+    public ReasoningService(Loader loader, QueryService queryService, FunctionRegistry functionRegistry,
+                            ScriptFunctionRunner scriptFunctionRunner) {
         this.loader = loader;
         this.queryService = queryService;
         this.functionRegistry = functionRegistry;
-        this.celEvaluator = new CelEvaluator();
+        this.scriptFunctionRunner = scriptFunctionRunner != null ? scriptFunctionRunner : new ScriptFunctionRunner();
+        this.celEvaluator = new CelEvaluator(new CelFunctionAdapter(functionRegistry));
     }
 
     @PostConstruct
@@ -56,12 +64,25 @@ public class ReasoningService {
         String path = loader.getFilePath() != null ? loader.getFilePath() : "";
         if (path.equals(lastParsedSchemaPath)) return;
         lastParsedSchemaPath = path;
+        functionRegistry.clearScriptFunctions();
         if (schema == null) {
             parsedRules = List.of();
             functionDisplayNames = Map.of();
             return;
         }
         try {
+            java.nio.file.Path ontologyBaseDir = (path != null && !path.isBlank()) ? Paths.get(path).getParent() : null;
+            if (schema.getFunctions() != null) {
+                for (FunctionDef fd : schema.getFunctions()) {
+                    if ("script".equalsIgnoreCase(fd.getImplementation()) && fd.getScriptPath() != null && !fd.getScriptPath().isBlank()) {
+                        try {
+                            functionRegistry.registerScript(new ScriptOntologyFunction(fd.getName(), fd.getScriptPath(), ontologyBaseDir, scriptFunctionRunner));
+                        } catch (Exception e) {
+                            System.err.println("WARNING: Failed to register script function " + fd.getName() + " (" + fd.getScriptPath() + "): " + e.getMessage());
+                        }
+                    }
+                }
+            }
             SWRLParser parser = new SWRLParser(schema, functionRegistry);
             parsedRules = parser.parseAll(schema);
             Map<String, String> names = new HashMap<>();
@@ -414,6 +435,48 @@ public class ReasoningService {
             System.err.println("Failed to compute derived properties: " + e.getMessage());
         }
         return derived;
+    }
+
+    /**
+     * 校验 CEL 表达式是否可解析/求值（用空上下文试运行）。
+     * 用于前端「查询验证」与脚本编辑时的即时校验。
+     */
+    public Map<String, Object> validateCel(String expr) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        if (expr == null || expr.isBlank()) {
+            result.put("valid", false);
+            result.put("message", "表达式为空");
+            return result;
+        }
+        try {
+            celEvaluator.evaluate(expr.trim(), Map.of(), Map.of());
+            result.put("valid", true);
+            result.put("message", "表达式合法");
+        } catch (Exception e) {
+            result.put("valid", false);
+            result.put("message", e.getMessage() != null ? e.getMessage() : "求值失败");
+        }
+        return result;
+    }
+
+    /**
+     * 使用给定上下文对 CEL 表达式求值（用于脚本编辑、测试）。
+     */
+    public Object evaluateCel(String expr, Map<String, Object> properties,
+                              Map<String, List<Map<String, Object>>> linkedData) {
+        if (expr == null || expr.isBlank()) return null;
+        return celEvaluator.evaluate(expr.trim(), properties != null ? properties : Map.of(),
+            linkedData != null ? linkedData : Map.of());
+    }
+
+    /**
+     * 使用给定参数调用已注册函数（用于函数测试）。
+     */
+    public Object testFunction(String name, List<Object> args) {
+        if (name == null || name.isBlank()) {
+            throw new IllegalArgumentException("函数名不能为空");
+        }
+        return functionRegistry.call(name, args != null ? args : List.of());
     }
 
     /**

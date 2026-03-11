@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import type { Attribute } from '../../models/OntologyModel';
-import { TrashIcon, PlusIcon, DocumentTextIcon } from '@heroicons/react/24/outline';
+import { TrashIcon, PlusIcon, DocumentTextIcon, CheckCircleIcon, ExclamationCircleIcon } from '@heroicons/react/24/outline';
 import { CelExprBuilder } from './CelExprBuilder';
 import type { EntityOption, RelationOption } from './CelExprBuilder';
+import { reasoningApi } from '../../api/client';
 
 interface PropertyEditorProps {
   attributes: Attribute[];
@@ -43,6 +44,25 @@ export function PropertyEditor({
       : relations;
   const derivedAttrs = attributes.filter((a) => a.derived === true);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [validateStatus, setValidateStatus] = useState<{ expr: string; valid: boolean; message: string } | null>(null);
+  const [validating, setValidating] = useState(false);
+
+  const handleValidateCel = useCallback(async (expr: string) => {
+    setValidating(true);
+    setValidateStatus(null);
+    try {
+      const result = await reasoningApi.validateCel(expr ?? '');
+      setValidateStatus({ expr: expr ?? '', valid: result.valid, message: result.message ?? '' });
+    } catch (e) {
+      setValidateStatus({
+        expr: expr ?? '',
+        valid: false,
+        message: e instanceof Error ? e.message : '校验请求失败',
+      });
+    } finally {
+      setValidating(false);
+    }
+  }, []);
 
   const addAttribute = () => {
     const newAttr: Attribute = {
@@ -205,9 +225,19 @@ export function PropertyEditor({
             {attributes.map((attr, index) =>
               attr.derived ? (
                 <div key={index} className="border border-gray-200 rounded-lg p-3 bg-gray-50/50">
-                  <div className="text-sm font-medium text-gray-800 mb-2">
-                    {attr.display_name || attr.name || '未命名'}
-                    {attr.name && <span className="text-gray-500 font-normal ml-1">({attr.name})</span>}
+                  <div className="text-sm font-medium text-gray-800 mb-2 flex items-center justify-between flex-wrap gap-2">
+                    <span>
+                      {attr.display_name || attr.name || '未命名'}
+                      {attr.name && <span className="text-gray-500 font-normal ml-1">({attr.name})</span>}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleValidateCel(attr.expr ?? '')}
+                      disabled={validating || !(attr.expr ?? '').trim()}
+                      className="text-xs px-2 py-1 rounded border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      {validating ? '验证中...' : '验证表达式'}
+                    </button>
                   </div>
                   <CelExprBuilder
                     expr={attr.expr ?? ''}
@@ -215,6 +245,20 @@ export function PropertyEditor({
                     relations={relationsFromEntity}
                     entities={entities}
                   />
+                  {validateStatus && validateStatus.expr === (attr.expr ?? '') && (
+                    <div
+                      className={`mt-2 flex items-center gap-1.5 text-xs ${
+                        validateStatus.valid ? 'text-green-700' : 'text-red-700'
+                      }`}
+                    >
+                      {validateStatus.valid ? (
+                        <CheckCircleIcon className="w-4 h-4 shrink-0" />
+                      ) : (
+                        <ExclamationCircleIcon className="w-4 h-4 shrink-0" />
+                      )}
+                      <span>{validateStatus.message}</span>
+                    </div>
+                  )}
                 </div>
               ) : null
             )}

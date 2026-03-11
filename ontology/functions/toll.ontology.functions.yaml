@@ -1,0 +1,110 @@
+ontology: toll.ontology
+category: toll.ontology
+functions:
+- name: fit_actual_route
+  description: 牌识拟合的实际路径与计费路径是否一致
+  parameters:
+  - name: path
+    type: Path
+  return_type: boolean
+  implementation_type: external
+  implementation_ref: ''
+  published: false
+- name: is_obu_billing_mode1
+  description: 判定OBU计费方式1
+  parameters:
+  - name: exitTransaction
+    type: ExitTransaction
+  return_type: boolean
+  implementation_type: builtin
+  published: false
+  script_configured: true
+- name: check_balance_continuity
+  description: 卡内余额是否连续
+  parameters:
+  - name: gantry_transactions
+    type: list<GantryTransaction>
+  return_type: boolean
+  implementation_type: builtin
+  published: false
+  script_configured: true
+- name: detect_duplicate_intervals
+  description: 门架收费单元是否重复
+  parameters:
+  - name: gantry_transactions
+    type: list<GantryTransaction>
+  return_type: boolean
+  implementation_type: builtin
+  published: false
+  script_configured: true
+- name: check_gantry_hex_continuity
+  description: 相邻门架HEX是否首尾衔接
+  parameters:
+  - name: gantry_transactions
+    type: list<GantryTransaction>
+  return_type: boolean
+  implementation_type: builtin
+  published: false
+  script_configured: true
+- name: check_gantry_count_complete
+  description: 门架数量是否等于交易成功数
+  parameters:
+  - name: gantry_transactions
+    type: list<GantryTransaction>
+  return_type: boolean
+  implementation_type: builtin
+  published: false
+  script_configured: true
+- name: detect_late_upload
+  description: 是否存在门架延迟上传
+  parameters:
+  - name: gantry_transactions
+    type: list<GantryTransaction>
+  - name: split_time
+    type: date
+  return_type: boolean
+  implementation_type: builtin
+  published: false
+  script_configured: true
+- name: check_fee_detail_consistency
+  description: 逐收费单元金额是否一致
+  parameters:
+  - name: split_details
+    type: list<SplitDetail>
+  - name: gantry_transactions
+    type: list<GantryTransaction>
+  return_type: boolean
+  implementation_type: builtin
+  published: false
+  script_configured: true
+- name: is_single_province_etc
+  description: 判定单省ETC交易
+  parameters:
+  - name: exitTransaction
+    type: ExitTransaction
+  return_type: boolean
+  implementation_type: builtin
+  published: false
+  script_configured: true
+- name: check_route_consistency
+  description: 拆分路径与门架路径是否一致
+  parameters:
+  - name: split_details
+    type: list<SplitDetail>
+  - name: gantry_transactions
+    type: list<GantryTransaction>
+  return_type: boolean
+  implementation_type: builtin
+  published: false
+  script_configured: true
+- name: check_rounding_mismatch
+  description: 取整是否导致金额差异
+  parameters:
+  - name: gantry_transactions
+    type: list<GantryTransaction>
+  - name: tolerance
+    type: float
+  return_type: boolean
+  implementation_type: builtin
+  published: false
+  script_configured: true

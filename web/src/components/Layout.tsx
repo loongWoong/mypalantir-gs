@@ -27,7 +27,8 @@ import {
   WrenchScrewdriverIcon,
   ShieldCheckIcon,
   CpuChipIcon,
-  ChatBubbleLeftRightIcon
+  ChatBubbleLeftRightIcon,
+  CodeBracketSquareIcon
 } from '@heroicons/react/24/outline';
 import type { ObjectType, LinkType, ModelInfo, CurrentModel } from '../api/client';
 import { schemaApi, modelApi } from '../api/client';
@@ -416,7 +417,19 @@ export default function Layout({ children }: LayoutProps) {
               }`}
             >
               <CpuChipIcon className="w-5 h-5 mr-3" />
-              Functions|开发中
+              函数
+            </Link>
+
+            <Link
+              to="/cel-playground"
+              className={`flex items-center px-3 py-2 rounded-lg mb-2 ${
+                isActive('/cel-playground')
+                  ? 'bg-blue-50 text-blue-700'
+                  : 'text-gray-700 hover:bg-gray-100'
+              }`}
+            >
+              <CodeBracketSquareIcon className="w-5 h-5 mr-3" />
+              CEL 脚本
             </Link>
 
             {!loading && (

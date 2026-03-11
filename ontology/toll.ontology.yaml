@@ -1,0 +1,3989 @@
+version: '1.0'
+name: toll.ontology
+display_name: 通行本体
+namespace: com.tollcenter.ontology
+description: 默认通行本体
+object_types:
+- name: EntryTransaction
+  display_name: 入口车道流水
+  description: 入口车道流水
+  url: ''
+  properties:
+  - name: id
+    display_name: 交易流水号
+    data_type: string
+    required: true
+    description: 交易流水号
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: pass_id
+    display_name: 通行标识ID
+    data_type: string
+    required: false
+    description: 通行标识ID
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: l_date
+    display_name: 逻辑日期
+    data_type: date
+    required: false
+    description: 逻辑日期
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: en_time
+    display_name: 入口时间
+    data_type: date
+    required: false
+    description: 入口时间
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: station_receive_time
+    display_name: 站级接收时间
+    data_type: date
+    required: false
+    description: 站级接收时间
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: receive_time
+    display_name: 接收时间
+    data_type: date
+    required: false
+    description: 接收时间
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: oper_id
+    display_name: 操作员工号
+    data_type: string
+    required: false
+    description: 操作员工号
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: oper_name
+    display_name: 操作员姓名
+    data_type: string
+    required: false
+    description: 操作员姓名
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: en_toll_lane_id
+    display_name: 入口车道号(国标)
+    data_type: string
+    required: false
+    description: 入口车道号(国标)
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: media_type
+    display_name: 通行介质类型
+    data_type: integer
+    required: false
+    description: 通行介质类型
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: media_no
+    display_name: OBU编号
+    data_type: string
+    required: false
+    description: OBU编号
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: vlp
+    display_name: 车牌号
+    data_type: string
+    required: false
+    description: 车牌号
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: vlpc
+    display_name: 车牌颜色
+    data_type: integer
+    required: false
+    description: 车牌颜色
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: identify_vlp
+    display_name: 识别车牌号
+    data_type: string
+    required: false
+    description: 识别车牌号
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: identify_vlpc
+    display_name: 识别车牌颜色
+    data_type: integer
+    required: false
+    description: 识别车牌颜色
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: trans_code
+    display_name: 交易编码
+    data_type: string
+    required: false
+    description: 交易编码
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: trans_type
+    display_name: 交易类型
+    data_type: string
+    required: false
+    description: 交易类型
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: balance_before
+    display_name: 交易前余额（分）
+    data_type: integer
+    required: false
+    description: 交易前余额（分）
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: trans_fee
+    display_name: 卡面扣费金额
+    data_type: long
+    required: false
+    description: 卡面扣费金额
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: direction
+    display_name: 行驶方向
+    data_type: integer
+    required: false
+    description: 行驶方向
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: en_axle_count
+    display_name: 入口轴数
+    data_type: integer
+    required: false
+    description: 入口轴数
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: axis_info
+    display_name: 轴组信息
+    data_type: string
+    required: false
+    description: 轴组信息
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: en_weight
+    display_name: 入口重量
+    data_type: string
+    required: false
+    description: 入口重量
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: limit_weight
+    display_name: 限载总重(kg)
+    data_type: integer
+    required: false
+    description: 限载总重(kg)
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: over_weight_rate
+    display_name: 超限率
+    data_type: integer
+    required: false
+    description: 超限率
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: description
+    display_name: 对交易的文字解释
+    data_type: string
+    required: false
+    description: 对交易的文字解释
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: special_type
+    display_name: 部特情类型
+    data_type: string
+    required: false
+    description: 部特情类型
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: lane_sp_info
+    display_name: 车道特情状态
+    data_type: string
+    required: false
+    description: 车道特情状态
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: sp_info
+    display_name: 业务分析特情状态
+    data_type: string
+    required: false
+    description: 业务分析特情状态
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+- name: ExitTransaction
+  display_name: 出口车道流水
+  description: 出口车道流水
+  url: ''
+  properties:
+  - name: id
+    display_name: 交易流水号
+    data_type: string
+    required: true
+    description: 交易流水号
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: pass_id
+    display_name: 通行标识ID
+    data_type: string
+    required: false
+    description: 通行标识ID
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: source_id
+    display_name: 原始流水号
+    data_type: string
+    required: false
+    description: 原始流水号
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: return_money_sn
+    display_name: 补费记录号
+    data_type: string
+    required: false
+    description: 补费记录号
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: l_date
+    display_name: 逻辑日期
+    data_type: date
+    required: false
+    description: 逻辑日期
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: ex_time
+    display_name: 出口时间
+    data_type: date
+    required: false
+    description: 出口时间
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: station_receive_time
+    display_name: 站级接收时间
+    data_type: date
+    required: false
+    description: 站级接收时间
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: receive_time
+    display_name: 接收时间
+    data_type: date
+    required: false
+    description: 接收时间
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: oper_id
+    display_name: 操作员工号
+    data_type: string
+    required: false
+    description: 操作员工号
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: oper_name
+    display_name: 操作员姓名
+    data_type: string
+    required: false
+    description: 操作员姓名
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: ex_toll_lane_id
+    display_name: 出口车道号(国标)
+    data_type: string
+    required: false
+    description: 出口车道号(国标)
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: ex_toll_station_id
+    display_name: 出口站号(国标)
+    data_type: string
+    required: false
+    description: 出口站号(国标)
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: ex_toll_station_name
+    display_name: 出口收费站名称
+    data_type: string
+    required: false
+    description: 出口收费站名称
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: media_type
+    display_name: 通行介质类型
+    data_type: integer
+    required: false
+    description: 通行介质类型
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: media_no
+    display_name: 通行介质编码
+    data_type: string
+    required: false
+    description: 通行介质编码
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: ex_vlp
+    display_name: 出口实际车牌号
+    data_type: string
+    required: false
+    description: 出口实际车牌号
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: ex_vlpc
+    display_name: 出口实际车牌颜色
+    data_type: integer
+    required: false
+    description: 出口实际车牌颜色
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: identify_vlp
+    display_name: 识别车牌号
+    data_type: string
+    required: false
+    description: 识别车牌号
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: identify_vlpc
+    display_name: 识别车牌颜色
+    data_type: integer
+    required: false
+    description: 识别车牌颜色
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: trans_code
+    display_name: 交易编码
+    data_type: string
+    required: false
+    description: 交易编码
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: trans_type
+    display_name: 交易类型
+    data_type: string
+    required: false
+    description: 交易类型
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: multi_province
+    display_name: 是否多省交易
+    data_type: integer
+    required: false
+    description: 是否多省交易
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: province_group
+    display_name: 省中心编号组合
+    data_type: string
+    required: false
+    description: 省中心编号组合
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: toll_province_id
+    display_name: 出口省中心 Id
+    data_type: string
+    required: false
+    description: 出口省中心 Id
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: trans_pay_type
+    display_name: 交易支付方式
+    data_type: integer
+    required: false
+    description: 交易支付方式
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: pay_type
+    display_name: 支付类型
+    data_type: integer
+    required: false
+    description: 支付类型
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: pay_card_id
+    display_name: 支付卡卡号
+    data_type: string
+    required: false
+    description: 支付卡卡号
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: axle_count
+    display_name: 轴数
+    data_type: integer
+    required: false
+    description: 轴数
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: axis_info
+    display_name: 轴组信息
+    data_type: string
+    required: false
+    description: 轴组信息
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: ex_weight
+    display_name: 出口重量
+    data_type: integer
+    required: false
+    description: 出口重量
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: limit_weight
+    display_name: 限载总重(kg)
+    data_type: integer
+    required: false
+    description: 限载总重(kg)
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: over_weight_rate
+    display_name: 超限率
+    data_type: integer
+    required: false
+    description: 超限率
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: description
+    display_name: 交易描述
+    data_type: string
+    required: false
+    description: 交易描述
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: v_speed
+    display_name: 特情处理类型
+    data_type: integer
+    required: false
+    description: 特情处理类型
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: special_type
+    display_name: 部特情类型
+    data_type: string
+    required: false
+    description: 部特情类型
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: lane_sp_info
+    display_name: 车道特情状态
+    data_type: string
+    required: false
+    description: 车道特情状态
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: sp_info
+    display_name: 业务分析特情状态
+    data_type: string
+    required: false
+    description: 业务分析特情状态
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: modify_flag
+    display_name: 修改标志
+    data_type: integer
+    required: false
+    description: 修改标志
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: toll_distance
+    display_name: 计费里程（米）
+    data_type: integer
+    required: false
+    description: 计费里程（米）
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: real_distance
+    display_name: 实际里程(米)
+    data_type: integer
+    required: false
+    description: 实际里程(米)
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: free_type
+    display_name: 免费区间类型
+    data_type: integer
+    required: false
+    description: 免费区间类型
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: free_mode
+    display_name: 免费方式
+    data_type: integer
+    required: false
+    description: 免费方式
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: free_info
+    display_name: 免费区域信息
+    data_type: string
+    required: false
+    description: 免费区域信息
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: trans_fee
+    display_name: 卡面扣费金额
+    data_type: long
+    required: false
+    description: 卡面扣费金额
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: balance_before
+    display_name: 交易前余额（分）
+    data_type: long
+    required: false
+    description: 交易前余额（分）
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: balance_after
+    display_name: 交易后余额（分）
+    data_type: long
+    required: false
+    description: 交易后余额（分）
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: fee
+    display_name: 总交易金额
+    data_type: long
+    required: false
+    description: 总交易金额
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: discount_fee
+    display_name: 优惠金额
+    data_type: long
+    required: false
+    description: 优惠金额
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: pay_fee
+    display_name: 应收金额
+    data_type: long
+    required: false
+    description: 应收金额
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: obu_pay_fee
+    display_name: OBU应收金额
+    data_type: long
+    required: false
+    description: OBU应收金额
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: obu_discount_fee
+    display_name: OBU优惠金额
+    data_type: long
+    required: false
+    description: OBU优惠金额
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: fee_mileage
+    display_name: 计费总里程数
+    data_type: long
+    required: false
+    description: 计费总里程数
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: collect_fee
+    display_name: 代收外省金额
+    data_type: long
+    required: false
+    description: 代收外省金额
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: rebate_money
+    display_name: 折扣优惠金额(分)
+    data_type: long
+    required: false
+    description: 折扣优惠金额(分)
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: card_cost_fee
+    display_name: 卡成本金额(分)
+    data_type: long
+    required: false
+    description: 卡成本金额(分)
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: unpay_fee
+    display_name: 欠通行费金额(分）
+    data_type: long
+    required: false
+    description: 欠通行费金额(分）
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: unpay_flag
+    display_name: 欠通行费标志
+    data_type: string
+    required: false
+    description: 欠通行费标志
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: unpay_card_cost
+    display_name: 欠卡成本金额(分）
+    data_type: long
+    required: false
+    description: 欠卡成本金额(分）
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: ticket_fee
+    display_name: 次票代收
+    data_type: long
+    required: false
+    description: 次票代收
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: en_toll_money
+    display_name: 应收通行费金额(分)
+    data_type: long
+    required: false
+    description: 应收通行费金额(分)
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: en_free_money
+    display_name: 通行费免收金额（分）
+    data_type: long
+    required: false
+    description: 通行费免收金额（分）
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: en_last_money
+    display_name: 本次最终支付通行费金额
+    data_type: long
+    required: false
+    description: 本次最终支付通行费金额
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: actual_fee_class
+    display_name: 实际计费方式
+    data_type: integer
+    required: false
+    description: 实际计费方式
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+- name: GantryTransaction
+  display_name: ETC门架计费流水
+  description: ETC门架计费流水
+  url: ''
+  properties:
+  - name: trade_id
+    display_name: 计费交易编号
+    data_type: string
+    required: true
+    description: 计费交易编号
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: pass_id
+    display_name: 通行标识 ID
+    data_type: string
+    required: false
+    description: 通行标识 ID
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: trans_time
+    display_name: 计费交易时间
+    data_type: date
+    required: false
+    description: 计费交易时间
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: record_gen_time
+    display_name: 记录生成时间
+    data_type: date
+    required: false
+    description: 记录生成时间
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: receive_time
+    display_name: 接收时间
+    data_type: date
+    required: false
+    description: 接收时间
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: gantry_id
+    display_name: 门架编号
+    data_type: string
+    required: false
+    description: 门架编号
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: gantry_type
+    display_name: 门架类型
+    data_type: string
+    required: false
+    description: 门架类型
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: original_flag
+    display_name: 数据来源
+    data_type: integer
+    required: false
+    description: 数据来源
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: gantry_hex
+    display_name: 门架HEX值
+    data_type: string
+    required: false
+    description: 门架HEX值
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: last_gantry_hex
+    display_name: 上个门架hex编码
+    data_type: string
+    required: false
+    description: 上个门架hex编码
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: last_gantry_time
+    display_name: 通过上个门架的时间
+    data_type: date
+    required: false
+    description: 通过上个门架的时间
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: media_type
+    display_name: 通行介质类型
+    data_type: integer
+    required: false
+    description: 通行介质类型
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: cpu_card_id
+    display_name: CPU卡编号
+    data_type: string
+    required: false
+    description: CPU卡编号
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: vlp
+    display_name: 计费车牌号
+    data_type: string
+    required: false
+    description: 计费车牌号
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: vlpc
+    display_name: 计费车牌颜色
+    data_type: integer
+    required: false
+    description: 计费车牌颜色
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: vehicle_type
+    display_name: 计费车型
+    data_type: integer
+    required: false
+    description: 计费车型
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: identify_vehicle_type
+    display_name: 识别的车型
+    data_type: integer
+    required: false
+    description: 识别的车型
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: trade_type
+    display_name: 交易类型
+    data_type: integer
+    required: false
+    description: 交易类型
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: axle_count
+    display_name: 车轴数
+    data_type: integer
+    required: false
+    description: 车轴数
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: total_weight
+    display_name: 车货总重
+    data_type: integer
+    required: false
+    description: 车货总重
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: vehicle_length
+    display_name: 车辆长
+    data_type: integer
+    required: false
+    description: 车辆长
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: vehicle_width
+    display_name: 车辆宽
+    data_type: integer
+    required: false
+    description: 车辆宽
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: vehicle_hight
+    display_name: 车辆高
+    data_type: integer
+    required: false
+    description: 车辆高
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: fee_mileage
+    display_name: 计费里程数
+    data_type: integer
+    required: false
+    description: 计费里程数
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: trans_fee
+    display_name: 卡面扣费金额
+    data_type: long
+    required: false
+    description: 卡面扣费金额
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: balance_before
+    display_name: 交易前余额（分）
+    data_type: long
+    required: false
+    description: 交易前余额（分）
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: balance_after
+    display_name: 交易后余额（分）
+    data_type: long
+    required: false
+    description: 交易后余额（分）
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: pay_fee
+    display_name: 应收金额
+    data_type: long
+    required: false
+    description: 应收金额
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: fee
+    display_name: 交易金额
+    data_type: long
+    required: false
+    description: 交易金额
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: discount_fee
+    display_name: 优惠金额
+    data_type: long
+    required: false
+    description: 优惠金额
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: toll_interval_id
+    display_name: 收费单元编号组合
+    data_type: string
+    required: false
+    description: 收费单元编号组合
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: toll_interval_sign
+    display_name: 收费单元处理标识
+    data_type: string
+    required: false
+    description: 收费单元处理标识
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: pay_fee_group
+    display_name: 应收金额组合
+    data_type: string
+    required: false
+    description: 应收金额组合
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: fee_group
+    display_name: 交易金额组合
+    data_type: string
+    required: false
+    description: 交易金额组合
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: discount_fee_group
+    display_name: 优惠金额组合
+    data_type: string
+    required: false
+    description: 优惠金额组合
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: description
+    display_name: 对交易的文字解释
+    data_type: string
+    required: false
+    description: 对交易的文字解释
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: fee_calc_special
+    display_name: 计费接口特情值
+    data_type: integer
+    required: false
+    description: 计费接口特情值
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: charges_special_type
+    display_name: 收费特情类型
+    data_type: string
+    required: false
+    description: 收费特情类型
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: is_fix_data
+    display_name: 是否修正过
+    data_type: integer
+    required: false
+    description: 是否修正过
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: obu_prov_trade_succ_num_after
+    display_name: OBU交易成功数
+    data_type: integer
+    required: false
+    description: OBU交易成功数
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+- name: Path
+  display_name: 车辆通行路径
+  description: 车辆通行路径
+  url: ''
+  properties:
+  - name: pass_id
+    display_name: 通行标识
+    data_type: string
+    required: false
+    description: 通行标识
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: plate_num
+    display_name: 车牌号码
+    data_type: string
+    required: false
+    description: 车牌号码
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: plate_color
+    display_name: 车牌颜色
+    data_type: integer
+    required: false
+    description: 车牌颜色
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: en_time
+    display_name: 入口时间
+    data_type: date
+    required: false
+    description: 入口时间
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: ex_time
+    display_name: 出口时间
+    data_type: date
+    required: false
+    description: 出口时间
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: en_toll_lane_id
+    display_name: 入口车道编号
+    data_type: string
+    required: false
+    description: 入口车道编号
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: ex_toll_lane_id
+    display_name: 出口车道编号
+    data_type: string
+    required: false
+    description: 出口车道编号
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: en_toll_station_id
+    display_name: 入口收费站编号
+    data_type: string
+    required: false
+    description: 入口收费站编号
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: ex_toll_station_id
+    display_name: 出口收费站编号
+    data_type: string
+    required: false
+    description: 出口收费站编号
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: ex_vehicle_type
+    display_name: 出口车辆类型
+    data_type: integer
+    required: false
+    description: 出口车辆类型
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: pay_type
+    display_name: 支付类型
+    data_type: integer
+    required: false
+    description: 支付类型
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: pay_card_type
+    display_name: 支付卡类型
+    data_type: integer
+    required: false
+    description: 支付卡类型
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: l_date
+    display_name: 逻辑日期
+    data_type: date
+    required: false
+    description: 逻辑日期
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: path_detail_count
+    display_name: 路径明细数量
+    data_type: integer
+    required: false
+    description: null
+    derived: true
+    derived_kind: null
+    expr: size(links.path_has_path_details)
+    relation_aggregation: null
+  - name: split_detail_count
+    display_name: 拆分明细数量
+    data_type: integer
+    required: false
+    description: null
+    derived: true
+    derived_kind: null
+    expr: size(links.path_has_split_details)
+    relation_aggregation: null
+  - name: gantry_transaction_count
+    display_name: 门架交易数量
+    data_type: integer
+    required: false
+    description: null
+    derived: true
+    derived_kind: null
+    expr: size(links.path_has_gantry_transactions)
+    relation_aggregation: null
+  - name: detail_count_matched
+    display_name: 数量是否一致
+    data_type: boolean
+    required: false
+    description: null
+    derived: true
+    derived_kind: null
+    expr: path_detail_count == split_detail_count
+    relation_aggregation: null
+  - name: interval_set_matched
+    display_name: 收费单元是否一致
+    data_type: boolean
+    required: false
+    description: null
+    derived: true
+    derived_kind: null
+    expr: size(links.path_has_path_details.map(p, p.id)) == size(links.path_has_split_details.map(s,
+      s.id)) && links.path_has_path_details.map(p, p.id).filter(x, x in links.path_has_split_details.map(s,
+      s.id)).size() == size(links.path_has_path_details.map(p, p.id))
+    relation_aggregation: null
+  - name: split_fee_total
+    display_name: 拆分费用合计
+    data_type: number
+    required: false
+    description: null
+    derived: true
+    derived_kind: null
+    expr: links.path_has_split_details.map(s,s.toll_interval_fee).sum()
+    relation_aggregation: null
+  - name: path_fee_total
+    display_name: 路径费用合计
+    data_type: number
+    required: false
+    description: null
+    derived: true
+    derived_kind: null
+    expr: links.path_has_path_details.map(d, double(d.fee)).sum()
+    relation_aggregation: null
+  - name: gantry_fee_total
+    display_name: 门架费用合计
+    data_type: number
+    required: false
+    description: null
+    derived: true
+    derived_kind: null
+    expr: links.path_has_gantry_transactions.map(d, double(d.fee)).sum()
+    relation_aggregation: null
+  - name: fee_matched
+    display_name: 费用是否一致
+    data_type: boolean
+    required: false
+    description: null
+    derived: true
+    derived_kind: null
+    expr: path_fee_total == split_fee_total
+    relation_aggregation: null
+- name: PathDetail
+  display_name: 车辆通行路径明细
+  description: 车辆通行路径明细
+  url: ''
+  properties:
+  - name: pass_id
+    display_name: 通行标识
+    data_type: string
+    required: false
+    description: 通行标识
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: plate_num
+    display_name: 车牌号码
+    data_type: string
+    required: false
+    description: 车牌号码
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: plate_color
+    display_name: 车牌颜色
+    data_type: integer
+    required: false
+    description: 车牌颜色
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: identify_point_id
+    display_name: 标识点标识
+    data_type: string
+    required: false
+    description: 标识点标识
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: identify_point_hex
+    display_name: 标识点Hex码
+    data_type: string
+    required: false
+    description: 标识点Hex码
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: intervals
+    display_name: 收费单元编号
+    data_type: string
+    required: false
+    description: 收费单元编号，多个编号使用"|"隔开
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: fee
+    display_name: 收费单元费用
+    data_type: string
+    required: false
+    description: 收费单元费用，多个费用使用"|"隔开
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: pay_fee
+    display_name: 收费单元支付费用
+    data_type: string
+    required: false
+    description: 收费单元支付费用，多个费用使用"|"隔开
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: discount_fee
+    display_name: 收费单元优惠费用
+    data_type: string
+    required: false
+    description: 收费单元优惠费用，多个费用使用"|"隔开
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: trans_time
+    display_name: 交易时间
+    data_type: date
+    required: false
+    description: 交易时间
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: id
+    display_name: 交易标志
+    data_type: string
+    required: true
+    description: 交易标识
+    derived: false
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+- name: SplitDetail
+  display_name: 拆分明细
+  description: 拆分明细
+  url: ''
+  properties:
+  - name: pass_id
+    display_name: 通行标识
+    data_type: string
+    required: true
+    description: 通行标识
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: transaction_id
+    display_name: 交易编号
+    data_type: string
+    required: true
+    description: 交易编号
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: interval_id
+    display_name: 收费单元编号
+    data_type: string
+    required: true
+    description: 收费单元编号
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: toll_interval_fee
+    display_name: 收费单元费用
+    data_type: string
+    required: false
+    description: 收费单元费用
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: toll_interval_pay_fee
+    display_name: 收费单元支付费用
+    data_type: string
+    required: false
+    description: 收费单元支付费用
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: toll_interval_discount_fee
+    display_name: 收费单元优惠费用
+    data_type: string
+    required: false
+    description: 收费单元优惠费用
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: split_flag
+    display_name: 拆分标志
+    data_type: integer
+    required: false
+    description: 拆分标志
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: pro_split_time
+    display_name: 拆分时间
+    data_type: date
+    required: false
+    description: 拆分时间
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: pro_split_type
+    display_name: 拆分原则
+    data_type: integer
+    required: false
+    description: 拆分原则
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: split_remark
+    display_name: 拆分备注
+    data_type: string
+    required: false
+    description: 拆分备注
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: id
+    display_name: 拆分标志
+    data_type: string
+    required: true
+    description: 拆分标志
+    derived: false
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+- name: TollSection
+  display_name: 收费路段
+  description: 表示高速公路收费路段的信息
+  url: null
+  properties:
+  - name: id
+    display_name: 路段ID
+    data_type: string
+    required: true
+    description: 路段ID（主键）
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: road_id
+    display_name: 道路ID
+    data_type: string
+    required: false
+    description: 道路ID
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: name
+    display_name: 名称
+    data_type: string
+    required: false
+    description: 名称
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: section_owner_id
+    display_name: 路段所有者ID
+    data_type: string
+    required: false
+    description: 路段所有者ID
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: type
+    display_name: 类型
+    data_type: integer
+    required: false
+    description: 类型
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: length
+    display_name: 长度
+    data_type: integer
+    required: false
+    description: 长度
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: start_stake_num
+    display_name: 起点桩号
+    data_type: string
+    required: false
+    description: 起点桩号
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: start_lat
+    display_name: 起点纬度
+    data_type: string
+    required: false
+    description: 起点纬度
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: start_lng
+    display_name: 起点经度
+    data_type: string
+    required: false
+    description: 起点经度
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: end_stake_num
+    display_name: 终点桩号
+    data_type: string
+    required: false
+    description: 终点桩号
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: end_lat
+    display_name: 终点纬度
+    data_type: string
+    required: false
+    description: 终点纬度
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: end_lng
+    display_name: 终点经度
+    data_type: string
+    required: false
+    description: 终点经度
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: tax
+    display_name: 税费
+    data_type: integer
+    required: false
+    description: 税费
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: tax_rate
+    display_name: 税率
+    data_type: double
+    required: false
+    description: 税率
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: charge_type
+    display_name: 收费类型
+    data_type: integer
+    required: false
+    description: 收费类型
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: toll_roads
+    display_name: 收费路段
+    data_type: string
+    required: false
+    description: 收费路段
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: build_time
+    display_name: 建造时间
+    data_type: date
+    required: false
+    description: 建造时间
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: start_time
+    display_name: 开始时间
+    data_type: date
+    required: false
+    description: 开始时间
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: end_time
+    display_name: 结束时间
+    data_type: date
+    required: false
+    description: 结束时间
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: operation
+    display_name: 操作
+    data_type: integer
+    required: false
+    description: 操作
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: record_gen_time
+    display_name: 记录生成时间
+    data_type: date
+    required: false
+    description: 记录生成时间
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: status
+    display_name: 状态
+    data_type: string
+    required: false
+    description: 状态
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+- name: ClearResult
+  display_name: 清分结果
+  description: 清分结果
+  url: ''
+  properties:
+  - name: pass_id
+    display_name: 通行标识
+    data_type: string
+    required: false
+    description: 通行标识
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: transaction_id
+    display_name: 交易编号
+    data_type: string
+    required: false
+    description: 交易编号
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: interval_id
+    display_name: 收费单元编号
+    data_type: string
+    required: false
+    description: 收费单元编号
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: crop_id
+    display_name: 收费路段业主
+    data_type: integer
+    required: false
+    description: 收费路段业主
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: road_id
+    display_name: 收费公路
+    data_type: string
+    required: false
+    description: 收费公路
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: pay_type
+    display_name: 支付方式
+    data_type: integer
+    required: false
+    description: 支付方式
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: pay_card_type
+    display_name: 支付卡类型
+    data_type: integer
+    required: false
+    description: 支付卡类型
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: amount
+    display_name: 实收清分金额
+    data_type: bigdecimal
+    required: false
+    description: 实收清分金额
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: discount_amount
+    display_name: 优惠清分金额
+    data_type: bigdecimal
+    required: false
+    description: 优惠清分金额
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: charge_amount
+    display_name: 应收清分金额
+    data_type: bigdecimal
+    required: false
+    description: 应收清分金额
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: clear_date
+    display_name: 清分日期
+    data_type: date
+    required: false
+    description: 清分日期
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: l_date
+    display_name: 逻辑日
+    data_type: date
+    required: false
+    description: 逻辑日
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+- name: ClearReport
+  display_name: 清分报表
+  description: 清分报表
+  url: ''
+  properties:
+  - name: crop_id
+    display_name: 收费路段业主
+    data_type: integer
+    required: false
+    description: 收费路段业主
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: road_id
+    display_name: 收费公路
+    data_type: string
+    required: false
+    description: 收费公路
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: split_org
+    display_name: 拆分机构
+    data_type: string
+    required: false
+    description: 拆分机构
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: org_type
+    display_name: 机构类型
+    data_type: integer
+    required: false
+    description: 机构类型
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: pay_card_type
+    display_name: 支付卡类型
+    data_type: integer
+    required: false
+    description: 支付卡类型
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: money_flag
+    display_name: 金额标志
+    data_type: integer
+    required: false
+    description: 金额标志
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: clear_date
+    display_name: 清分日期
+    data_type: date
+    required: false
+    description: 清分日期
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: l_date
+    display_name: 逻辑日期
+    data_type: date
+    required: false
+    description: 逻辑日期
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: gen_time
+    display_name: 生成时间
+    data_type: date
+    required: false
+    description: 生成时间
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: cash_split_money
+    display_name: 现金拆分金额
+    data_type: bigdecimal
+    required: false
+    description: 现金拆分金额
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: cash_op_split_money
+    display_name: 现金操作拆分金额
+    data_type: bigdecimal
+    required: false
+    description: 现金操作拆分金额
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: cash_toll_money
+    display_name: 现金合计金额
+    data_type: bigdecimal
+    required: false
+    description: 现金合计金额
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: cash_op_toll_money
+    display_name: 现金操作合计金额
+    data_type: bigdecimal
+    required: false
+    description: 现金操作合计金额
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: other_split_money
+    display_name: 其他拆分金额
+    data_type: bigdecimal
+    required: false
+    description: 其他拆分金额
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: other_op_split_money
+    display_name: 其他操作拆分金额
+    data_type: bigdecimal
+    required: false
+    description: 其他操作拆分金额
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: other_toll_money
+    display_name: 其他合计金额
+    data_type: bigdecimal
+    required: false
+    description: 其他合计金额
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: other_op_toll_money
+    display_name: 其他操作合计金额
+    data_type: bigdecimal
+    required: false
+    description: 其他操作合计金额
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: union_split_money
+    display_name: 联合拆分金额
+    data_type: bigdecimal
+    required: false
+    description: 联合拆分金额
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: union_op_split_money
+    display_name: 联合操作拆分金额
+    data_type: bigdecimal
+    required: false
+    description: 联合操作拆分金额
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: union_toll_money
+    display_name: 联合合计金额
+    data_type: bigdecimal
+    required: false
+    description: 联合合计金额
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: union_op_toll_money
+    display_name: 联合操作合计金额
+    data_type: bigdecimal
+    required: false
+    description: 联合操作合计金额
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: etc_split_money
+    display_name: ETC拆分金额
+    data_type: bigdecimal
+    required: false
+    description: ETC拆分金额
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: etc_op_split_money
+    display_name: ETC操作拆分金额
+    data_type: bigdecimal
+    required: false
+    description: ETC操作拆分金额
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: etc_toll_money
+    display_name: ETC合计金额
+    data_type: bigdecimal
+    required: false
+    description: ETC合计金额
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: etc_op_toll_money
+    display_name: ETC操作合计金额
+    data_type: bigdecimal
+    required: false
+    description: ETC操作合计金额
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: alipay_split_money
+    display_name: 支付宝拆分金额
+    data_type: bigdecimal
+    required: false
+    description: 支付宝拆分金额
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: alipay_op_split_money
+    display_name: 支付宝操作拆分金额
+    data_type: bigdecimal
+    required: false
+    description: 支付宝操作拆分金额
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: alipay_toll_money
+    display_name: 支付宝合计金额
+    data_type: bigdecimal
+    required: false
+    description: 支付宝合计金额
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: alipay_op_toll_money
+    display_name: 支付宝操作合计金额
+    data_type: bigdecimal
+    required: false
+    description: 支付宝操作合计金额
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: wepay_split_money
+    display_name: 微信拆分金额
+    data_type: bigdecimal
+    required: false
+    description: 微信拆分金额
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: wepay_op_split_money
+    display_name: 微信操作拆分金额
+    data_type: bigdecimal
+    required: false
+    description: 微信操作拆分金额
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: wepay_toll_money
+    display_name: 微信合计金额
+    data_type: bigdecimal
+    required: false
+    description: 微信合计金额
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: wepay_op_toll_money
+    display_name: 微信操作合计金额
+    data_type: bigdecimal
+    required: false
+    description: 微信操作合计金额
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: cash_return_money
+    display_name: 现金退费金额
+    data_type: bigdecimal
+    required: false
+    description: 现金退费金额
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: other_return_money
+    display_name: 其他退费金额
+    data_type: bigdecimal
+    required: false
+    description: 其他退费金额
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: union_return_money
+    display_name: 联合退费金额
+    data_type: bigdecimal
+    required: false
+    description: 联合退费金额
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: etc_return_money
+    display_name: ETC退费金额
+    data_type: bigdecimal
+    required: false
+    description: ETC退费金额
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: alipay_return_money
+    display_name: 支付宝退费金额
+    data_type: bigdecimal
+    required: false
+    description: 支付宝退费金额
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: wepay_return_money
+    display_name: 微信退费金额
+    data_type: bigdecimal
+    required: false
+    description: 微信退费金额
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+- name: TollInterval
+  display_name: 收费单元
+  description: 表示公路收费系统中的收费单元信息，用于记录路段的分段收费数据
+  url: null
+  properties:
+  - name: id
+    display_name: ID
+    data_type: string
+    required: true
+    description: 主键ID
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: section_id
+    display_name: 路段ID
+    data_type: string
+    required: false
+    description: id截取前11位为路段ID
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: name
+    display_name: 名称
+    data_type: string
+    required: false
+    description: 收费单元名称
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: type
+    display_name: 类型
+    data_type: integer
+    required: false
+    description: 收费单元类型
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: length
+    display_name: 长度
+    data_type: integer
+    required: false
+    description: 收费单元长度
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: start_lat
+    display_name: 起点纬度
+    data_type: string
+    required: false
+    description: 起点纬度
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: start_lng
+    display_name: 起点经度
+    data_type: string
+    required: false
+    description: 起点经度
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: start_stake_num
+    display_name: 起点桩号
+    data_type: string
+    required: false
+    description: 起点桩号
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: end_stake_num
+    display_name: 终点桩号
+    data_type: string
+    required: false
+    description: 终点桩号
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: end_lat
+    display_name: 终点纬度
+    data_type: string
+    required: false
+    description: 终点纬度
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: end_lng
+    display_name: 终点经度
+    data_type: string
+    required: false
+    description: 终点经度
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: toll_roads
+    display_name: 收费道路
+    data_type: string
+    required: false
+    description: 收费道路信息
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: province_type
+    display_name: 省份类型
+    data_type: integer
+    required: false
+    description: 省份类型
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: end_time
+    display_name: 结束时间
+    data_type: date
+    required: false
+    description: 收费单元结束时间
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: operation
+    display_name: 操作
+    data_type: integer
+    required: false
+    description: 操作类型
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: record_gen_time
+    display_name: 记录生成时间
+    data_type: date
+    required: false
+    description: 记录生成时间
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: response_code
+    display_name: 响应代码
+    data_type: integer
+    required: false
+    description: 系统响应代码
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: response_info
+    display_name: 响应信息
+    data_type: string
+    required: false
+    description: 系统响应信息
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: receive_time
+    display_name: 接收时间
+    data_type: date
+    required: false
+    description: 数据接收时间
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: pro_time
+    display_name: 处理时间
+    data_type: date
+    required: false
+    description: 系统处理时间
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: batch_file_name
+    display_name: 批次文件名
+    data_type: string
+    required: false
+    description: 批次处理文件名
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: status
+    display_name: 状态
+    data_type: integer
+    required: false
+    description: 收费单元状态
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: direction
+    display_name: 方向
+    data_type: integer
+    required: false
+    description: 通行方向
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: begin_time
+    display_name: 开始时间
+    data_type: date
+    required: false
+    description: 收费单元开始时间
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: vertical_section_type
+    display_name: 垂直断面类型
+    data_type: integer
+    required: false
+    description: 垂直断面类型
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+- name: SectionOwner
+  display_name: 收费路段业主
+  description: 表示高速公路收费路段的业主信息，包含业主基本信息和银行账户信息
+  url: null
+  properties:
+  - name: id
+    display_name: ID
+    data_type: string
+    required: true
+    description: 主键ID
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: owner_id
+    display_name: 业主ID
+    data_type: string
+    required: false
+    description: 业主唯一标识
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: name
+    display_name: 名称
+    data_type: string
+    required: false
+    description: 业主名称
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: contact
+    display_name: 联系人
+    data_type: string
+    required: false
+    description: 业主联系人姓名
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: tel
+    display_name: 电话
+    data_type: string
+    required: false
+    description: 联系人电话号码
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: address
+    display_name: 地址
+    data_type: string
+    required: false
+    description: 业主详细地址
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: bank
+    display_name: 开户行
+    data_type: string
+    required: false
+    description: 银行名称
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: bank_addr
+    display_name: 开户行地址
+    data_type: string
+    required: false
+    description: 银行详细地址
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: bank_account
+    display_name: 银行账号
+    data_type: string
+    required: false
+    description: 银行账户号码
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: tax_payer_code
+    display_name: 纳税人识别号
+    data_type: string
+    required: false
+    description: 税务登记编号
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: credit_code
+    display_name: 统一社会信用代码
+    data_type: string
+    required: false
+    description: 企业统一社会信用代码
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: operation
+    display_name: 操作
+    data_type: integer
+    required: false
+    description: 操作类型（新增/修改/删除）
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: record_gen_time
+    display_name: 记录生成时间
+    data_type: date
+    required: false
+    description: 数据记录生成时间
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: status
+    display_name: 状态
+    data_type: string
+    required: false
+    description: 业主状态（有效/失效）
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: batch_file_name
+    display_name: 批次文件名
+    data_type: string
+    required: false
+    description: 数据处理批次文件名
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: response_code
+    display_name: 响应代码
+    data_type: integer
+    required: false
+    description: 系统响应代码
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: response_info
+    display_name: 响应信息
+    data_type: string
+    required: false
+    description: 系统响应信息
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: receive_time
+    display_name: 接收时间
+    data_type: date
+    required: false
+    description: 数据接收时间
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: pro_time
+    display_name: 处理时间
+    data_type: date
+    required: false
+    description: 数据处理完成时间
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+- name: TollGantry
+  display_name: 收费门架
+  description: 表示高速公路ETC门架系统的基本信息，用于记录门架的硬件配置、位置信息及运行状态
+  url: null
+  properties:
+  - name: id
+    display_name: ID
+    data_type: string
+    required: true
+    description: 主键ID
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: name
+    display_name: 名称
+    data_type: string
+    required: false
+    description: 收费门架名称
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: type
+    display_name: 类型
+    data_type: integer
+    required: false
+    description: 收费门架类型
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: toll_intervals
+    display_name: 收费区间
+    data_type: string
+    required: false
+    description: 收费区间信息
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: lat
+    display_name: 纬度
+    data_type: string
+    required: false
+    description: 门架地理位置纬度
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: lng
+    display_name: 经度
+    data_type: string
+    required: false
+    description: 门架地理位置经度
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: pile_number
+    display_name: 桩号
+    data_type: string
+    required: false
+    description: 门架所在位置的桩号
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: status
+    display_name: 状态
+    data_type: integer
+    required: false
+    description: 门架运行状态
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: start_time
+    display_name: 开始时间
+    data_type: date
+    required: false
+    description: 门架开始运行时间
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: end_time
+    display_name: 结束时间
+    data_type: date
+    required: false
+    description: 门架停止运行时间
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: etc_gantry_hex
+    display_name: ETC门架十六进制
+    data_type: string
+    required: false
+    description: ETC门架的十六进制标识
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: rsu_man_uid
+    display_name: RSU管理UID
+    data_type: string
+    required: false
+    description: RSU(路侧单元)管理唯一标识
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: rsu_model
+    display_name: RSU型号
+    data_type: string
+    required: false
+    description: RSU设备型号
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: rsu_id
+    display_name: RSU ID
+    data_type: string
+    required: false
+    description: RSU设备ID
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: vplr_uid
+    display_name: VPLR管理UID
+    data_type: string
+    required: false
+    description: VPLR(车牌识别设备)管理唯一标识
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: vplr_model
+    display_name: VPLR型号
+    data_type: string
+    required: false
+    description: VPLR设备型号
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: vplr_id
+    display_name: VPLR ID
+    data_type: string
+    required: false
+    description: VPLR设备ID
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: hdv_uid
+    display_name: HDV管理UID
+    data_type: string
+    required: false
+    description: HDV(高清视频设备)管理唯一标识
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: hdv_model
+    display_name: HDV型号
+    data_type: string
+    required: false
+    description: HDV设备型号
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: hdv_id
+    display_name: HDV ID
+    data_type: string
+    required: false
+    description: HDV设备ID
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: operation
+    display_name: 操作
+    data_type: integer
+    required: false
+    description: 系统操作类型
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: record_gen_time
+    display_name: 记录生成时间
+    data_type: date
+    required: false
+    description: 数据记录生成时间
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: response_code
+    display_name: 响应代码
+    data_type: integer
+    required: false
+    description: 系统响应代码
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: response_info
+    display_name: 响应信息
+    data_type: string
+    required: false
+    description: 系统响应信息
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: receive_time
+    display_name: 接收时间
+    data_type: date
+    required: false
+    description: 数据接收时间
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: pro_time
+    display_name: 处理时间
+    data_type: date
+    required: false
+    description: 数据处理完成时间
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: batch_file_name
+    display_name: 批次文件名
+    data_type: string
+    required: false
+    description: 数据处理批次文件名
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: boundary_type
+    display_name: 边界类型
+    data_type: integer
+    required: false
+    description: 门架边界类型
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: controller_uid
+    display_name: 控制器UID
+    data_type: string
+    required: false
+    description: 控制器管理唯一标识
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: controller_model
+    display_name: 控制器型号
+    data_type: string
+    required: false
+    description: 控制器设备型号
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: controller_id
+    display_name: 控制器ID
+    data_type: string
+    required: false
+    description: 控制器设备ID
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: controller_sys_ver
+    display_name: 控制器系统版本
+    data_type: string
+    required: false
+    description: 控制器系统版本号
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: server_uid
+    display_name: 服务器UID
+    data_type: string
+    required: false
+    description: 服务器管理唯一标识
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: server_model
+    display_name: 服务器型号
+    data_type: string
+    required: false
+    description: 服务器设备型号
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: server_id
+    display_name: 服务器ID
+    data_type: string
+    required: false
+    description: 服务器设备ID
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: server_sys_ver
+    display_name: 服务器系统版本
+    data_type: string
+    required: false
+    description: 服务器系统版本号
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: server_db_ver
+    display_name: 服务器数据库版本
+    data_type: string
+    required: false
+    description: 服务器数据库版本号
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: veh_detector_uid
+    display_name: 车辆检测器UID
+    data_type: string
+    required: false
+    description: 车辆检测器管理唯一标识
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: veh_detector_model
+    display_name: 车辆检测器型号
+    data_type: string
+    required: false
+    description: 车辆检测器设备型号
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: veh_detector_id
+    display_name: 车辆检测器ID
+    data_type: string
+    required: false
+    description: 车辆检测器设备ID
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: weather_detector_uid
+    display_name: 天气检测器UID
+    data_type: string
+    required: false
+    description: 天气检测器管理唯一标识
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: weather_detector_model
+    display_name: 天气检测器型号
+    data_type: string
+    required: false
+    description: 天气检测器设备型号
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: weather_detector_id
+    display_name: 天气检测器ID
+    data_type: string
+    required: false
+    description: 天气检测器设备ID
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: class_detector_uid
+    display_name: 车型检测器UID
+    data_type: string
+    required: false
+    description: 车型检测器管理唯一标识
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: class_detector_model
+    display_name: 车型检测器型号
+    data_type: string
+    required: false
+    description: 车型检测器设备型号
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: class_detector_id
+    display_name: 车型检测器ID
+    data_type: string
+    required: false
+    description: 车型检测器设备ID
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: load_detection_uid
+    display_name: 载重检测器UID
+    data_type: string
+    required: false
+    description: 载重检测器管理唯一标识
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: load_detection_model
+    display_name: 载重检测器型号
+    data_type: string
+    required: false
+    description: 载重检测器设备型号
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: load_detection_id
+    display_name: 载重检测器ID
+    data_type: string
+    required: false
+    description: 载重检测器设备ID
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: temp_controller_uid
+    display_name: 温度控制器UID
+    data_type: string
+    required: false
+    description: 温度控制器管理唯一标识
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: temp_controller_model
+    display_name: 温度控制器型号
+    data_type: string
+    required: false
+    description: 温度控制器设备型号
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: temp_controller_id
+    display_name: 温度控制器ID
+    data_type: string
+    required: false
+    description: 温度控制器设备ID
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: power_controller_uid
+    display_name: 电源控制器UID
+    data_type: string
+    required: false
+    description: 电源控制器管理唯一标识
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: power_controller_model
+    display_name: 电源控制器型号
+    data_type: string
+    required: false
+    description: 电源控制器设备型号
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: power_controller_id
+    display_name: 电源控制器ID
+    data_type: string
+    required: false
+    description: 电源控制器设备ID
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: safe_equip_uid
+    display_name: 安全设备UID
+    data_type: string
+    required: false
+    description: 安全设备管理唯一标识
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: safe_equip_model
+    display_name: 安全设备型号
+    data_type: string
+    required: false
+    description: 安全设备设备型号
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: safe_equip_id
+    display_name: 安全设备ID
+    data_type: string
+    required: false
+    description: 安全设备设备ID
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: line_type
+    display_name: 线路类型
+    data_type: string
+    required: false
+    description: 通信线路类型
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: operators
+    display_name: 操作员
+    data_type: string
+    required: false
+    description: 系统操作员信息
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: data_merge_point
+    display_name: 数据合并点
+    data_type: string
+    required: false
+    description: 数据合并点标识
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: imei
+    display_name: IMEI号
+    data_type: string
+    required: false
+    description: 设备IMEI号码
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: equipment_ip
+    display_name: 设备IP
+    data_type: string
+    required: false
+    description: 设备IP地址
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: snmp_version
+    display_name: SNMP版本
+    data_type: string
+    required: false
+    description: SNMP协议版本
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: snmp_port
+    display_name: SNMP端口
+    data_type: integer
+    required: false
+    description: SNMP协议端口号
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: community
+    display_name: 团体名
+    data_type: string
+    required: false
+    description: SNMP团体名
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: security_name
+    display_name: 安全名
+    data_type: string
+    required: false
+    description: SNMP安全名
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: security_level
+    display_name: 安全级别
+    data_type: string
+    required: false
+    description: SNMP安全级别
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: authentication
+    display_name: 认证
+    data_type: string
+    required: false
+    description: SNMP认证方式
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: auth_key
+    display_name: 认证密钥
+    data_type: string
+    required: false
+    description: SNMP认证密钥
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: encryption
+    display_name: 加密
+    data_type: string
+    required: false
+    description: SNMP加密方式
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: secret_key
+    display_name: 秘钥
+    data_type: string
+    required: false
+    description: SNMP秘钥
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: use_status
+    display_name: 使用状态
+    data_type: integer
+    required: false
+    description: 设备使用状态
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+#  - name: gantry_type
+#    display_name: 门架类型
+#    data_type: string
+#    required: false
+#    description: 门架类型（如：ETC门架、普通门架等）
+#    derived: null
+#    derived_kind: null
+#    expr: null
+#    relation_aggregation: null
+  - name: lane_count
+    display_name: 车道数
+    data_type: string
+    required: false
+    description: 门架覆盖的车道数量
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: reetc_gantry_hex
+    display_name: 重ETC门架十六进制
+    data_type: string
+    required: false
+    description: 重ETC门架的十六进制标识
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: agency_gantry_ids
+    display_name: 机构门架ID
+    data_type: string
+    required: false
+    description: 关联的机构门架ID列表
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+  - name: gantry_sign
+    display_name: 门架标识
+    data_type: string
+    required: false
+    description: 门架标识信息
+    derived: null
+    derived_kind: null
+    expr: null
+    relation_aggregation: null
+link_types:
+- name: entry_to_path
+  display_name: 入口交易关联路径
+  description: 入口交易关联路径信息（passId,vlp,vlpc -> passId,plateNum,plateColor）(函数计算)
+  source_type: EntryTransaction
+  target_type: Path
+  cardinality: one-to-one
+  direction: directed
+  property_mappings:
+    pass_id: pass_id
+    vlp: plate_num
+    vlpc: plate_color
+  link_table: null
+  source_to_link: null
+  target_to_link: null
+- name: exit_to_path
+  display_name: 出口交易关联为路径
+  description: 出口交易关联为路径信息（passId,exVlp,exVlpc -> passId,plateNum,plateColor）(函数计算)
+  source_type: ExitTransaction
+  target_type: Path
+  cardinality: one-to-one
+  direction: directed
+  property_mappings:
+    pass_id: pass_id
+    ex_vlp: plate_num
+    ex_vlpc: plate_color
+  link_table: null
+  source_to_link: null
+  target_to_link: null
+- name: gantry_to_path
+  display_name: 门架交易关联为路径
+  description: 门架交易关联为路径信息（passId,vlp,vlpc -> passId,plateNum,plateColor）(函数计算)
+  source_type: GantryTransaction
+  target_type: Path
+  cardinality: many-to-one
+  direction: directed
+  property_mappings:
+    pass_id: pass_id
+    vlp: plate_num
+    vlpc: plate_color
+  link_table: null
+  source_to_link: null
+  target_to_link: null
+- name: path_has_path_details
+  display_name: 路径持有路径明细
+  description: 路径持有多个路径明细（passId -> passId）
+  source_type: Path
+  target_type: PathDetail
+  cardinality: one-to-many
+  direction: directed
+  property_mappings:
+    pass_id: pass_id
+  link_table: null
+  source_to_link: null
+  target_to_link: null
+- name: path_has_split_details
+  display_name: 路径持有拆分详情
+  description: 路径拆分为多个拆分详情（passId -> passId）
+  source_type: Path
+  target_type: SplitDetail
+  cardinality: one-to-many
+  direction: directed
+  property_mappings:
+    pass_id: pass_id
+  link_table: null
+  source_to_link: null
+  target_to_link: null
+- name: path_has_gantry_transactions
+  display_name: 路径持有的门架交易
+  description: 路径持有多个门架交易（passId -> passId）
+  source_type: Path
+  target_type: GantryTransaction
+  cardinality: one-to-many
+  direction: directed
+  property_mappings:
+    pass_id: pass_id
+    plate_num: vlp
+    plate_color: vlpc
+  link_table: null
+  source_to_link: null
+  target_to_link: null
+- name: path_to_clear_result
+  display_name: 路径映射为清分结果
+  description: 路径映射为清分结果（passId -> passId）
+  source_type: Path
+  target_type: ClearResult
+  cardinality: many-to-one
+  direction: directed
+  property_mappings:
+    pass_id: pass_id
+  link_table: null
+  source_to_link: null
+  target_to_link: null
+- name: split_detail_to_clear_result
+  display_name: 拆分详情映射清分结果
+  description: 拆分详情映射清分结果（passId,transactionId,intervalId -> passId,transactionId,intervalId）
+  source_type: SplitDetail
+  target_type: ClearResult
+  cardinality: many-to-one
+  direction: directed
+  property_mappings:
+    pass_id: pass_id
+    transaction_id: transaction_id
+    interval_id: interval_id
+  link_table: null
+  source_to_link: null
+  target_to_link: null
+- name: toll_gantry_to_toll_interval
+  display_name: 收费门架关联收费单元
+  description: 收费门架关联多个收费单元( tollIntervals -> id)
+  source_type: TollGantry
+  target_type: TollInterval
+  cardinality: one-to-many
+  direction: directed
+  property_mappings:
+    toll_intervals: id
+  link_table: null
+  source_to_link: null
+  target_to_link: null
+- name: split_detail_to_toll_interval
+  display_name: 拆分明细关联收费单元
+  description: 多个拆分明细关联收费单元关联( intervalId -> id )
+  source_type: SplitDetail
+  target_type: TollInterval
+  cardinality: many-to-one
+  direction: directed
+  property_mappings:
+    interval_id: id
+  link_table: null
+  source_to_link: null
+  target_to_link: null
+- name: toll_interval_belong_toll_section
+  display_name: 收费单元属于收费路段
+  description: 多个收费单元属于收费路段(sectionId -> id)
+  source_type: TollInterval
+  target_type: TollSection
+  cardinality: many-to-one
+  direction: directed
+  property_mappings:
+    section_id: id
+  link_table: null
+  source_to_link: null
+  target_to_link: null
+- name: toll_section_belong_section_owner
+  display_name: 收费路段属于路段业主
+  description: 多个收费单元属于收费业主(sectionOwnerId -> id)
+  source_type: TollSection
+  target_type: SectionOwner
+  cardinality: many-to-one
+  direction: directed
+  property_mappings:
+    section_owner_id: id
+  link_table: null
+  source_to_link: null
+  target_to_link: null
+- name: toll_section_to_clear_result
+  display_name: 收费路段映射清分结果
+  description: 收费路段映射多个清分结果(sectionownerid,roadId -> cropId,roadId)
+  source_type: TollSection
+  target_type: ClearResult
+  cardinality: one-to-many
+  direction: directed
+  property_mappings:
+    section_owner_id: crop_id
+    road_id: road_id
+  link_table: null
+  source_to_link: null
+  target_to_link: null
+- name: section_owner_to_clear_result
+  display_name: 路段业主关联清分结果
+  description: 路段业主关联多个清分结果(id -> cropId)
+  source_type: SectionOwner
+  target_type: ClearResult
+  cardinality: one-to-many
+  direction: directed
+  property_mappings:
+    id: crop_id
+  link_table: null
+  source_to_link: null
+  target_to_link: null
+- name: clear_result_to_clear_report
+  display_name: 清分结果统计汇总为清分报表
+  description: 清分结果统计汇总为清分报表（cropId,roadId,payCardType,clearDate,lDate -> cropId,roadId,payCardType,clearDate,lDate）
+  source_type: ClearResult
+  target_type: ClearReport
+  cardinality: many-to-one
+  direction: directed
+  property_mappings:
+    crop_id: crop_id
+    road_id: road_id
+    pay_card_type: pay_card_type
+    clear_date: clear_date
+    l_date: l_date
+  link_table: null
+  source_to_link: null
+  target_to_link: null
+actions: []
+
+
+functions:
+- name: fit_actual_route
+  description: 牌识拟合的实际路径与计费路径是否一致
+  parameters:
+  - name: path
+    type: Path
+  return_type: boolean
+  implementation_type: external
+  implementation_ref: ''
+  published: false
+- name: is_obu_billing_mode1
+  description: 判定OBU计费方式1
+  parameters:
+  - name: exitTransaction
+    type: ExitTransaction
+  return_type: boolean
+  implementation_type: builtin
+  published: false
+  script_configured: true
+- name: check_balance_continuity
+  description: 卡内余额是否连续
+  parameters:
+  - name: gantry_transactions
+    type: list<GantryTransaction>
+  return_type: boolean
+  implementation_type: builtin
+  published: false
+  script_configured: true
+- name: detect_duplicate_intervals
+  description: 门架收费单元是否重复
+  parameters:
+  - name: gantry_transactions
+    type: list<GantryTransaction>
+  return_type: boolean
+  implementation_type: builtin
+  published: false
+  script_configured: true
+- name: check_gantry_hex_continuity
+  description: 相邻门架HEX是否首尾衔接
+  parameters:
+  - name: gantry_transactions
+    type: list<GantryTransaction>
+  return_type: boolean
+  implementation_type: builtin
+  published: false
+  script_configured: true
+- name: check_gantry_count_complete
+  description: 门架数量是否等于交易成功数
+  parameters:
+  - name: gantry_transactions
+    type: list<GantryTransaction>
+  return_type: boolean
+  implementation_type: builtin
+  published: false
+  script_configured: true
+- name: detect_late_upload
+  description: 是否存在门架延迟上传
+  parameters:
+  - name: gantry_transactions
+    type: list<GantryTransaction>
+  - name: split_time
+    type: date
+  return_type: boolean
+  implementation_type: builtin
+  published: false
+  script_configured: true
+- name: check_fee_detail_consistency
+  description: 逐收费单元金额是否一致
+  parameters:
+  - name: split_details
+    type: list<SplitDetail>
+  - name: gantry_transactions
+    type: list<GantryTransaction>
+  return_type: boolean
+  implementation_type: builtin
+  published: false
+  script_configured: true
+- name: is_single_province_etc
+  description: 判定单省ETC交易
+  parameters:
+  - name: exitTransaction
+    type: ExitTransaction
+  return_type: boolean
+  implementation_type: builtin
+  published: false
+  script_configured: true
+- name: check_route_consistency
+  description: 拆分路径与门架路径是否一致
+  parameters:
+  - name: split_details
+    type: list<SplitDetail>
+  - name: gantry_transactions
+    type: list<GantryTransaction>
+  return_type: boolean
+  implementation_type: builtin
+  published: false
+  script_configured: true
+- name: check_rounding_mismatch
+  description: 取整是否导致金额差异
+  parameters:
+  - name: gantry_transactions
+    type: list<GantryTransaction>
+  - name: tolerance
+    type: float
+  return_type: boolean
+  implementation_type: builtin
+  published: false
+  script_configured: true
+
+
+rules:
+  # ==========================================================
+  # 第一部分：通行路径完整性校验（基础规则）
+  # 基于衍生属性的简单命题组合
+  # ==========================================================
+
+  # 规则1：明细数量一致 + 收费单元对应 + 费用一致 → 正常
+  - name: Path_integrity_normal
+    display_name: 通行路径完整性正常
+    description: "路径明细与拆分明细在数量、收费单元、费用三个维度均一致，判定为正常"
+    language: swrl
+    expr: >
+      Path(?p) ∧ detail_count_matched(?p, true)
+        ∧ interval_set_matched(?p, true)
+        ∧ fee_matched(?p, true)
+        → check_status(?p, "正常")
+
+  # 规则2：明细数量不一致 → 不正常
+  - name: Path_count_mismatch
+    display_name: 通行路径明细数量不一致
+    description: "路径明细数量与拆分明细数量不一致，判定为不正常"
+    language: swrl
+    expr: >
+      Path(?p) ∧ detail_count_matched(?p, false)
+        → check_status(?p, "不正常")
+
+  # 规则3：数量一致但收费单元不对应 → 不正常
+  - name: Path_interval_mismatch
+    display_name: 通行路径收费单元不对应
+    description: "明细数量一致但收费单元无法一一对应，判定为不正常"
+    language: swrl
+    expr: >
+      Path(?p) ∧ detail_count_matched(?p, true)
+        ∧ interval_set_matched(?p, false)
+        → check_status(?p, "不正常")
+
+  # 规则4：数量和单元都对应但费用不一致 → 费用异常
+  - name: Path_fee_mismatch
+    display_name: 通行路径费用不一致
+    description: "明细数量和收费单元均对应，但费用合计不一致，判定为费用异常"
+    language: swrl
+    expr: >
+      Path(?p) ∧ detail_count_matched(?p, true)
+        ∧ interval_set_matched(?p, true)
+        ∧ fee_matched(?p, false)
+        → check_status(?p, "费用异常")
+
+  # ------------------------------------------
+  # 链式推导：从通行路径异常上推到车辆
+  # ------------------------------------------
+
+  # 规则5：通行路径不正常 → 关联车辆标记存在异常通行
+  - name: vehicle_has_abnormal_Path
+    display_name: 车辆存在异常通行
+    description: "如果车辆关联的某条通行路径状态为不正常，则标记该车辆存在异常通行"
+    language: swrl
+    expr: >
+      Path(?p) ∧ check_status(?p, "不正常")
+        ∧ entry_involves_vehicle(?p, ?v)
+        → has_abnormal_Path(?v, true)
+
+  # 规则6：通行路径费用异常 → 关联车辆标记存在费用异常
+  - name: vehicle_has_fee_abnormal_Path
+    display_name: 车辆存在费用异常通行
+    description: "如果车辆关联的某条通行路径状态为费用异常，则标记该车辆存在费用异常"
+    language: swrl
+    expr: >
+      Path(?p) ∧ check_status(?p, "费用异常")
+        ∧ entry_involves_vehicle(?p, ?v)
+        → has_fee_abnormal_Path(?v, true)
+
+  # ------------------------------------------
+  # 链式推导：从车辆异常上推到收费站
+  # ------------------------------------------
+
+  # 规则7：收费站有异常通行记录 → 标记收费站需关注
+  - name: station_has_abnormal_traffic
+    display_name: 收费站存在异常通行
+    description: "如果某收费站的入口交易关联到不正常的通行路径，则标记该站需关注"
+    language: swrl
+    expr: >
+      Path(?p) ∧ check_status(?p, "不正常")
+        ∧ entry_at_station(?p, ?s)
+        → has_abnormal_traffic(?s, true)
+
+  # ==========================================================
+  # 第二部分：OBU拆分异常诊断（调用函数进行深度分析）
+  # 前置条件 → 三维度异常检测 → 根因诊断 → 链式传播
+  # ==========================================================
+
+  # ------------------------------------------
+  # 前置条件：OBU单省ETC交易筛选
+  # ------------------------------------------
+
+  - name: obu_split_scope
+    display_name: OBU拆分分析范围
+    description: "单省ETC + OBU计费方式1 的交易纳入拆分异常分析范围"
+    language: swrl
+    expr: >
+      Path(?p)
+        ∧ is_single_province_etc(?p) == true
+        ∧ is_obu_billing_mode1(?p) == true
+        → in_obu_split_scope(?p, true)
+
+  # ------------------------------------------
+  # 第一层判定：三维度异常检测
+  # ------------------------------------------
+
+  # 三维度均正常 → 拆分正常
+  - name: obu_split_normal
+    display_name: OBU拆分正常
+    description: "拆分路径、金额、实际路径三个维度均一致，判定OBU拆分正常"
+    language: swrl
+    expr: >
+      Path(?p) ∧ in_obu_split_scope(?p, true)
+        ∧ check_route_consistency(
+            links(?p, path_has_split_details),
+            links(?p, Path_has_gantry_transactions)) == true
+        ∧ check_fee_detail_consistency(
+            links(?p, path_has_split_details),
+            links(?p, Path_has_gantry_transactions)) == true
+        ∧ fit_actual_route(?p) == true
+        → obu_split_status(?p, "正常")
+
+  # 拆分路径与门架路径不一致
+  - name: obu_split_route_mismatch
+    display_name: OBU拆分路径不一致
+    description: "拆分结果的收费单元组合与门架流水的收费单元组合不一致"
+    language: swrl
+    expr: >
+      Path(?p) ∧ in_obu_split_scope(?p, true)
+        ∧ check_route_consistency(
+            links(?p, path_has_split_details),
+            links(?p, Path_has_gantry_transactions)) == false
+        → obu_split_status(?p, "路径不一致")
+
+  # 拆分金额与流水金额不一致
+  - name: obu_split_fee_mismatch
+    display_name: OBU拆分金额不一致
+    description: "拆分路径一致，但逐收费单元金额与门架流水金额不一致"
+    language: swrl
+    expr: >
+      Path(?p) ∧ in_obu_split_scope(?p, true)
+        ∧ check_route_consistency(
+            links(?p, path_has_split_details),
+            links(?p, Path_has_gantry_transactions)) == true
+        ∧ check_fee_detail_consistency(
+            links(?p, path_has_split_details),
+            links(?p, Path_has_gantry_transactions)) == false
+        → obu_split_status(?p, "金额不一致")
+
+  # 实际路径与计费路径不一致
+  - name: obu_split_actual_route_mismatch
+    display_name: 实际路径与计费路径不一致
+    description: "拆分路径和金额均一致，但牌识拟合的实际路径与门架计费路径不一致"
+    language: swrl
+    expr: >
+      Path(?p) ∧ in_obu_split_scope(?p, true)
+        ∧ check_route_consistency(
+            links(?p, path_has_split_details),
+            links(?p, Path_has_gantry_transactions)) == true
+        ∧ check_fee_detail_consistency(
+            links(?p, path_has_split_details),
+            links(?p, Path_has_gantry_transactions)) == true
+        ∧ fit_actual_route(?p) == false
+        → obu_split_status(?p, "实际路径偏差")
+
+  # ------------------------------------------
+  # 第二层诊断：路径不一致的根因
+  # ------------------------------------------
+
+  # 根因：门架收费单元重复
+  - name: obu_route_cause_duplicate_gantry
+    display_name: 根因-门架收费单元重复
+    description: "路径不一致的原因为门架流水中存在重复的收费单元（同一门架重复上报）"
+    language: swrl
+    expr: >
+      Path(?p) ∧ obu_split_status(?p, "路径不一致")
+        ∧ detect_duplicate_intervals(
+            links(?p, Path_has_gantry_transactions)) == true
+        → obu_route_cause(?p, "门架收费单元重复")
+
+  # 根因：ETC门架路径不完整（HEX不连续）
+  - name: obu_route_cause_etc_incomplete
+    display_name: 根因-ETC门架路径不完整
+    description: "路径不一致的原因为相邻门架HEX编码不连续，存在缺失门架"
+    language: swrl
+    expr: >
+      Path(?p) ∧ obu_split_status(?p, "路径不一致")
+        ∧ detect_duplicate_intervals(
+            links(?p, Path_has_gantry_transactions)) == false
+        ∧ check_gantry_hex_continuity(
+            links(?p, Path_has_gantry_transactions)) == false
+        → obu_route_cause(?p, "ETC门架不完整")
+
+  # 根因：CPC门架路径不完整（数量不符）
+  - name: obu_route_cause_cpc_incomplete
+    display_name: 根因-CPC门架路径不完整
+    description: "路径不一致的原因为门架流水数量与最后一条门架的顺序号不符"
+    language: swrl
+    expr: >
+      Path(?p) ∧ obu_split_status(?p, "路径不一致")
+        ∧ detect_duplicate_intervals(
+            links(?p, Path_has_gantry_transactions)) == false
+        ∧ check_gantry_hex_continuity(
+            links(?p, Path_has_gantry_transactions)) == true
+        ∧ check_gantry_count_complete(
+            links(?p, Path_has_gantry_transactions)) == false
+        → obu_route_cause(?p, "CPC门架不完整")
+
+  # 根因进一步：门架不完整是因为延迟上传
+  - name: obu_route_cause_late_upload
+    display_name: 根因-门架延迟上传
+    description: "门架不完整的进一步原因为门架流水接收时间晚于拆分时间"
+    language: swrl
+    expr: >
+      Path(?p)
+        ∧ (obu_route_cause(?p, "ETC门架不完整")
+           ∨ obu_route_cause(?p, "CPC门架不完整"))
+        ∧ detect_late_upload(
+            links(?p, Path_has_gantry_transactions),
+            links(?p, path_has_split_details)[0].pro_split_time) == true
+        → obu_incomplete_reason(?p, "门架延迟上传")
+
+  # ------------------------------------------
+  # 第二层诊断：金额不一致的根因
+  # ------------------------------------------
+
+  # 根因：四舍五入取整差异
+  - name: obu_fee_cause_rounding
+    display_name: 根因-四舍五入取整差异
+    description: "金额不一致的原因为分省实收与门架实收因取整产生差异"
+    language: swrl
+    expr: >
+      Path(?p) ∧ obu_split_status(?p, "金额不一致")
+        ∧ check_rounding_mismatch(
+            links(?p, Path_has_gantry_transactions), 0.95) == true
+        → obu_fee_cause(?p, "四舍五入取整差异")
+
+  # 根因：卡内累计金额异常
+  - name: obu_fee_cause_balance_anomaly
+    display_name: 根因-卡内累计金额异常
+    description: "金额不一致的原因为相邻门架交易的卡内余额不衔接（前笔交易后余额≠后笔交易前余额）"
+    language: swrl
+    expr: >
+      Path(?p) ∧ obu_split_status(?p, "金额不一致")
+        ∧ check_balance_continuity(
+            links(?p, Path_has_gantry_transactions)) == false
+        → obu_fee_cause(?p, "卡内累计金额异常")
+
+  # ------------------------------------------
+  # 链式传播：OBU拆分异常上推到车辆和收费站
+  # ------------------------------------------
+
+  - name: vehicle_has_obu_split_abnormal
+    display_name: 车辆存在OBU拆分异常
+    description: "车辆关联的通行路径存在OBU拆分异常（路径不一致/金额不一致/实际路径偏差）"
+    language: swrl
+    expr: >
+      Path(?p) ∧ in_obu_split_scope(?p, true)
+        ∧ obu_split_status(?p, ?status) ∧ (?status != "正常")
+        ∧ entry_involves_vehicle(?p, ?v)
+        → has_obu_split_abnormal(?v, true)
+
+  - name: station_has_obu_split_abnormal
+    display_name: 收费站存在OBU拆分异常
+    description: "收费站关联的通行路径存在OBU拆分异常"
+    language: swrl
+    expr: >
+      Path(?p) ∧ in_obu_split_scope(?p, true)
+        ∧ obu_split_status(?p, ?status) ∧ (?status != "正常")
+        ∧ entry_at_station(?p, ?s)
+        → has_obu_split_abnormal(?s, true)

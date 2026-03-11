@@ -5,7 +5,7 @@ import type {
   FunctionInputPayload,
   ParameterBindingPayload,
 } from '../api/client';
-import { ontologyBuilderApi } from '../api/client';
+import { ontologyBuilderApi, reasoningApi } from '../api/client';
 import {
   CpuChipIcon,
   PlusIcon,
@@ -16,6 +16,8 @@ import {
   LinkIcon,
   CubeIcon,
   InformationCircleIcon,
+  PlayIcon,
+  XMarkIcon,
 } from '@heroicons/react/24/outline';
 
 const DEFAULT_FUNCTION: FunctionPayload = {
@@ -23,10 +25,24 @@ const DEFAULT_FUNCTION: FunctionPayload = {
   display_name: '',
   description: '',
   implementation: 'builtin',
+  implementation_type: 'builtin',
+  parameters: [],
   inputs: [],
+  return_type: 'boolean',
   output_type: 'boolean',
   parameter_bindings: [],
 };
+
+/** 兼容 ontology（parameters/return_type/implementation_type）与既有（inputs/output_type/implementation） */
+function getParams(fn: FunctionPayload): FunctionInputPayload[] {
+  return fn.parameters ?? fn.inputs ?? [];
+}
+function getReturnType(fn: FunctionPayload): string {
+  return fn.return_type ?? fn.output_type ?? (fn.output && typeof fn.output === 'object' && 'type' in fn.output ? (fn.output as { type?: string }).type : undefined) ?? 'boolean';
+}
+function getImplementation(fn: FunctionPayload): string {
+  return fn.implementation_type ?? fn.implementation ?? 'builtin';
+}
 
 export default function FunctionsView() {
   const [fileList, setFileList] = useState<string[]>([]);
@@ -37,6 +53,10 @@ export default function FunctionsView() {
   const [loadingSchema, setLoadingSchema] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [testModalOpen, setTestModalOpen] = useState(false);
+  const [testArgsJson, setTestArgsJson] = useState('[]');
+  const [testResult, setTestResult] = useState<{ ok: boolean; value?: unknown; error?: string } | null>(null);
+  const [testRunning, setTestRunning] = useState(false);
 
   const functions = schema?.functions ?? [];
   const selectedFn = selectedIndex !== null && functions[selectedIndex] ? functions[selectedIndex] : null;
@@ -136,25 +156,28 @@ export default function FunctionsView() {
   const addInput = (fnIndex: number) => {
     const fn = schema?.functions?.[fnIndex];
     if (!fn) return;
-    const inputs = [...(fn.inputs ?? []), { name: `arg_${(fn.inputs?.length ?? 0) + 1}`, type: 'list<?>' }];
-    updateFunction(fnIndex, { inputs });
+    const params = getParams(fn);
+    const newParam: FunctionInputPayload = { name: `arg_${params.length + 1}`, type: 'list<?>' };
+    const next = [...params, newParam];
+    updateFunction(fnIndex, { parameters: next, inputs: next });
   };
 
   const updateInput = (fnIndex: number, inputIndex: number, updates: Partial<FunctionInputPayload>) => {
     const fn = schema?.functions?.[fnIndex];
-    if (!fn?.inputs) return;
-    const inputs = fn.inputs.map((inp, i) => (i === inputIndex ? { ...inp, ...updates } : inp));
-    updateFunction(fnIndex, { inputs });
+    const params = fn ? getParams(fn) : [];
+    if (inputIndex < 0 || inputIndex >= params.length) return;
+    const next = params.map((inp, i) => (i === inputIndex ? { ...inp, ...updates } : inp));
+    updateFunction(fnIndex, { parameters: next, inputs: next });
   };
 
   const removeInput = (fnIndex: number, inputIndex: number) => {
     const fn = schema?.functions?.[fnIndex];
-    if (!fn?.inputs) return;
-    const inputs = fn.inputs.filter((_, i) => i !== inputIndex);
-    const bindings = (fn.parameter_bindings ?? []).filter(
-      (b) => b.parameter_name !== fn.inputs?.[inputIndex]?.name
-    );
-    updateFunction(fnIndex, { inputs, parameter_bindings: bindings });
+    const params = fn ? getParams(fn) : [];
+    const nameToRemove = params[inputIndex]?.name;
+    if (nameToRemove == null) return;
+    const next = params.filter((_, i) => i !== inputIndex);
+    const bindings = (fn?.parameter_bindings ?? []).filter((b) => b.parameter_name !== nameToRemove);
+    updateFunction(fnIndex, { parameters: next, inputs: next, parameter_bindings: bindings });
   };
 
   const setBinding = (fnIndex: number, parameterName: string, binding: ParameterBindingPayload | null) => {
@@ -171,6 +194,30 @@ export default function FunctionsView() {
 
   const getDerivedProperties = (objectType: Record<string, any> | undefined) =>
     objectType ? (objectType.properties ?? []).filter((p: Record<string, any>) => p.derived === true) : [];
+
+  const runFunctionTest = useCallback(async () => {
+    if (!selectedFn?.name) return;
+    setTestRunning(true);
+    setTestResult(null);
+    try {
+      const args = JSON.parse(testArgsJson) as unknown[];
+      const value = await reasoningApi.testFunction(selectedFn.name, args);
+      setTestResult({ ok: true, value });
+    } catch (e) {
+      setTestResult({
+        ok: false,
+        error: e instanceof Error ? e.message : String(e),
+      });
+    } finally {
+      setTestRunning(false);
+    }
+  }, [selectedFn?.name, testArgsJson]);
+
+  const openTestModal = useCallback(() => {
+    setTestArgsJson('[]');
+    setTestResult(null);
+    setTestModalOpen(true);
+  }, []);
 
   if (loading) {
     return (
@@ -264,7 +311,7 @@ export default function FunctionsView() {
                   >
                     <div className="font-medium text-sm truncate">{fn.display_name || fn.name || '(未命名)'}</div>
                     <div className="text-xs text-gray-500 mt-0.5">
-                      {fn.implementation} · {(fn.inputs ?? []).length} 个入参
+                      {getImplementation(fn)} · {getParams(fn).length} 个入参
                     </div>
                   </button>
                 ))
@@ -279,15 +326,25 @@ export default function FunctionsView() {
               </h2>
               {selectedFn ? (
                 <div className="space-y-4">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
                     <h3 className="text-xl font-bold text-gray-900">{selectedFn.display_name || selectedFn.name}</h3>
-                    <button
-                      type="button"
-                      onClick={() => selectedIndex !== null && deleteFunction(selectedIndex)}
-                      className="text-red-500 hover:text-red-700"
-                    >
-                      <TrashIcon className="w-5 h-5" />
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={openTestModal}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-amber-100 text-amber-800 text-sm hover:bg-amber-200"
+                      >
+                        <PlayIcon className="w-4 h-4" />
+                        测试函数
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => selectedIndex !== null && deleteFunction(selectedIndex)}
+                        className="text-red-500 hover:text-red-700"
+                      >
+                        <TrashIcon className="w-5 h-5" />
+                      </button>
+                    </div>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">名称 *</label>
@@ -326,27 +383,51 @@ export default function FunctionsView() {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">实现类型</label>
                     <select
-                      value={selectedFn.implementation}
-                      onChange={(e) =>
-                        selectedIndex !== null &&
+                      value={getImplementation(selectedFn)}
+                      onChange={(e) => {
+                        if (selectedIndex === null) return;
+                        const v = e.target.value;
                         updateFunction(selectedIndex, {
-                          implementation: e.target.value as 'builtin' | 'external',
-                        })
-                      }
+                          implementation: v as 'builtin' | 'external' | 'script',
+                          implementation_type: v,
+                        });
+                      }}
                       className="w-full border rounded px-3 py-2 text-sm"
                     >
                       <option value="builtin">builtin（引擎内置）</option>
+                      <option value="script">script（脚本，从 functions/script/ 加载）</option>
                       <option value="external">external（外部服务）</option>
                     </select>
                   </div>
+                  {getImplementation(selectedFn) === 'script' && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">脚本路径 *</label>
+                      <input
+                        type="text"
+                        value={selectedFn.script_path ?? ''}
+                        onChange={(e) =>
+                          selectedIndex !== null && updateFunction(selectedIndex, { script_path: e.target.value })
+                        }
+                        className="w-full border rounded px-3 py-2 text-sm font-mono"
+                        placeholder="如 toll/sample_check.js"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">相对于当前本体所在目录下的 functions/script/（如 ontology/functions/script/）</p>
+                    </div>
+                  )}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">返回类型</label>
                     <input
                       type="text"
-                      value={selectedFn.output_type ?? 'boolean'}
-                      onChange={(e) =>
-                        selectedIndex !== null && updateFunction(selectedIndex, { output_type: e.target.value })
-                      }
+                      value={getReturnType(selectedFn)}
+                      onChange={(e) => {
+                        if (selectedIndex === null) return;
+                        const v = e.target.value;
+                        updateFunction(selectedIndex, {
+                          return_type: v,
+                          output_type: v,
+                          output: { type: v },
+                        });
+                      }}
                       className="w-full border rounded px-3 py-2 text-sm"
                       placeholder="boolean | number | string"
                     />
@@ -364,7 +445,7 @@ export default function FunctionsView() {
                       </button>
                     </div>
                     <div className="space-y-3">
-                      {(selectedFn.inputs ?? []).map((inp, i) => (
+                      {getParams(selectedFn).map((inp, i) => (
                         <div
                           key={i}
                           className="border border-gray-200 rounded-lg p-3 bg-gray-50/50 space-y-2"
@@ -510,6 +591,64 @@ export default function FunctionsView() {
                 </div>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 函数测试弹窗 */}
+      {testModalOpen && selectedFn && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" onClick={() => setTestModalOpen(false)}>
+          <div
+            className="bg-white rounded-lg shadow-xl max-w-lg w-full p-5 space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-900">测试函数：{selectedFn.name}</h3>
+              <button type="button" onClick={() => setTestModalOpen(false)} className="text-gray-500 hover:text-gray-700">
+                <XMarkIcon className="w-5 h-5" />
+              </button>
+            </div>
+            <p className="text-xs text-gray-500">
+              入参为 JSON 数组，顺序与函数定义一致。例如实例对象 <code className="bg-gray-100 px-1 rounded">&#123;&#125;</code>、关联列表 <code className="bg-gray-100 px-1 rounded">[&#123;&#125;]</code>。
+            </p>
+            <textarea
+              value={testArgsJson}
+              onChange={(e) => setTestArgsJson(e.target.value)}
+              className="w-full border rounded px-3 py-2 text-sm font-mono h-32"
+              placeholder='[{"pass_id": "xxx"}, [{"fee": 10}]]'
+              spellCheck={false}
+            />
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={runFunctionTest}
+                disabled={testRunning}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md bg-blue-600 text-white text-sm hover:bg-blue-700 disabled:opacity-50"
+              >
+                <PlayIcon className="w-4 h-4" />
+                {testRunning ? '执行中...' : '执行'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setTestModalOpen(false)}
+                className="px-3 py-2 rounded-md border border-gray-300 text-sm hover:bg-gray-50"
+              >
+                关闭
+              </button>
+            </div>
+            {testResult && (
+              <div
+                className={`p-3 rounded text-sm font-mono break-all ${
+                  testResult.ok ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'
+                }`}
+              >
+                {testResult.ok ? (
+                  <pre className="whitespace-pre-wrap">{JSON.stringify(testResult.value, null, 2)}</pre>
+                ) : (
+                  <span>{testResult.error}</span>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}

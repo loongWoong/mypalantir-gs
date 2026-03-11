@@ -23,6 +23,10 @@ public class FunctionDef {
     @JsonProperty("implementation")
     private String implementation;
 
+    /** 脚本实现时使用：脚本路径，相对于 functions/script/ 或类路径，如 toll/check_xxx.js */
+    @JsonProperty("script_path")
+    private String scriptPath;
+
     @JsonIgnore
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }
@@ -46,4 +50,8 @@ public class FunctionDef {
     @JsonIgnore
     public String getImplementation() { return implementation; }
     public void setImplementation(String implementation) { this.implementation = implementation; }
+
+    @JsonIgnore
+    public String getScriptPath() { return scriptPath; }
+    public void setScriptPath(String scriptPath) { this.scriptPath = scriptPath; }
 }

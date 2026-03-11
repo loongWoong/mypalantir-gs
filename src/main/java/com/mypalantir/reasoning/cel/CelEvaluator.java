@@ -3,7 +3,6 @@ package com.mypalantir.reasoning.cel;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 
 /**
  * 轻量 CEL 表达式求值器。
@@ -13,8 +12,23 @@ import java.util.stream.Collectors;
  * - 简单等值比较 a == b
  * - 字段访问 links.linkName
  * - double(x) 转换
+ * - 自定义函数调用：当注入 CelFunctionAdapter 时，支持 funcName(arg1, arg2, ...) 并委托 FunctionRegistry。
  */
 public class CelEvaluator {
+
+    private static final Set<String> BUILTIN_CEL_NAMES = Set.of("size", "double");
+
+    private final CelFunctionAdapter functionAdapter;
+
+    /** 无注入时仅支持内置 CEL 语法，不解析自定义函数调用。 */
+    public CelEvaluator() {
+        this(null);
+    }
+
+    /** 注入 adapter 后，表达式中可调用 FunctionRegistry 已注册函数。 */
+    public CelEvaluator(CelFunctionAdapter functionAdapter) {
+        this.functionAdapter = functionAdapter;
+    }
 
     /**
      * 对 CEL 表达式求值
@@ -80,8 +94,73 @@ public class CelEvaluator {
                 mapSortMatcher.group(3), properties, linkedData);
         }
 
+        // 自定义函数调用：funcName(arg1, arg2, ...) 委托 FunctionRegistry（支持参数内括号）
+        if (functionAdapter != null) {
+            String[] nameAndArgs = parseFunctionCall(expr);
+            if (nameAndArgs != null) {
+                String name = nameAndArgs[0];
+                String argsStr = nameAndArgs[1];
+                if (!BUILTIN_CEL_NAMES.contains(name) && functionAdapter.hasFunction(name)) {
+                    List<String> argExprs = splitArgsByComma(argsStr);
+                    List<Object> evaluated = new ArrayList<>();
+                    for (String argExpr : argExprs) {
+                        evaluated.add(evaluateSimple(argExpr.trim(), properties, linkedData));
+                    }
+                    return functionAdapter.call(name, evaluated);
+                }
+            }
+        }
+
         // 简单路径解析
         return evaluateSimple(expr, properties, linkedData);
+    }
+
+    /**
+     * 解析函数调用形式 name(args)，返回 [name, argsStr]；若不是合法调用则返回 null。
+     * 正确匹配配对括号，使参数中可含 size(links.x) 等。
+     */
+    private static String[] parseFunctionCall(String expr) {
+        expr = expr.trim();
+        int open = expr.indexOf('(');
+        if (open <= 0 || !expr.endsWith(")")) return null;
+        String name = expr.substring(0, open).trim();
+        if (!IDENTIFIER_PATTERN.matcher(name).matches()) return null;
+        int depth = 1;
+        for (int i = open + 1; i < expr.length(); i++) {
+            char c = expr.charAt(i);
+            if (c == '(' || c == '（') depth++;
+            else if (c == ')' || c == '）') {
+                depth--;
+                if (depth == 0) {
+                    String argsStr = expr.substring(open + 1, i).trim();
+                    return new String[]{name, argsStr};
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 按顶层逗号分割参数串，不分割括号内的逗号。
+     */
+    private static List<String> splitArgsByComma(String argsStr) {
+        if (argsStr.isEmpty()) return List.of();
+        List<String> out = new ArrayList<>();
+        int depth = 0;
+        StringBuilder cur = new StringBuilder();
+        for (int i = 0; i < argsStr.length(); i++) {
+            char c = argsStr.charAt(i);
+            if (c == '(' || c == '（') depth++;
+            else if (c == ')' || c == '）') depth--;
+            else if ((c == ',' || c == '，') && depth == 0) {
+                out.add(cur.toString().trim());
+                cur = new StringBuilder();
+                continue;
+            }
+            cur.append(c);
+        }
+        out.add(cur.toString().trim());
+        return out;
     }
 
     private static final Pattern SIZE_PATTERN = Pattern.compile("^size\\(([^)]+)\\)$");
@@ -89,6 +168,8 @@ public class CelEvaluator {
     private static final Pattern MAP_SORT_PATTERN = Pattern.compile("(.+)\\.map\\(([^,]+),\\s*(.+)\\)\\.sort\\(\\)");
     private static final Pattern EQUALS_PATTERN = Pattern.compile("(.+?)\\s*==\\s*(.+)");
     private static final Pattern DOUBLE_PATTERN = Pattern.compile("double\\(([^)]+)\\)");
+    /** 自定义函数名：标识符 */
+    private static final Pattern IDENTIFIER_PATTERN = Pattern.compile("^[a-zA-Z_][a-zA-Z0-9_]*$");
 
     /**
      * 解析路径表达式
@@ -178,6 +259,23 @@ public class CelEvaluator {
         if (mapSortMatcher.matches()) {
             return evaluateMapSort(mapSortMatcher.group(1), mapSortMatcher.group(2),
                 mapSortMatcher.group(3), properties, linkedData);
+        }
+
+        // 嵌套的自定义函数调用
+        if (functionAdapter != null) {
+            String[] nameAndArgs = parseFunctionCall(expr);
+            if (nameAndArgs != null) {
+                String name = nameAndArgs[0];
+                String argsStr = nameAndArgs[1];
+                if (!BUILTIN_CEL_NAMES.contains(name) && functionAdapter.hasFunction(name)) {
+                    List<String> argExprs = splitArgsByComma(argsStr);
+                    List<Object> evaluated = new ArrayList<>();
+                    for (String argExpr : argExprs) {
+                        evaluated.add(evaluateSimple(argExpr.trim(), properties, linkedData));
+                    }
+                    return functionAdapter.call(name, evaluated);
+                }
+            }
         }
 
         return resolvePath(expr, properties, linkedData);
