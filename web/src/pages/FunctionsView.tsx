@@ -5,7 +5,8 @@ import type {
   FunctionInputPayload,
   ParameterBindingPayload,
 } from '../api/client';
-import { ontologyBuilderApi, reasoningApi } from '../api/client';
+import { ontologyBuilderApi, reasoningApi, modelApi, instanceApi } from '../api/client';
+import type { ModelInfo, ObjectType } from '../api/client';
 import {
   CpuChipIcon,
   PlusIcon,
@@ -18,6 +19,9 @@ import {
   InformationCircleIcon,
   PlayIcon,
   XMarkIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+  MagnifyingGlassIcon,
 } from '@heroicons/react/24/outline';
 
 const DEFAULT_FUNCTION: FunctionPayload = {
@@ -33,15 +37,38 @@ const DEFAULT_FUNCTION: FunctionPayload = {
   parameter_bindings: [],
 };
 
-/** 兼容 ontology（parameters/return_type/implementation_type）与既有（inputs/output_type/implementation） */
+/** 兼容 ontology（parameters/return_type）与后端（input/output.type）及既有（inputs/output_type） */
 function getParams(fn: FunctionPayload): FunctionInputPayload[] {
-  return fn.parameters ?? fn.inputs ?? [];
+  const list = fn.parameters ?? fn.inputs ?? (fn as FunctionPayload & { input?: FunctionInputPayload[] }).input ?? [];
+  return Array.isArray(list) ? list : [];
 }
 function getReturnType(fn: FunctionPayload): string {
-  return fn.return_type ?? fn.output_type ?? (fn.output && typeof fn.output === 'object' && 'type' in fn.output ? (fn.output as { type?: string }).type : undefined) ?? 'boolean';
+  return (
+    fn.return_type ??
+    fn.output_type ??
+    (fn.output && typeof fn.output === 'object' && 'type' in fn.output ? (fn.output as { type?: string }).type : undefined) ??
+    'boolean'
+  );
 }
 function getImplementation(fn: FunctionPayload): string {
   return fn.implementation_type ?? fn.implementation ?? 'builtin';
+}
+
+/** 从规则 SWRL 表达式中解析“作用域”（第一个谓词的主语类型），与 RulesView 一致 */
+function getScope(expr: string | undefined): string {
+  if (!expr) return 'Unknown';
+  const match = expr.match(/^(\w+)\(\?/);
+  return match ? match[1] : 'Unknown';
+}
+
+/** 从规则表达式中提取出现的函数名（与 schema 中函数名匹配） */
+function getFunctionNamesInRule(expr: string | undefined, functionNames: string[]): string[] {
+  if (!expr || functionNames.length === 0) return [];
+  const found: string[] = [];
+  for (const name of functionNames) {
+    if (expr.includes(name + '(') || expr.includes(name + ' (')) found.push(name);
+  }
+  return found;
 }
 
 export default function FunctionsView() {
@@ -57,24 +84,58 @@ export default function FunctionsView() {
   const [testArgsJson, setTestArgsJson] = useState('[]');
   const [testResult, setTestResult] = useState<{ ok: boolean; value?: unknown; error?: string } | null>(null);
   const [testRunning, setTestRunning] = useState(false);
+  // 按实例测试（规则上下文）：本体模型、根对象类型、实例
+  const [testModelList, setTestModelList] = useState<ModelInfo[]>([]);
+  const [testModelId, setTestModelId] = useState<string>('');
+  const [testObjectTypes, setTestObjectTypes] = useState<ObjectType[]>([]);
+  const [testObjectType, setTestObjectType] = useState<string>('');
+  const [testInstanceOptions, setTestInstanceOptions] = useState<Array<{ id: string; label: string }>>([]);
+  const [testInstanceId, setTestInstanceId] = useState<string>('');
+  const [loadingTestData, setLoadingTestData] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
   const functions = schema?.functions ?? [];
+  const rules = schema?.rules ?? [];
   const selectedFn = selectedIndex !== null && functions[selectedIndex] ? functions[selectedIndex] : null;
   const objectTypes = schema?.object_types ?? [];
   const linkTypes = schema?.link_types ?? [];
 
+  const toggleGroupCollapse = (groupName: string) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(groupName)) next.delete(groupName);
+      else next.add(groupName);
+      return next;
+    });
+  };
+
   const loadFileList = useCallback(async () => {
     try {
-      const files = await ontologyBuilderApi.listFiles();
+      const [files, currentModel] = await Promise.all([
+        ontologyBuilderApi.listFiles(),
+        modelApi.getCurrentModel().catch(() => null),
+      ]);
       setFileList(files);
-      if (files.length > 0 && !selectedFilename) setSelectedFilename(files[0]);
+      if (files.length > 0) {
+        const getBasename = (filePath: string) => {
+          const normalized = filePath.replace(/\\/g, '/');
+          const last = normalized.lastIndexOf('/');
+          return last >= 0 ? normalized.slice(last + 1) : filePath;
+        };
+        const pathToUse = currentModel?.filePath;
+        const match = pathToUse
+          ? files.find((f) => f === getBasename(pathToUse) || pathToUse.endsWith(f) || pathToUse === f)
+          : undefined;
+        setSelectedFilename((prev) => (prev ? prev : match ?? files[0]));
+      }
     } catch (e) {
       console.error('Failed to list ontology files:', e);
       setError('无法获取本体文件列表');
     } finally {
       setLoading(false);
     }
-  }, [selectedFilename]);
+  }, []);
 
   useEffect(() => {
     loadFileList();
@@ -159,7 +220,7 @@ export default function FunctionsView() {
     const params = getParams(fn);
     const newParam: FunctionInputPayload = { name: `arg_${params.length + 1}`, type: 'list<?>' };
     const next = [...params, newParam];
-    updateFunction(fnIndex, { parameters: next, inputs: next });
+    updateFunction(fnIndex, { parameters: next, inputs: next, input: next });
   };
 
   const updateInput = (fnIndex: number, inputIndex: number, updates: Partial<FunctionInputPayload>) => {
@@ -167,7 +228,7 @@ export default function FunctionsView() {
     const params = fn ? getParams(fn) : [];
     if (inputIndex < 0 || inputIndex >= params.length) return;
     const next = params.map((inp, i) => (i === inputIndex ? { ...inp, ...updates } : inp));
-    updateFunction(fnIndex, { parameters: next, inputs: next });
+    updateFunction(fnIndex, { parameters: next, inputs: next, input: next });
   };
 
   const removeInput = (fnIndex: number, inputIndex: number) => {
@@ -177,7 +238,7 @@ export default function FunctionsView() {
     if (nameToRemove == null) return;
     const next = params.filter((_, i) => i !== inputIndex);
     const bindings = (fn?.parameter_bindings ?? []).filter((b) => b.parameter_name !== nameToRemove);
-    updateFunction(fnIndex, { parameters: next, inputs: next, parameter_bindings: bindings });
+    updateFunction(fnIndex, { parameters: next, inputs: next, input: next, parameter_bindings: bindings });
   };
 
   const setBinding = (fnIndex: number, parameterName: string, binding: ParameterBindingPayload | null) => {
@@ -213,11 +274,109 @@ export default function FunctionsView() {
     }
   }, [selectedFn?.name, testArgsJson]);
 
-  const openTestModal = useCallback(() => {
+  const openTestModal = useCallback(async () => {
     setTestArgsJson('[]');
     setTestResult(null);
     setTestModalOpen(true);
+    setTestObjectType('');
+    setTestInstanceId('');
+    setTestInstanceOptions([]);
+    try {
+      const [models, current] = await Promise.all([
+        modelApi.listModels(),
+        modelApi.getCurrentModel().catch(() => null),
+      ]);
+      setTestModelList(models);
+      if (current?.modelId) setTestModelId(current.modelId);
+      else if (models.length > 0) setTestModelId(models[0].id);
+      else setTestModelId('');
+    } catch (e) {
+      console.error('Load test models failed:', e);
+    }
   }, []);
+
+  // 切换本体模型时加载该模型下的对象类型
+  useEffect(() => {
+    if (!testModalOpen || !testModelId) {
+      setTestObjectTypes([]);
+      setTestObjectType('');
+      setTestInstanceId('');
+      setTestInstanceOptions([]);
+      return;
+    }
+    let cancelled = false;
+    modelApi
+      .getObjectTypes(testModelId)
+      .then((ots) => {
+        if (!cancelled) {
+          setTestObjectTypes(ots);
+          setTestObjectType('');
+          setTestInstanceId('');
+          setTestInstanceOptions([]);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setTestObjectTypes([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [testModalOpen, testModelId]);
+
+  // 切换根对象类型时加载实例列表（当前模型下的数据）
+  useEffect(() => {
+    if (!testModalOpen || !testObjectType || !testModelId) {
+      setTestInstanceOptions([]);
+      setTestInstanceId('');
+      return;
+    }
+    let cancelled = false;
+    setLoadingTestData(true);
+    instanceApi
+      .list(testObjectType, 0, 50)
+      .then(({ items }) => {
+        if (!cancelled) {
+          const options = items.map((item: Record<string, unknown>) => {
+            const id = (item.id ?? item.pass_id ?? Object.values(item)[0]) as string;
+            const label = typeof id === 'string' ? id : JSON.stringify(id);
+            return { id: String(id), label };
+          });
+          setTestInstanceOptions(options);
+          setTestInstanceId(options[0]?.id ?? '');
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setTestInstanceOptions([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingTestData(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [testModalOpen, testModelId, testObjectType]);
+
+  const runTestWithInstance = useCallback(async () => {
+    if (!selectedFn?.name || !testObjectType || !testInstanceId) return;
+    setTestRunning(true);
+    setTestResult(null);
+    try {
+      await modelApi.switchModel(testModelId);
+      const value = await reasoningApi.testFunctionWithInstance(
+        selectedFn.name,
+        testObjectType,
+        testInstanceId
+      );
+      setTestResult({ ok: true, value });
+    } catch (e) {
+      setTestResult({
+        ok: false,
+        error: e instanceof Error ? e.message : String(e),
+      });
+    } finally {
+      setTestRunning(false);
+    }
+  }, [selectedFn?.name, testModelId, testObjectType, testInstanceId]);
 
   if (loading) {
     return (
@@ -281,7 +440,7 @@ export default function FunctionsView() {
       {!loadingSchema && schema && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-gray-900 mb-3 flex items-center justify-between">
               <span className="flex items-center">
                 <CpuChipIcon className="w-5 h-5 mr-2" />
                 函数 ({functions.length})
@@ -295,26 +454,103 @@ export default function FunctionsView() {
                 添加
               </button>
             </h2>
-            <div className="space-y-2">
+            <div className="relative mb-3">
+              <MagnifyingGlassIcon className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="搜索函数..."
+                className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+            <div className="space-y-1 max-h-[calc(100vh-380px)] overflow-y-auto">
               {functions.length === 0 ? (
                 <p className="text-sm text-gray-500 py-4">暂无函数，点击「添加」创建。函数供规则前件调用，可与 link/衍生属性绑定参数。</p>
               ) : (
-                functions.map((fn, idx) => (
-                  <button
-                    key={`${fn.name}-${idx}`}
-                    onClick={() => setSelectedIndex(idx)}
-                    className={`w-full text-left px-3 py-2 rounded-lg transition-colors border ${
-                      selectedIndex === idx
-                        ? 'bg-blue-50 text-blue-700 border-blue-200'
-                        : 'hover:bg-gray-50 border-transparent'
-                    }`}
-                  >
-                    <div className="font-medium text-sm truncate">{fn.display_name || fn.name || '(未命名)'}</div>
-                    <div className="text-xs text-gray-500 mt-0.5">
-                      {getImplementation(fn)} · {getParams(fn).length} 个入参
+                (() => {
+                  const colors = ['bg-blue-500', 'bg-yellow-500', 'bg-red-500', 'bg-green-500', 'bg-purple-500', 'bg-indigo-500', 'bg-pink-500', 'bg-teal-500'];
+                  const functionNames = functions.map((f) => f.name);
+                  const filteredFunctions = functions.filter((fn) => {
+                    if (!searchQuery.trim()) return true;
+                    const q = searchQuery.toLowerCase();
+                    return (
+                      (fn.name ?? '').toLowerCase().includes(q) ||
+                      (fn.display_name ?? '').toLowerCase().includes(q) ||
+                      (fn.description ?? '').toLowerCase().includes(q)
+                    );
+                  });
+                  const functionsByScope: Array<{ name: string; displayName: string; color: string; functions: FunctionPayload[] }> = objectTypes
+                    .map((ot: Record<string, any>, idx: number) => {
+                      const scope = ot.name ?? '';
+                      const scopeRules = rules.filter((r: Record<string, any>) => getScope(r.expr ?? r.swrl) === scope);
+                      const namesInScope = new Set<string>();
+                      scopeRules.forEach((r: Record<string, any>) => {
+                        getFunctionNamesInRule(r.expr ?? r.swrl, functionNames).forEach((name) => namesInScope.add(name));
+                      });
+                      const groupFns = filteredFunctions.filter((fn) => namesInScope.has(fn.name));
+                      return {
+                        name: scope,
+                        displayName: (ot.display_name ?? ot.name ?? scope) as string,
+                        color: colors[idx % colors.length],
+                        functions: groupFns,
+                      };
+                    })
+                    .filter((g) => g.functions.length > 0);
+                  const usedNames = new Set(functionsByScope.flatMap((g) => g.functions.map((f) => f.name)));
+                  const ungrouped = filteredFunctions.filter((fn) => !usedNames.has(fn.name));
+                  if (ungrouped.length > 0) {
+                    functionsByScope.push({
+                      name: 'Unknown',
+                      displayName: '未分类',
+                      color: 'bg-gray-400',
+                      functions: ungrouped,
+                    });
+                  }
+                  if (functionsByScope.length === 0 && searchQuery.trim()) {
+                    return <p className="text-sm text-gray-500 py-4 text-center">未找到匹配的函数</p>;
+                  }
+                  return functionsByScope.map((group) => (
+                    <div key={group.name} className="border border-gray-100 rounded-lg overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => toggleGroupCollapse(group.name)}
+                        className="w-full flex items-center gap-2 px-3 py-2 bg-gray-50 hover:bg-gray-100 transition-colors text-left"
+                      >
+                        {collapsedGroups.has(group.name) ? (
+                          <ChevronRightIcon className="w-4 h-4 text-gray-500 shrink-0" />
+                        ) : (
+                          <ChevronDownIcon className="w-4 h-4 text-gray-500 shrink-0" />
+                        )}
+                        <span className={`w-2 h-2 rounded-full shrink-0 ${group.color}`} />
+                        <span className="text-sm font-medium text-gray-700 truncate">{group.displayName}</span>
+                        <span className="text-xs text-gray-400 ml-auto shrink-0">({group.functions.length})</span>
+                      </button>
+                      {!collapsedGroups.has(group.name) && (
+                        <div className="divide-y divide-gray-50">
+                          {group.functions.map((fn) => {
+                            const idx = functions.indexOf(fn);
+                            return (
+                              <button
+                                key={fn.name}
+                                type="button"
+                                onClick={() => setSelectedIndex(idx)}
+                                className={`w-full text-left px-3 py-2 transition-colors ${
+                                  selectedIndex === idx ? 'bg-blue-50 text-blue-700' : 'hover:bg-gray-50 text-gray-700'
+                                }`}
+                              >
+                                <div className="font-medium text-sm truncate">{fn.display_name || fn.name || '(未命名)'}</div>
+                                <div className="text-xs text-gray-500 mt-0.5">
+                                  {getImplementation(fn)} · {getParams(fn).length} 个入参
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
-                  </button>
-                ))
+                  ));
+                })()
               )}
             </div>
           </div>
@@ -415,7 +651,7 @@ export default function FunctionsView() {
                     </div>
                   )}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">返回类型</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">出参（返回类型）</label>
                     <input
                       type="text"
                       value={getReturnType(selectedFn)}
@@ -429,13 +665,13 @@ export default function FunctionsView() {
                         });
                       }}
                       className="w-full border rounded px-3 py-2 text-sm"
-                      placeholder="boolean | number | string"
+                      placeholder="boolean | number | string | date | list&lt;T&gt;"
                     />
                   </div>
 
                   <div>
                     <div className="flex items-center justify-between mb-2">
-                      <label className="block text-sm font-medium text-gray-700">入参</label>
+                      <label className="block text-sm font-medium text-gray-700">入参（参数名与类型，与定义文件一致）</label>
                       <button
                         type="button"
                         onClick={() => selectedIndex !== null && addInput(selectedIndex)}
@@ -460,15 +696,41 @@ export default function FunctionsView() {
                               className="flex-1 border rounded px-2 py-1.5 text-sm"
                               placeholder="参数名"
                             />
-                            <input
-                              type="text"
+                            <select
                               value={inp.type}
                               onChange={(e) =>
                                 selectedIndex !== null && updateInput(selectedIndex, i, { type: e.target.value })
                               }
-                              className="flex-1 border rounded px-2 py-1.5 text-sm"
-                              placeholder="类型 如 list&lt;SplitDetail&gt;"
-                            />
+                              className="flex-1 border rounded px-2 py-1.5 text-sm bg-white"
+                            >
+                              <option value="">选择类型</option>
+                              <optgroup label="基础类型">
+                                <option value="string">string</option>
+                                <option value="int">int</option>
+                                <option value="long">long</option>
+                                <option value="float">float</option>
+                                <option value="double">double</option>
+                                <option value="number">number</option>
+                                <option value="boolean">boolean</option>
+                                <option value="date">date</option>
+                                <option value="datetime">datetime</option>
+                                <option value="json">json</option>
+                              </optgroup>
+                              <optgroup label="本体对象类型">
+                                {objectTypes.map((ot: Record<string, any>) => (
+                                  <option key={ot.name} value={ot.name}>
+                                    {ot.display_name || ot.name}
+                                  </option>
+                                ))}
+                              </optgroup>
+                              <optgroup label="本体对象列表类型">
+                                {objectTypes.map((ot: Record<string, any>) => (
+                                  <option key={`list<${ot.name}>`} value={`list<${ot.name}>`}>
+                                    list&lt;{ot.display_name || ot.name}&gt;
+                                  </option>
+                                ))}
+                              </optgroup>
+                            </select>
                             <button
                               type="button"
                               onClick={() => selectedIndex !== null && removeInput(selectedIndex, i)}
@@ -599,7 +861,7 @@ export default function FunctionsView() {
       {testModalOpen && selectedFn && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" onClick={() => setTestModalOpen(false)}>
           <div
-            className="bg-white rounded-lg shadow-xl max-w-lg w-full p-5 space-y-4"
+            className="bg-white rounded-lg shadow-xl max-w-lg w-full p-5 space-y-4 max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">
@@ -608,8 +870,75 @@ export default function FunctionsView() {
                 <XMarkIcon className="w-5 h-5" />
               </button>
             </div>
+
+            {/* 按实例运行（规则上下文）：选择本体模型与根实例，用该模型绑定的数据存储查询后调用函数 */}
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-3">
+              <p className="text-sm font-medium text-gray-700">按实例运行（规则上下文）</p>
+              <p className="text-xs text-gray-500">
+                选择关联规则绑定的本体模型与根对象实例，系统将按该模型的数据存储查询实例及关联数据，并作为函数入参执行。
+              </p>
+              <div className="grid grid-cols-1 gap-2">
+                <div>
+                  <label className="block text-xs text-gray-500 mb-0.5">本体模型</label>
+                  <select
+                    value={testModelId}
+                    onChange={(e) => setTestModelId(e.target.value)}
+                    className="w-full border rounded px-2 py-1.5 text-sm"
+                  >
+                    <option value="">请选择</option>
+                    {testModelList.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.displayName || m.path || m.id}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-0.5">根对象类型</label>
+                  <select
+                    value={testObjectType}
+                    onChange={(e) => setTestObjectType(e.target.value)}
+                    className="w-full border rounded px-2 py-1.5 text-sm"
+                  >
+                    <option value="">请选择</option>
+                    {testObjectTypes.map((ot) => (
+                      <option key={ot.name} value={ot.name}>
+                        {ot.display_name || ot.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-0.5">实例</label>
+                  <select
+                    value={testInstanceId}
+                    onChange={(e) => setTestInstanceId(e.target.value)}
+                    disabled={loadingTestData || !testObjectType}
+                    className="w-full border rounded px-2 py-1.5 text-sm"
+                  >
+                    <option value="">请选择</option>
+                    {testInstanceOptions.map((opt) => (
+                      <option key={opt.id} value={opt.id}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                  {loadingTestData && <span className="text-xs text-gray-400">加载中…</span>}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={runTestWithInstance}
+                disabled={testRunning || !testModelId || !testObjectType || !testInstanceId}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md bg-indigo-600 text-white text-sm hover:bg-indigo-700 disabled:opacity-50"
+              >
+                <PlayIcon className="w-4 h-4" />
+                {testRunning ? '执行中...' : '用该实例数据运行'}
+              </button>
+            </div>
+
             <p className="text-xs text-gray-500">
-              入参为 JSON 数组，顺序与函数定义一致。例如实例对象 <code className="bg-gray-100 px-1 rounded">&#123;&#125;</code>、关联列表 <code className="bg-gray-100 px-1 rounded">[&#123;&#125;]</code>。
+              或手动填写入参（JSON 数组，顺序与函数定义一致）。例如实例对象 <code className="bg-gray-100 px-1 rounded">&#123;&#125;</code>、关联列表 <code className="bg-gray-100 px-1 rounded">[&#123;&#125;]</code>。
             </p>
             <textarea
               value={testArgsJson}

@@ -3607,6 +3607,7 @@ actions: []
 functions:
 - name: fit_actual_route
   description: 牌识拟合的实际路径与计费路径是否一致
+  display_name: 牌识拟合的实际路径与计费路径是否一致
   parameters:
   - name: path
     type: Path
@@ -3616,6 +3617,7 @@ functions:
   published: false
 - name: is_obu_billing_mode1
   description: 判定OBU计费方式1
+  display_name: 判定OBU计费方式1
   parameters:
   - name: exitTransaction
     type: ExitTransaction
@@ -3625,6 +3627,7 @@ functions:
   script_configured: true
 - name: check_balance_continuity
   description: 卡内余额是否连续
+  display_name: 卡内余额是否连续
   parameters:
   - name: gantry_transactions
     type: list<GantryTransaction>
@@ -3634,6 +3637,7 @@ functions:
   script_configured: true
 - name: detect_duplicate_intervals
   description: 门架收费单元是否重复
+  display_name: 门架收费单元是否重复
   parameters:
   - name: gantry_transactions
     type: list<GantryTransaction>
@@ -3643,6 +3647,7 @@ functions:
   script_configured: true
 - name: check_gantry_hex_continuity
   description: 相邻门架HEX是否首尾衔接
+  display_name: 相邻门架HEX是否首尾衔接
   parameters:
   - name: gantry_transactions
     type: list<GantryTransaction>
@@ -3652,6 +3657,7 @@ functions:
   script_configured: true
 - name: check_gantry_count_complete
   description: 门架数量是否等于交易成功数
+  display_name: 门架数量是否等于交易成功数
   parameters:
   - name: gantry_transactions
     type: list<GantryTransaction>
@@ -3661,6 +3667,7 @@ functions:
   script_configured: true
 - name: detect_late_upload
   description: 是否存在门架延迟上传
+  display_name: 是否存在门架延迟上传
   parameters:
   - name: gantry_transactions
     type: list<GantryTransaction>
@@ -3672,6 +3679,7 @@ functions:
   script_configured: true
 - name: check_fee_detail_consistency
   description: 逐收费单元金额是否一致
+  display_name: 逐收费单元金额是否一致
   parameters:
   - name: split_details
     type: list<SplitDetail>
@@ -3683,6 +3691,7 @@ functions:
   script_configured: true
 - name: is_single_province_etc
   description: 判定单省ETC交易
+  display_name: 判定单省ETC交易
   parameters:
   - name: exitTransaction
     type: ExitTransaction
@@ -3692,6 +3701,7 @@ functions:
   script_configured: true
 - name: check_route_consistency
   description: 拆分路径与门架路径是否一致
+  display_name: 拆分路径与门架路径是否一致
   parameters:
   - name: split_details
     type: list<SplitDetail>
@@ -3703,6 +3713,7 @@ functions:
   script_configured: true
 - name: check_rounding_mismatch
   description: 取整是否导致金额差异
+  display_name: 取整是否导致金额差异
   parameters:
   - name: gantry_transactions
     type: list<GantryTransaction>

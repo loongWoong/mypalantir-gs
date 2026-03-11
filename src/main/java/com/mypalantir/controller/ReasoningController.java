@@ -129,6 +129,29 @@ public class ReasoningController {
     }
 
     /**
+     * CEL 表达式按实例求值：使用当前本体模型下指定根对象类型与实例 ID 构建上下文（实例+关联数据+衍生属性），并求值。
+     * 调用前需已切换到目标本体模型；数据来自该模型绑定的数据存储。
+     * POST /api/v1/reasoning/cel/evaluate-with-instance
+     * Body: { "expr": "...", "object_type": "Path", "instance_id": "xxx" }
+     */
+    @PostMapping("/cel/evaluate-with-instance")
+    public ApiResponse<Object> evaluateCelWithInstance(@RequestBody Map<String, Object> request) {
+        if (request == null) return ApiResponse.error(400, "请求体不能为空");
+        String expr = request.get("expr") != null ? String.valueOf(request.get("expr")) : null;
+        String objectType = request.get("object_type") != null ? String.valueOf(request.get("object_type")) : null;
+        String instanceId = request.get("instance_id") != null ? String.valueOf(request.get("instance_id")) : null;
+        if (expr == null || expr.isBlank() || objectType == null || objectType.isBlank() || instanceId == null || instanceId.isBlank()) {
+            return ApiResponse.error(400, "expr、object_type、instance_id 不能为空");
+        }
+        try {
+            Object result = reasoningService.evaluateCelWithInstance(expr, objectType, instanceId);
+            return ApiResponse.success(result);
+        } catch (Exception e) {
+            return ApiResponse.error(400, "按实例求值失败: " + e.getMessage());
+        }
+    }
+
+    /**
      * 函数测试：使用给定参数调用已注册函数
      * POST /api/v1/reasoning/functions/test
      * Body: { "name": "is_single_province_etc", "args": [ {...}, [...] ] }
@@ -143,6 +166,29 @@ public class ReasoningController {
             return ApiResponse.success(result);
         } catch (Exception e) {
             return ApiResponse.error(400, "调用失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 按实例测试函数：使用当前本体模型下指定根对象类型与实例 ID 构建上下文（实例+关联数据），按函数入参解析后调用。
+     * 调用前需已切换到目标本体模型；数据来自该模型绑定的数据存储。
+     * POST /api/v1/reasoning/functions/test-with-instance
+     * Body: { "name": "is_obu_billing_mode1", "object_type": "Path", "instance_id": "xxx" }
+     */
+    @PostMapping("/functions/test-with-instance")
+    public ApiResponse<Object> testFunctionWithInstance(@RequestBody Map<String, Object> request) {
+        if (request == null) return ApiResponse.error(400, "请求体不能为空");
+        String name = request.get("name") != null ? String.valueOf(request.get("name")) : null;
+        String objectType = request.get("object_type") != null ? String.valueOf(request.get("object_type")) : null;
+        String instanceId = request.get("instance_id") != null ? String.valueOf(request.get("instance_id")) : null;
+        if (name == null || name.isBlank() || objectType == null || objectType.isBlank() || instanceId == null || instanceId.isBlank()) {
+            return ApiResponse.error(400, "name、object_type、instance_id 不能为空");
+        }
+        try {
+            Object result = reasoningService.testFunctionWithInstance(name, objectType, instanceId);
+            return ApiResponse.success(result);
+        } catch (Exception e) {
+            return ApiResponse.error(400, "按实例测试失败: " + e.getMessage());
         }
     }
 }

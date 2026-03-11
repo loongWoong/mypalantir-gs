@@ -1,5 +1,6 @@
 package com.mypalantir.meta;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.List;
@@ -15,6 +16,7 @@ public class FunctionDef {
     private String description;
 
     @JsonProperty("input")
+    @JsonAlias("parameters")
     private List<FunctionParam> input;
 
     @JsonProperty("output")

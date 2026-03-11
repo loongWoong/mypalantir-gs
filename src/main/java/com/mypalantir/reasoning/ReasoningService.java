@@ -470,6 +470,18 @@ public class ReasoningService {
     }
 
     /**
+     * 使用当前本体模型下指定实例的上下文数据对 CEL 表达式求值。
+     * 与规则执行、函数测试使用相同的 InstanceContext（instance + linkedData + derivedValues）。
+     */
+    public Object evaluateCelWithInstance(String expr, String objectType, String instanceId) throws Exception {
+        if (expr == null || expr.isBlank()) return null;
+        InstanceContext ctx = buildInstanceContext(objectType, instanceId);
+        Map<String, Object> properties = new HashMap<>(ctx.instance);
+        properties.putAll(ctx.derivedValues != null ? ctx.derivedValues : Map.of());
+        return celEvaluator.evaluate(expr.trim(), properties, ctx.linkedData != null ? ctx.linkedData : Map.of());
+    }
+
+    /**
      * 使用给定参数调用已注册函数（用于函数测试）。
      */
     public Object testFunction(String name, List<Object> args) {
@@ -477,6 +489,74 @@ public class ReasoningService {
             throw new IllegalArgumentException("函数名不能为空");
         }
         return functionRegistry.call(name, args != null ? args : List.of());
+    }
+
+    /**
+     * 使用当前本体模型下指定实例的上下文数据测试函数（与规则执行一致：构建实例上下文后按函数入参解析并调用）。
+     * 调用方需先通过模型切换接口切换到目标本体，此处使用当前 Loader 的 schema 与数据源。
+     */
+    public Object testFunctionWithInstance(String functionName, String objectType, String instanceId) throws Exception {
+        InstanceContext ctx = buildInstanceContext(objectType, instanceId);
+        List<Object> args = resolveFunctionArgsFromContext(functionName, ctx);
+        return functionRegistry.call(functionName, args);
+    }
+
+    /**
+     * 根据函数定义与实例上下文解析出调用参数：首参为 instance（规则主变量），其余参按参数名匹配 linkedData。
+     */
+    private List<Object> resolveFunctionArgsFromContext(String functionName, InstanceContext ctx) {
+        List<Object> args = new ArrayList<>();
+        try {
+            FunctionDef fn = loader.getFunction(functionName);
+            List<FunctionParam> params = fn.getInput() != null ? fn.getInput() : List.of();
+            if (params.isEmpty()) {
+                args.add(ctx.instance);
+                return args;
+            }
+            for (int i = 0; i < params.size(); i++) {
+                if (i == 0) {
+                    args.add(ctx.instance);
+                    continue;
+                }
+                FunctionParam p = params.get(i);
+                String linkKey = findLinkKeyForParam(ctx.linkedData, p.getName());
+                if (linkKey != null && ctx.linkedData.get(linkKey) != null) {
+                    args.add(ctx.linkedData.get(linkKey));
+                } else {
+                    args.add(List.<Map<String, Object>>of());
+                }
+            }
+            return args;
+        } catch (Loader.NotFoundException e) {
+            args.add(ctx.instance);
+            return args;
+        }
+    }
+
+    private String findLinkKeyForParam(Map<String, List<Map<String, Object>>> linkedData, String paramName) {
+        if (linkedData == null || paramName == null) return null;
+        if (linkedData.containsKey(paramName)) return paramName;
+        String snake = camelToSnake(paramName);
+        if (linkedData.containsKey(snake)) return snake;
+        for (String key : linkedData.keySet()) {
+            if (key.replace("_", "").equalsIgnoreCase(paramName.replace("_", ""))) return key;
+        }
+        return null;
+    }
+
+    private static String camelToSnake(String s) {
+        if (s == null) return null;
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (Character.isUpperCase(c)) {
+                if (i > 0) sb.append('_');
+                sb.append(Character.toLowerCase(c));
+            } else {
+                sb.append(c);
+            }
+        }
+        return sb.toString();
     }
 
     /**

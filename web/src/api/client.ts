@@ -246,9 +246,10 @@ export interface FunctionPayload {
   published?: boolean;
   script_configured?: boolean;
   script_path?: string;
-  /** 入参（兼容 parameters / inputs） */
+  /** 入参（兼容 parameters / inputs / input，后端序列化常用 input） */
   parameters?: FunctionInputPayload[];
   inputs?: FunctionInputPayload[];
+  input?: FunctionInputPayload[];
   /** 出参类型（兼容 return_type / output_type / output.type） */
   return_type?: string;
   output_type?: string;
@@ -829,6 +830,22 @@ export const reasoningApi = {
     });
     return response.data.data;
   },
+
+  /**
+   * 按实例测试函数：使用当前本体模型下指定根对象类型与实例 ID 构建上下文（实例+关联数据），按函数入参解析后调用。
+   * 调用前需已通过模型切换接口切换到目标本体；数据来自该模型绑定的数据存储。
+   */
+  testFunctionWithInstance: async (
+    name: string,
+    objectType: string,
+    instanceId: string
+  ): Promise<unknown> => {
+    const response = await apiClient.post<ApiResponse<unknown>>(
+      '/reasoning/functions/test-with-instance',
+      { name, object_type: objectType, instance_id: instanceId }
+    );
+    return response.data.data;
+  },
 };
 
 // Agent API
@@ -855,6 +872,20 @@ export const agentApi = {
       '/agent/chat',
       { message }
     );
+    return response.data.data;
+  },
+
+  /** CEL 表达式按实例求值：使用当前本体模型下指定根对象类型与实例 ID 构建上下文并求值 */
+  evaluateCelWithInstance: async (
+    expr: string,
+    objectType: string,
+    instanceId: string
+  ): Promise<unknown> => {
+    const response = await apiClient.post<ApiResponse<unknown>>('/reasoning/cel/evaluate-with-instance', {
+      expr: expr ?? '',
+      object_type: objectType,
+      instance_id: instanceId,
+    });
     return response.data.data;
   },
 
