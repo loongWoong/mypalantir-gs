@@ -72,14 +72,13 @@ describe('WorkspaceContext', () => {
 
     expect(mockList).toHaveBeenCalledWith('workspace', 0, 100);
     expect(captured).not.toBeNull();
+    if (!captured) return;
     
-    const ctx = captured as unknown as ReturnType<typeof useWorkspace>;
-
-    expect(ctx.workspaces).toHaveLength(1);
-    expect(ctx.workspaces[0].id).toBe('w1');
-    expect(ctx.workspaces[0].name).toBe('WS1');
-    expect(ctx.workspaces[0].object_types).toEqual(['Vehicle']);
-    expect(ctx.workspaces[0].link_types).toEqual(['owns']);
+    expect(captured.workspaces).toHaveLength(1);
+    expect(captured.workspaces[0].id).toBe('w1');
+    expect(captured.workspaces[0].name).toBe('WS1');
+    expect(captured.workspaces[0].object_types).toEqual(['Vehicle']);
+    expect(captured.workspaces[0].link_types).toEqual(['owns']);
   });
 
   it('object_types 为对象时提取键名', async () => {
@@ -107,10 +106,10 @@ describe('WorkspaceContext', () => {
     await flushPromises();
 
     expect(captured).not.toBeNull();
-    const ctx = captured as unknown as ReturnType<typeof useWorkspace>;
+    if (!captured) return;
 
-    expect(ctx.workspaces[0].object_types).toEqual(expect.arrayContaining(['Vehicle', 'Person']));
-    expect(ctx.workspaces[0].object_types).toHaveLength(2);
+    expect(captured.workspaces[0].object_types).toEqual(expect.arrayContaining(['Vehicle', 'Person']));
+    expect(captured.workspaces[0].object_types).toHaveLength(2);
   });
 
   it('updateWorkspace 调用 update 并刷新', async () => {
@@ -131,10 +130,10 @@ describe('WorkspaceContext', () => {
     await flushPromises();
 
     expect(captured).not.toBeNull();
-    const ctx = captured as unknown as ReturnType<typeof useWorkspace>;
+    if (!captured) return;
 
     await act(async () => {
-      await ctx.updateWorkspace('w1', { name: 'WS2' });
+      await captured!.updateWorkspace('w1', { name: 'WS2' });
     });
 
     expect(mockUpdate).toHaveBeenCalledWith('workspace', 'w1', { name: 'WS2' });
@@ -163,10 +162,10 @@ describe('WorkspaceContext', () => {
     await flushPromises();
 
     expect(captured).not.toBeNull();
-    const ctx = captured as unknown as ReturnType<typeof useWorkspace>;
+    if (!captured) return;
 
     act(() => {
-      ctx.setSelectedWorkspaceId('w2');
+      captured!.setSelectedWorkspaceId('w2');
     });
 
     // 重新捕获
@@ -178,12 +177,9 @@ describe('WorkspaceContext', () => {
     // 这里因为 TestChild 直接在 render 中调用 onValue，所以当 context 变化导致 re-render 时，captured 会更新
     // 但 context update 是异步的 state update
     await flushPromises();
-    
-    // Refresh captured value reference as it might have been updated
-    const ctxUpdated = captured as unknown as ReturnType<typeof useWorkspace>;
 
-    expect(ctxUpdated.selectedWorkspaceId).toBe('w2');
-    expect(ctxUpdated.selectedWorkspace?.id).toBe('w2');
-    expect(ctxUpdated.selectedWorkspace?.name).toBe('B');
+    expect(captured.selectedWorkspaceId).toBe('w2');
+    expect(captured.selectedWorkspace?.id).toBe('w2');
+    expect(captured.selectedWorkspace?.name).toBe('B');
   });
 });

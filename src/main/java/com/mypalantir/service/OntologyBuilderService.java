@@ -387,6 +387,48 @@ public class OntologyBuilderService {
         return parser.parse();
     }
 
+    private static final String FUNCTIONS_SCRIPT_SUBDIR = "functions/script";
+
+    /**
+     * 读取函数脚本内容。脚本存储在 ontology/functions/script/ 下，scriptPath 为相对路径如 toll/sample_check.js。
+     *
+     * @param scriptPath 相对路径，如 toll/sample_check.js
+     * @return 脚本文件内容，不存在时返回 null
+     */
+    public String getFunctionScriptContent(String scriptPath) throws IOException {
+        if (scriptPath == null || scriptPath.isBlank()) {
+            return null;
+        }
+        Path base = Paths.get("ontology").resolve(FUNCTIONS_SCRIPT_SUBDIR);
+        Path resolved = base.resolve(scriptPath.replace('\\', '/').trim()).normalize();
+        if (!resolved.startsWith(base)) {
+            throw new IllegalArgumentException("无效的脚本路径: " + scriptPath);
+        }
+        if (!Files.exists(resolved) || !Files.isRegularFile(resolved)) {
+            return null;
+        }
+        return Files.readString(resolved);
+    }
+
+    /**
+     * 保存函数脚本内容到 ontology/functions/script/{scriptPath}。
+     *
+     * @param scriptPath 相对路径，如 toll/sample_check.js
+     * @param content    脚本内容
+     */
+    public void saveFunctionScriptContent(String scriptPath, String content) throws IOException {
+        if (scriptPath == null || scriptPath.isBlank()) {
+            throw new IllegalArgumentException("脚本路径不能为空");
+        }
+        Path base = Paths.get("ontology").resolve(FUNCTIONS_SCRIPT_SUBDIR);
+        Path resolved = base.resolve(scriptPath.replace('\\', '/').trim()).normalize();
+        if (!resolved.startsWith(base)) {
+            throw new IllegalArgumentException("无效的脚本路径: " + scriptPath);
+        }
+        Files.createDirectories(resolved.getParent());
+        Files.writeString(resolved, content != null ? content : "");
+    }
+
     /**
      * 获取版本历史列表
      */

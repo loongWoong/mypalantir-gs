@@ -355,6 +355,22 @@ export const ontologyBuilderApi = {
     );
     return response.data.data;
   },
+  /** 读取函数脚本内容，脚本存储在 ontology/functions/script/ 下，scriptPath 如 toll/sample_check.js */
+  getScript: async (scriptPath: string): Promise<{ content: string; exists: boolean }> => {
+    const response = await apiClient.get<ApiResponse<{ content: string; exists: string }>>(
+      `/ontology-builder/script?scriptPath=${encodeURIComponent(scriptPath)}`
+    );
+    const data = response.data.data;
+    return { content: data?.content ?? '', exists: data?.exists === 'true' };
+  },
+  /** 保存函数脚本到 ontology/functions/script/{scriptPath} */
+  saveScript: async (scriptPath: string, content: string): Promise<{ success: boolean; scriptPath: string }> => {
+    const response = await apiClient.post<ApiResponse<{ success: boolean; scriptPath: string }>>(
+      '/ontology-builder/script',
+      { scriptPath, content }
+    );
+    return response.data.data;
+  },
   getVersionHistory: async (filename: string): Promise<OntologyVersion[]> => {
     const response = await apiClient.get<ApiResponse<OntologyVersion[]>>(
       `/ontology-builder/versions/${encodeURIComponent(filename)}/history`

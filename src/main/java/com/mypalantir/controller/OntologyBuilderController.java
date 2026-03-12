@@ -97,6 +97,55 @@ public class OntologyBuilderController {
     }
 
     /**
+     * 读取函数脚本内容。脚本存储在 ontology/functions/script/ 下。
+     * @param scriptPath 相对路径，如 toll/sample_check.js
+     */
+    @GetMapping("/script")
+    public ResponseEntity<ApiResponse<Map<String, String>>> getFunctionScript(
+            @RequestParam String scriptPath) {
+        try {
+            String content = ontologyBuilderService.getFunctionScriptContent(scriptPath);
+            Map<String, String> payload = new java.util.HashMap<>();
+            payload.put("content", content != null ? content : "");
+            payload.put("exists", content != null ? "true" : "false");
+            return ResponseEntity.ok(ApiResponse.success(payload));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error(400, e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(ApiResponse.error(500, "读取脚本失败: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * 保存函数脚本内容到 ontology/functions/script/{scriptPath}。
+     */
+    @PostMapping("/script")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> saveFunctionScript(
+            @RequestBody Map<String, String> body) {
+        String scriptPath = body != null ? body.get("scriptPath") : null;
+        String content = body != null ? body.get("content") : null;
+        if (scriptPath == null || scriptPath.isBlank()) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error(400, "scriptPath 不能为空"));
+        }
+        try {
+            ontologyBuilderService.saveFunctionScriptContent(scriptPath, content);
+            Map<String, Object> payload = new java.util.HashMap<>();
+            payload.put("success", true);
+            payload.put("scriptPath", scriptPath);
+            return ResponseEntity.ok(ApiResponse.success(payload));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error(400, e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(ApiResponse.error(500, "保存脚本失败: " + e.getMessage()));
+        }
+    }
+
+    /**
      * 获取版本历史列表
      */
     @GetMapping("/versions/{filename}/history")

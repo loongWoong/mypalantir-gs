@@ -54,6 +54,35 @@ function getImplementation(fn: FunctionPayload): string {
   return fn.implementation_type ?? fn.implementation ?? 'builtin';
 }
 
+/** 从本体文件名得到 ontology/functions/script 下的子目录名（同名文件夹），如 toll.ontology.yaml → toll.ontology；无文件名时默认 toll.ontology */
+function getOntologyScriptFolder(ontologyFilename: string): string {
+  if (ontologyFilename?.trim()) {
+    const name = ontologyFilename.replace(/\.(yaml|yml)$/i, '').trim();
+    if (name) return name;
+  }
+  return 'toll.ontology';
+}
+
+/**
+ * 解析用于加载/保存的脚本路径（相对 ontology/functions/script/）：
+ * builtin 时从系统默认路径加载：本体文件同名文件夹下的函数同名脚本，即 {ontologyScriptFolder}/{name}.js。
+ */
+function getEffectiveScriptPath(fn: FunctionPayload | null, ontologyFilename?: string): string {
+  if (!fn?.name) return '';
+  const impl = getImplementation(fn);
+  if (impl === 'builtin') {
+    const folder = getOntologyScriptFolder(ontologyFilename ?? '');
+    return `${folder}/${fn.name}.js`;
+  }
+  return '';
+}
+
+/** 是否应显示脚本编辑区：所有 builtin 函数均展示脚本编辑（从 ontology/functions/script/{本体同名}/{name}.js 加载），不依赖 script_configured */
+function shouldShowScriptEditor(fn: FunctionPayload | null): boolean {
+  if (!fn?.name) return false;
+  return getImplementation(fn) === 'builtin';
+}
+
 /** 从规则 SWRL 表达式中解析“作用域”（第一个谓词的主语类型），与 RulesView 一致 */
 function getScope(expr: string | undefined): string {
   if (!expr) return 'Unknown';
@@ -94,6 +123,11 @@ export default function FunctionsView() {
   const [loadingTestData, setLoadingTestData] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  // 函数脚本编辑：内容、加载/保存状态
+  const [scriptContent, setScriptContent] = useState('');
+  const [scriptLoading, setScriptLoading] = useState(false);
+  const [scriptSaving, setScriptSaving] = useState(false);
+  const [scriptError, setScriptError] = useState<string | null>(null);
 
   const functions = schema?.functions ?? [];
   const rules = schema?.rules ?? [];
@@ -378,6 +412,56 @@ export default function FunctionsView() {
     }
   }, [selectedFn?.name, testModelId, testObjectType, testInstanceId]);
 
+  // 加载当前选中函数的脚本内容（builtin 从 ontology/functions/script/{本体文件同名目录}/{name}.js 加载，如 toll.ontology/is_obu_billing_mode1.js）
+  const loadScriptContent = useCallback(async () => {
+    const fn = selectedFn;
+    if (!fn) return;
+    const path = getEffectiveScriptPath(fn, selectedFilename);
+    if (!path || !shouldShowScriptEditor(fn)) {
+      setScriptContent('');
+      setScriptError(null);
+      return;
+    }
+    setScriptLoading(true);
+    setScriptError(null);
+    try {
+      const { content, exists } = await ontologyBuilderApi.getScript(path);
+      setScriptContent(content);
+      if (!exists && !content) setScriptError(null); // 新文件，无错误
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { message?: string } }; message?: string })?.response?.data?.message ?? (e instanceof Error ? e.message : String(e));
+      setScriptError(msg || '加载脚本失败');
+      setScriptContent('');
+    } finally {
+      setScriptLoading(false);
+    }
+  }, [selectedFn?.script_path, selectedFn?.script_configured, selectedFn?.name, selectedFn, selectedIndex, selectedFilename]);
+
+  useEffect(() => {
+    if (selectedFn && shouldShowScriptEditor(selectedFn) && getEffectiveScriptPath(selectedFn, selectedFilename)) {
+      loadScriptContent();
+    } else {
+      setScriptContent('');
+      setScriptError(null);
+    }
+  }, [selectedFn?.name, selectedFn?.script_path, selectedFn?.script_configured, selectedFilename, loadScriptContent]);
+
+  const saveScriptContent = useCallback(async () => {
+    if (!selectedFn) return;
+    const path = getEffectiveScriptPath(selectedFn, selectedFilename);
+    if (!path || !shouldShowScriptEditor(selectedFn)) return;
+    setScriptSaving(true);
+    setScriptError(null);
+    try {
+      await ontologyBuilderApi.saveScript(path, scriptContent);
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { message?: string } }; message?: string })?.response?.data?.message ?? (e instanceof Error ? e.message : String(e));
+      setScriptError(msg || '保存脚本失败');
+    } finally {
+      setScriptSaving(false);
+    }
+  }, [selectedFn?.script_path, selectedFn?.script_configured, selectedFn?.name, selectedFn, scriptContent, selectedFilename]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -619,36 +703,61 @@ export default function FunctionsView() {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">实现类型</label>
                     <select
-                      value={getImplementation(selectedFn)}
+                      value={getImplementation(selectedFn) === 'script' ? 'builtin' : getImplementation(selectedFn)}
                       onChange={(e) => {
                         if (selectedIndex === null) return;
-                        const v = e.target.value;
+                        const v = e.target.value as 'builtin' | 'external';
                         updateFunction(selectedIndex, {
-                          implementation: v as 'builtin' | 'external' | 'script',
+                          implementation: v,
                           implementation_type: v,
                         });
                       }}
                       className="w-full border rounded px-3 py-2 text-sm"
                     >
-                      <option value="builtin">builtin（引擎内置）</option>
-                      <option value="script">script（脚本，从 functions/script/ 加载）</option>
+                      <option value="builtin">builtin（引擎内置，可带脚本）</option>
                       <option value="external">external（外部服务）</option>
                     </select>
                   </div>
-                  {getImplementation(selectedFn) === 'script' && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">脚本路径 *</label>
-                      <input
-                        type="text"
-                        value={selectedFn.script_path ?? ''}
-                        onChange={(e) =>
-                          selectedIndex !== null && updateFunction(selectedIndex, { script_path: e.target.value })
-                        }
-                        className="w-full border rounded px-3 py-2 text-sm font-mono"
-                        placeholder="如 toll/sample_check.js"
-                      />
-                      <p className="text-xs text-gray-500 mt-1">相对于当前本体所在目录下的 functions/script/（如 ontology/functions/script/）</p>
-                    </div>
+                  {shouldShowScriptEditor(selectedFn) && (
+                    <>
+                        <div className="border border-gray-200 rounded-lg overflow-hidden bg-gray-50/50">
+                          <div className="flex items-center justify-between px-3 py-2 bg-gray-100 border-b border-gray-200">
+                            <span className="text-sm font-medium text-gray-700">脚本编辑</span>
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={loadScriptContent}
+                                disabled={scriptLoading}
+                                className="text-xs px-2 py-1 rounded border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50"
+                              >
+                                {scriptLoading ? '加载中...' : '重新加载'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={saveScriptContent}
+                                disabled={scriptSaving}
+                                className="text-xs px-2 py-1 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+                              >
+                                {scriptSaving ? '保存中...' : '保存脚本'}
+                              </button>
+                            </div>
+                          </div>
+                          {scriptError && (
+                            <p className="text-xs text-red-600 px-3 py-1 bg-red-50 border-b border-red-100">{scriptError}</p>
+                          )}
+                          <textarea
+                            value={scriptContent}
+                            onChange={(e) => setScriptContent(e.target.value)}
+                            className="w-full h-64 p-3 text-sm font-mono border-0 focus:ring-0 focus:outline-none resize-y min-h-[200px]"
+                            placeholder="function execute(args) { ... }"
+                            spellCheck={false}
+                          />
+                          <p className="text-xs text-gray-500 px-3 pb-2">
+                            约定：定义 execute(args)，args 为参数列表，返回 boolean/number/string 等。
+                            <span className="block mt-1">路径：ontology/functions/script/{getEffectiveScriptPath(selectedFn, selectedFilename)}</span>
+                          </p>
+                        </div>
+                    </>
                   )}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">出参（返回类型）</label>
