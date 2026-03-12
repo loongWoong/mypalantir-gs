@@ -424,6 +424,7 @@ export default function RulesView() {
                       className="w-full border rounded px-3 py-2 text-sm"
                     >
                       <option value="swrl">SWRL</option>
+                      <option value="cel">CEL</option>
                     </select>
                   </div>
                   <div>

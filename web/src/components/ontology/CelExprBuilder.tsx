@@ -42,17 +42,19 @@ export function CelExprBuilder({
   entities,
   disabled = false,
 }: CelExprBuilderProps) {
+  const [editMode, setEditMode] = useState<'visual' | 'advanced'>(() => {
+    if (!expr.trim()) return 'visual';
+    return celExprToVisual(expr) ? 'visual' : 'advanced';
+  });
   const [visual, setVisual] = useState<CelVisualExpr>(() => {
     if (!expr.trim()) return { ...DEFAULT_CEL_VISUAL };
     const parsed = celExprToVisual(expr);
     return parsed ?? { ...DEFAULT_CEL_VISUAL };
   });
 
-  // 跟踪本组件最后一次生成的 expr，避免把自己 onChange 触发的 prop 更新再次解析回来造成循环
   const lastGeneratedExprRef = useRef<string>('');
 
   useEffect(() => {
-    // 如果这次 expr 是本组件自己生成的，跳过解析（避免循环）
     if (expr === lastGeneratedExprRef.current) return;
 
     if (!expr.trim()) {
@@ -60,7 +62,11 @@ export function CelExprBuilder({
       return;
     }
     const parsed = celExprToVisual(expr);
-    if (parsed) setVisual(parsed);
+    if (parsed) {
+      setVisual(parsed);
+    } else if (editMode === 'visual') {
+      setEditMode('advanced');
+    }
   }, [expr]);
 
   // 统一的 visual → expr 同步出口，直接调用 onChange，不再使用 useEffect 监听 visual
@@ -100,6 +106,43 @@ export function CelExprBuilder({
   return (
     <div className="space-y-3 min-w-0 overflow-hidden">
       <div className="flex items-center gap-2">
+        <span className="text-xs text-gray-500">编辑模式：</span>
+        <select
+          value={editMode}
+          onChange={(e) => {
+            const m = e.target.value as 'visual' | 'advanced';
+            setEditMode(m);
+            if (m === 'visual') {
+              const parsed = celExprToVisual(expr);
+              if (parsed) setVisual(parsed);
+            }
+          }}
+          disabled={disabled}
+          className="border rounded px-2 py-1 text-sm"
+        >
+          <option value="visual">可视化</option>
+          <option value="advanced">高级（源码）</option>
+        </select>
+      </div>
+      {editMode === 'advanced' ? (
+        <div className="space-y-2">
+          <textarea
+            value={expr}
+            onChange={(e) => onChange(e.target.value)}
+            disabled={disabled}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono min-h-[80px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            placeholder="输入 CEL 表达式，如 size(links.xxx) == path_detail_count"
+            spellCheck={false}
+          />
+          {expr.trim() && (
+            <div className="p-2 bg-gray-50 border rounded text-xs font-mono text-gray-700 break-all whitespace-pre-wrap overflow-x-auto max-h-32 overflow-y-auto">
+              {expr}
+            </div>
+          )}
+        </div>
+      ) : (
+      <>
+      <div className="flex items-center gap-2">
         <span className="text-xs text-gray-500">表达式类型：</span>
         <select
           value={visual.mode}
@@ -128,7 +171,19 @@ export function CelExprBuilder({
             <option value="size">关系数量</option>
             <option value="sum">聚合合计</option>
             <option value="sort">集合排序</option>
+            <option value="variable">变量/属性引用</option>
           </select>
+          {visual.left.kind === 'variable' ? (
+            <input
+              type="text"
+              value={visual.left.variableName ?? ''}
+              onChange={(e) => setLeft({ variableName: e.target.value })}
+              disabled={disabled}
+              placeholder="属性名或衍生属性名"
+              className="border rounded px-2 py-1.5 text-sm min-w-[150px] font-mono"
+            />
+          ) : (
+          <>
           <select
             value={visual.left.linkType}
             onChange={(e) => setLeft({ linkType: e.target.value })}
@@ -174,6 +229,8 @@ export function CelExprBuilder({
               )}
             </>
           )}
+          </>
+          )}
         </div>
         {visual.mode === 'compare' && (
           <>
@@ -205,7 +262,19 @@ export function CelExprBuilder({
             <option value="size">关系数量</option>
             <option value="sum">聚合合计</option>
             <option value="sort">集合排序</option>
+            <option value="variable">变量/属性引用</option>
           </select>
+          {visual.right.kind === 'variable' ? (
+            <input
+              type="text"
+              value={visual.right.variableName ?? ''}
+              onChange={(e) => setRight({ variableName: e.target.value })}
+              disabled={disabled}
+              placeholder="属性名或衍生属性名"
+              className="border rounded px-2 py-1.5 text-sm min-w-[150px] font-mono"
+            />
+          ) : (
+          <>
           <select
             value={visual.right.linkType}
             onChange={(e) => setRight({ linkType: e.target.value })}
@@ -251,6 +320,8 @@ export function CelExprBuilder({
               )}
             </>
           )}
+          </>
+          )}
             </div>
           </>
         )}
@@ -259,6 +330,8 @@ export function CelExprBuilder({
         <div className="p-2 bg-gray-50 border rounded text-xs font-mono text-gray-700 break-all whitespace-pre-wrap overflow-x-auto max-h-32 overflow-y-auto">
           {celVisualToExpr(visual)}
         </div>
+      )}
+      </>
       )}
     </div>
   );

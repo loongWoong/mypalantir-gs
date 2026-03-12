@@ -111,6 +111,28 @@ function normalizeSwrl(expr: string): string {
     .trim();
 }
 
+/** 按顶层 ∧ 分割，不拆分括号内的 ∧（保护函数参数、析取子句等） */
+function splitByTopLevelAnd(str: string): string[] {
+  const result: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < str.length; i++) {
+    const c = str[i];
+    if (c === '(' || c === '[' || c === '（') depth++;
+    else if (c === ')' || c === ']' || c === '）') depth--;
+    else if (depth === 0) {
+      const andMatch = str.slice(i).match(/^(\s*[∧&^]\s*|\s+and\s+)/i);
+      if (andMatch) {
+        result.push(str.slice(start, i).trim());
+        start = i + andMatch[1].length;
+        i += andMatch[1].length - 1;
+      }
+    }
+  }
+  if (start < str.length) result.push(str.slice(start).trim());
+  return result.filter(Boolean);
+}
+
 /** 按顶层 ∨ 分割，不分割括号内的 ∨ */
 function splitByTopLevelOr(str: string): string[] {
   const result: string[] = [];
@@ -171,10 +193,17 @@ function parseOneCondition(
     const [, pred, v1, v2] = relMatch;
     return { kind: 'relation', predicate: pred, var1: v1, var2: v2 };
   }
-  const funcMatch = part.match(/^(\w+)\s*\((.*)\)\s*==\s*(true|false)$/);
+  const funcMatch = part.match(/^(\w+)\s*\((.*)\)\s*==\s*(true|false)$/s);
   if (funcMatch) {
     const [, funcName, argsStr] = funcMatch;
     const expectedValue = funcMatch[3] === 'true';
+    const argExprs = splitTopLevelArgs(argsStr.trim());
+    return { kind: 'function', funcName, argExprs, expectedValue };
+  }
+  const funcMatchBracket = part.match(/^(\w+)\s*\((.+)\)(?:\[.+\])?\s*==\s*(true|false)$/s);
+  if (funcMatchBracket) {
+    const [, funcName, argsStr] = funcMatchBracket;
+    const expectedValue = funcMatchBracket[3] === 'true';
     const argExprs = splitTopLevelArgs(argsStr.trim());
     return { kind: 'function', funcName, argExprs, expectedValue };
   }
@@ -216,9 +245,8 @@ export function swrlExprToVisual(
     value: boolVal !== undefined ? boolVal === 'true' : (strVal ?? (numVal ?? '')),
   };
 
-  // 解析前件: 用 ∧ 分割（析取子句 (A ∨ B) 作为整体保留）
-  const andPattern = /\s*[∧&^]\s*|\s+and\s+/i;
-  const parts = antecedent.split(andPattern).map((s) => s.trim()).filter(Boolean);
+  // 解析前件: 按顶层 ∧ 分割（不拆分括号内的 ∧，析取子句作为整体保留）
+  const parts = splitByTopLevelAnd(antecedent);
   const conditions: SwrlCondition[] = [];
   let subjectEntity = '';
   let subjectVar = DEFAULT_SUBJECT_VAR;

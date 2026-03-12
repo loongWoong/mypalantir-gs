@@ -293,7 +293,7 @@ export default function FunctionsView() {
     const params = getParams(fn);
     const newParam: FunctionInputPayload = { name: `arg_${params.length + 1}`, type: 'list<?>' };
     const next = [...params, newParam];
-    updateFunction(fnIndex, { parameters: next, inputs: next, input: next });
+    updateFunction(fnIndex, { input: next, parameters: next });
   };
 
   const updateInput = (fnIndex: number, inputIndex: number, updates: Partial<FunctionInputPayload>) => {
@@ -301,7 +301,7 @@ export default function FunctionsView() {
     const params = fn ? getParams(fn) : [];
     if (inputIndex < 0 || inputIndex >= params.length) return;
     const next = params.map((inp, i) => (i === inputIndex ? { ...inp, ...updates } : inp));
-    updateFunction(fnIndex, { parameters: next, inputs: next, input: next });
+    updateFunction(fnIndex, { input: next, parameters: next });
   };
 
   const removeInput = (fnIndex: number, inputIndex: number) => {
@@ -311,7 +311,7 @@ export default function FunctionsView() {
     if (nameToRemove == null) return;
     const next = params.filter((_, i) => i !== inputIndex);
     const bindings = (fn?.parameter_bindings ?? []).filter((b) => b.parameter_name !== nameToRemove);
-    updateFunction(fnIndex, { parameters: next, inputs: next, input: next, parameter_bindings: bindings });
+    updateFunction(fnIndex, { input: next, parameters: next, parameter_bindings: bindings });
   };
 
   const setBinding = (fnIndex: number, parameterName: string, binding: ParameterBindingPayload | null) => {

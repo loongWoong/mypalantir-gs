@@ -23,11 +23,15 @@ public class FunctionDef {
     private FunctionOutput output;
 
     @JsonProperty("implementation")
+    @JsonAlias("implementation_type")
     private String implementation;
 
     /** 脚本实现时使用：脚本路径，相对于 functions/script/ 或类路径，如 toll/check_xxx.js */
     @JsonProperty("script_path")
     private String scriptPath;
+
+    @JsonProperty("parameter_bindings")
+    private List<ParameterBinding> parameterBindings;
 
     @JsonIgnore
     public String getName() { return name; }
@@ -56,4 +60,8 @@ public class FunctionDef {
     @JsonIgnore
     public String getScriptPath() { return scriptPath; }
     public void setScriptPath(String scriptPath) { this.scriptPath = scriptPath; }
+
+    @JsonIgnore
+    public List<ParameterBinding> getParameterBindings() { return parameterBindings; }
+    public void setParameterBindings(List<ParameterBinding> parameterBindings) { this.parameterBindings = parameterBindings; }
 }

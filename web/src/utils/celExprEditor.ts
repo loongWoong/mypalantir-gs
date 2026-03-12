@@ -3,7 +3,7 @@
  * 支持：关系数量比较、聚合合计比较、集合排序比较
  */
 
-export type CelOperandKind = 'size' | 'sum' | 'sort';
+export type CelOperandKind = 'size' | 'sum' | 'sort' | 'variable';
 
 export interface CelOperand {
   kind: CelOperandKind;
@@ -14,6 +14,8 @@ export interface CelOperand {
   property?: string;
   /** sum 时是否用 double() 包裹（数值型） */
   useDouble?: boolean;
+  /** variable 类型时的变量/属性名引用（如衍生属性名） */
+  variableName?: string;
 }
 
 export type CelExprMode = 'single' | 'compare';
@@ -43,6 +45,9 @@ function celOperandToExpr(op: CelOperand, defaultAlias: string): string {
     const propExpr = op.property ? `${alias}.${op.property}` : alias;
     return `links.${op.linkType}.map(${alias}, ${propExpr}).sort()`;
   }
+  if (op.kind === 'variable') {
+    return op.variableName ?? '';
+  }
   return '';
 }
 
@@ -70,6 +75,9 @@ function parseOperand(s: string): CelOperand | null {
 
   const sortMatch = t.match(/^links\.(\w+)\s*\.map\s*\(\s*(\w+)\s*,\s*\w+\.(\w+)\s*\)\.sort\(\)$/);
   if (sortMatch) return { kind: 'sort', linkType: sortMatch[1], alias: sortMatch[2], property: sortMatch[3] };
+
+  const varMatch = t.match(/^([a-zA-Z_]\w*)$/);
+  if (varMatch) return { kind: 'variable', linkType: '', variableName: varMatch[1] };
 
   return null;
 }

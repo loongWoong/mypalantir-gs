@@ -165,7 +165,7 @@ public class ForwardChainEngine {
                     yield new AtomMatchResult(funcName + "(...) [未注册]", true, "跳过");
                 }
                 List<Object> resolvedArgs = resolveArguments(atom.getArguments(), instanceData, linkedData);
-                String cacheKey = funcName + ":" + resolvedArgs.size();
+                String cacheKey = funcName + ":" + resolvedArgs.size() + ":" + Objects.hash(resolvedArgs.toArray());
                 Object actualResult = functionCallCache.computeIfAbsent(cacheKey,
                         k -> functionRegistry.call(funcName, resolvedArgs));
                 boolean result = Objects.equals(actualResult, atom.getExpectedValue());

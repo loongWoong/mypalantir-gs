@@ -5,8 +5,9 @@ import com.mypalantir.reasoning.cel.engine.CelEvaluationService;
 import com.mypalantir.reasoning.cel.engine.CelRuntimeFactory;
 import org.springframework.stereotype.Service;
 
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * CEL 求值服务实现：委托 CelRuntimeFactory，并设置/清除线程局部上下文。
@@ -14,8 +15,13 @@ import java.util.Map;
 @Service
 public class CelEvaluationServiceImpl implements CelEvaluationService {
 
-    /** 校验时声明的变量，使 size(links.xxx) 等表达式能通过编译 */
-    private static final List<String> VALIDATION_VARS = List.of("links");
+    private static final List<String> BASE_VALIDATION_VARS = List.of("links");
+    private static final Pattern IDENTIFIER_PATTERN = Pattern.compile("\\b([a-zA-Z_][a-zA-Z0-9_]*)\\b");
+    private static final Set<String> CEL_KEYWORDS = Set.of(
+            "true", "false", "null", "in", "size", "map", "filter", "exists", "all",
+            "sum", "sort", "double", "int", "string", "bool", "type", "has", "dyn",
+            "links", "if", "else", "for"
+    );
 
     private final CelRuntimeFactory runtimeFactory;
 
@@ -37,6 +43,14 @@ public class CelEvaluationServiceImpl implements CelEvaluationService {
 
     @Override
     public void validateCompile(String expr) {
-        runtimeFactory.compileOnly(expr, VALIDATION_VARS);
+        Set<String> vars = new LinkedHashSet<>(BASE_VALIDATION_VARS);
+        Matcher m = IDENTIFIER_PATTERN.matcher(expr);
+        while (m.find()) {
+            String id = m.group(1);
+            if (!CEL_KEYWORDS.contains(id) && !id.matches("^\\d")) {
+                vars.add(id);
+            }
+        }
+        runtimeFactory.compileOnly(expr, vars);
     }
 }

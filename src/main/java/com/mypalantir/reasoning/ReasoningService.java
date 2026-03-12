@@ -544,7 +544,8 @@ public class ReasoningService {
     }
 
     /**
-     * 根据函数定义与实例上下文解析出调用参数：首参为 instance（规则主变量），其余参按参数名匹配 linkedData。
+     * 根据函数定义与实例上下文解析出调用参数。
+     * 按参数类型智能匹配：实体类型→instance，list<X>→linkedData，基本类型→默认值或从 instance 属性取值。
      */
     private List<Object> resolveFunctionArgsFromContext(String functionName, InstanceContext ctx) {
         List<Object> args = new ArrayList<>();
@@ -555,17 +556,38 @@ public class ReasoningService {
                 args.add(ctx.instance);
                 return args;
             }
+            Set<String> knownObjectTypes = loader.listObjectTypes().stream()
+                    .map(ot -> ot.getName()).collect(java.util.stream.Collectors.toSet());
             for (int i = 0; i < params.size(); i++) {
-                if (i == 0) {
-                    args.add(ctx.instance);
-                    continue;
-                }
                 FunctionParam p = params.get(i);
-                String linkKey = findLinkKeyForParam(ctx.linkedData, p.getName());
-                if (linkKey != null && ctx.linkedData.get(linkKey) != null) {
-                    args.add(ctx.linkedData.get(linkKey));
+                String paramType = p.getType() != null ? p.getType().trim() : "";
+                if (knownObjectTypes.contains(paramType)) {
+                    args.add(ctx.instance);
+                } else if (paramType.startsWith("list<") || paramType.startsWith("List<")) {
+                    String linkKey = findLinkKeyForParam(ctx.linkedData, p.getName());
+                    if (linkKey != null && ctx.linkedData.get(linkKey) != null) {
+                        args.add(ctx.linkedData.get(linkKey));
+                    } else {
+                        args.add(List.<Map<String, Object>>of());
+                    }
+                } else if (isBasicType(paramType)) {
+                    Object defaultVal = p.getDefaultValue();
+                    if (defaultVal != null) {
+                        args.add(defaultVal);
+                    } else if (ctx.instance.containsKey(p.getName())) {
+                        args.add(ctx.instance.get(p.getName()));
+                    } else {
+                        args.add(getBasicTypeDefault(paramType));
+                    }
+                } else if (i == 0) {
+                    args.add(ctx.instance);
                 } else {
-                    args.add(List.<Map<String, Object>>of());
+                    String linkKey = findLinkKeyForParam(ctx.linkedData, p.getName());
+                    if (linkKey != null && ctx.linkedData.get(linkKey) != null) {
+                        args.add(ctx.linkedData.get(linkKey));
+                    } else {
+                        args.add(List.<Map<String, Object>>of());
+                    }
                 }
             }
             return args;
@@ -573,6 +595,23 @@ public class ReasoningService {
             args.add(ctx.instance);
             return args;
         }
+    }
+
+    private static boolean isBasicType(String type) {
+        if (type == null || type.isEmpty()) return false;
+        return Set.of("string", "int", "integer", "long", "float", "double", "number", "boolean", "date", "datetime")
+                .contains(type.toLowerCase());
+    }
+
+    private static Object getBasicTypeDefault(String type) {
+        if (type == null) return null;
+        return switch (type.toLowerCase()) {
+            case "int", "integer", "long" -> 0;
+            case "float", "double", "number" -> 0.0;
+            case "boolean" -> false;
+            case "string" -> "";
+            default -> null;
+        };
     }
 
     private String findLinkKeyForParam(Map<String, List<Map<String, Object>>> linkedData, String paramName) {
