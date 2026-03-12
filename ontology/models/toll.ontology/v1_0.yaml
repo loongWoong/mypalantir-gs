@@ -1,4 +1,4 @@
-version: 1.0.1
+version: 1.0
 namespace: com.tollcenter.ontology
 data_sources: null
 object_types:
@@ -3640,7 +3640,7 @@ functions:
         description: null
         default: null
     output: null
-    implementation: null
+    implementation: external
     script_path: null
   - name: is_obu_billing_mode1
     display_name: 判定OBU计费方式1
@@ -3705,8 +3705,8 @@ functions:
         type: list<GantryTransaction>
         description: null
         default: null
-      - name: split_details
-        type: list<SplitDetail>
+      - name: split_time
+        type: date
         description: null
         default: null
     output: null
@@ -3802,6 +3802,22 @@ rules:
         ∧ interval_set_matched(?p, true)
         ∧ fee_matched(?p, false)
         → check_status(?p, "费用异常")
+  - name: vehicle_has_abnormal_Path
+    display_name: 车辆存在异常通行
+    description: 如果车辆关联的某条通行路径状态为不正常，则标记该车辆存在异常通行
+    language: swrl
+    expr: |
+      Path(?p) ∧ check_status(?p, "不正常")
+        ∧ entry_involves_vehicle(?p, ?v)
+        → has_abnormal_Path(?v, true)
+  - name: vehicle_has_fee_abnormal_Path
+    display_name: 车辆存在费用异常通行
+    description: 如果车辆关联的某条通行路径状态为费用异常，则标记该车辆存在费用异常
+    language: swrl
+    expr: |
+      Path(?p) ∧ check_status(?p, "费用异常")
+        ∧ entry_involves_vehicle(?p, ?v)
+        → has_fee_abnormal_Path(?v, true)
   - name: station_has_abnormal_traffic
     display_name: 收费站存在异常通行
     description: 如果某收费站的入口交易关联到不正常的通行路径，则标记该站需关注
@@ -3831,6 +3847,7 @@ rules:
         ∧ check_fee_detail_consistency(
             links(?p, path_has_split_details),
             links(?p, Path_has_gantry_transactions)) == true
+        ∧ fit_actual_route(?p) == true
         → obu_split_status(?p, "正常")
   - name: obu_split_route_mismatch
     display_name: OBU拆分路径不一致
@@ -3867,6 +3884,7 @@ rules:
         ∧ check_fee_detail_consistency(
             links(?p, path_has_split_details),
             links(?p, Path_has_gantry_transactions)) == true
+        ∧ fit_actual_route(?p) == false
         → obu_split_status(?p, "实际路径偏差")
   - name: obu_route_cause_duplicate_gantry
     display_name: 根因-门架收费单元重复
@@ -3931,3 +3949,21 @@ rules:
         ∧ check_balance_continuity(
             links(?p, Path_has_gantry_transactions)) == false
         → obu_fee_cause(?p, "卡内累计金额异常")
+  - name: vehicle_has_obu_split_abnormal
+    display_name: 车辆存在OBU拆分异常
+    description: 车辆关联的通行路径存在OBU拆分异常（路径不一致/金额不一致/实际路径偏差）
+    language: swrl
+    expr: |
+      Path(?p) ∧ in_obu_split_scope(?p, true)
+        ∧ obu_split_status(?p, ?status) ∧ (?status != "正常")
+        ∧ entry_involves_vehicle(?p, ?v)
+        → has_obu_split_abnormal(?v, true)
+  - name: station_has_obu_split_abnormal
+    display_name: 收费站存在OBU拆分异常
+    description: 收费站关联的通行路径存在OBU拆分异常
+    language: swrl
+    expr: |
+      Path(?p) ∧ in_obu_split_scope(?p, true)
+        ∧ obu_split_status(?p, ?status) ∧ (?status != "正常")
+        ∧ entry_at_station(?p, ?s)
+        → has_obu_split_abnormal(?s, true)

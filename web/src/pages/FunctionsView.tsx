@@ -100,6 +100,45 @@ function getFunctionNamesInRule(expr: string | undefined, functionNames: string[
   return found;
 }
 
+/**
+ * 根据函数首参类型从本体推断「根对象类型」：用于按实例测试时自动确定 objectType。
+ * - 首参为实体类型（如 Path、Passage）则直接返回；
+ * - 首参为 list<X> 则从 link_types 查找 target 为 X 的 link，返回其 source_type。
+ */
+function inferRootObjectType(
+  fn: FunctionPayload,
+  objectTypes: Array<Record<string, any>>,
+  linkTypes: Array<Record<string, any>>
+): string {
+  const params = getParams(fn);
+  if (params.length === 0) return '';
+  const firstType = (params[0].type ?? '').trim();
+  if (!firstType) return '';
+  const otNames = new Set((objectTypes ?? []).map((ot: Record<string, any>) => ot.name));
+  if (otNames.has(firstType)) return firstType;
+  const listMatch = firstType.match(/^list\s*<\s*(\w+)\s*>$/);
+  if (listMatch) {
+    const elementType = listMatch[1];
+    const link = (linkTypes ?? []).find(
+      (lt: Record<string, any>) =>
+        (lt.target_type ?? lt.target) === elementType || (lt.target_type ?? lt.target) === elementType + 's'
+    );
+    const source = link?.source_type ?? link?.sourceType ?? link?.source;
+    if (source) return source;
+  }
+  return '';
+}
+
+/** 根据当前选中的本体文件名匹配模型 id（path 包含 filename 的模型） */
+function findModelIdByOntologyFile(models: ModelInfo[], ontologyFilename: string): string {
+  if (!ontologyFilename || !models?.length) return '';
+  const norm = (s: string) => (s || '').replace(/\\/g, '/').toLowerCase();
+  const fn = norm(ontologyFilename);
+  const pathOf = (m: ModelInfo) => norm((m as unknown as { filePath?: string; path?: string }).filePath ?? m.path ?? '');
+  const byPath = models.find((m) => pathOf(m).endsWith(fn) || pathOf(m).includes(fn));
+  return byPath?.id ?? '';
+}
+
 export default function FunctionsView() {
   const [fileList, setFileList] = useState<string[]>([]);
   const [selectedFilename, setSelectedFilename] = useState<string>('');
@@ -311,43 +350,37 @@ export default function FunctionsView() {
   const openTestModal = useCallback(async () => {
     setTestArgsJson('[]');
     setTestResult(null);
-    setTestModalOpen(true);
-    setTestObjectType('');
-    setTestInstanceId('');
     setTestInstanceOptions([]);
+    setTestInstanceId('');
+    setTestModalOpen(true);
     try {
       const [models, current] = await Promise.all([
         modelApi.listModels(),
         modelApi.getCurrentModel().catch(() => null),
       ]);
       setTestModelList(models);
-      if (current?.modelId) setTestModelId(current.modelId);
-      else if (models.length > 0) setTestModelId(models[0].id);
-      else setTestModelId('');
+      const objectTypes = schema?.object_types ?? [];
+      const linkTypes = schema?.link_types ?? [];
+      const inferredRoot = selectedFn ? inferRootObjectType(selectedFn, objectTypes, linkTypes) : '';
+      const modelIdByFile = findModelIdByOntologyFile(models, selectedFilename ?? '');
+      setTestModelId(modelIdByFile || (current?.modelId ?? models[0]?.id ?? ''));
+      setTestObjectType(inferredRoot);
     } catch (e) {
       console.error('Load test models failed:', e);
     }
-  }, []);
+  }, [schema?.object_types, schema?.link_types, selectedFn, selectedFilename]);
 
-  // 切换本体模型时加载该模型下的对象类型
+  // 打开弹窗并确定模型后，加载该模型下的对象类型（不覆盖已根据函数推断的根对象类型）
   useEffect(() => {
     if (!testModalOpen || !testModelId) {
       setTestObjectTypes([]);
-      setTestObjectType('');
-      setTestInstanceId('');
-      setTestInstanceOptions([]);
       return;
     }
     let cancelled = false;
     modelApi
       .getObjectTypes(testModelId)
       .then((ots) => {
-        if (!cancelled) {
-          setTestObjectTypes(ots);
-          setTestObjectType('');
-          setTestInstanceId('');
-          setTestInstanceOptions([]);
-        }
+        if (!cancelled) setTestObjectTypes(ots);
       })
       .catch(() => {
         if (!cancelled) setTestObjectTypes([]);
@@ -357,7 +390,7 @@ export default function FunctionsView() {
     };
   }, [testModalOpen, testModelId]);
 
-  // 切换根对象类型时加载实例列表（当前模型下的数据）
+  // 根据根对象类型加载实例列表（先切换到当前本体对应模型再拉取数据）
   useEffect(() => {
     if (!testModalOpen || !testObjectType || !testModelId) {
       setTestInstanceOptions([]);
@@ -366,8 +399,9 @@ export default function FunctionsView() {
     }
     let cancelled = false;
     setLoadingTestData(true);
-    instanceApi
-      .list(testObjectType, 0, 50)
+    modelApi
+      .switchModel(testModelId)
+      .then(() => instanceApi.list(testObjectType, 0, 50))
       .then(({ items }) => {
         if (!cancelled) {
           const options = items.map((item: Record<string, unknown>) => {
@@ -980,42 +1014,32 @@ export default function FunctionsView() {
               </button>
             </div>
 
-            {/* 按实例运行（规则上下文）：选择本体模型与根实例，用该模型绑定的数据存储查询后调用函数 */}
+            {/* 按实例运行：根据函数输入格式与当前本体自动匹配根对象类型并拉取实例，填充入参后验证 */}
             <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-3">
-              <p className="text-sm font-medium text-gray-700">按实例运行（规则上下文）</p>
+              <p className="text-sm font-medium text-gray-700">按实例数据验证</p>
               <p className="text-xs text-gray-500">
-                选择关联规则绑定的本体模型与根对象实例，系统将按该模型的数据存储查询实例及关联数据，并作为函数入参执行。
+                根据函数定义的输入（首参类型）与当前本体文件绑定的模型，自动确定根对象类型并查询实例；选择实例后执行，系统将用该实例及关联数据填充函数入参并运行。
               </p>
               <div className="grid grid-cols-1 gap-2">
-                <div>
-                  <label className="block text-xs text-gray-500 mb-0.5">本体模型</label>
-                  <select
-                    value={testModelId}
-                    onChange={(e) => setTestModelId(e.target.value)}
-                    className="w-full border rounded px-2 py-1.5 text-sm"
-                  >
-                    <option value="">请选择</option>
-                    {testModelList.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.displayName || m.path || m.id}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                {testModelId && testModelList.length > 0 && (
+                  <p className="text-xs text-gray-500">
+                    当前模型：{testModelList.find((m) => m.id === testModelId)?.displayName ?? testModelId}
+                  </p>
+                )}
                 <div>
                   <label className="block text-xs text-gray-500 mb-0.5">根对象类型</label>
-                  <select
-                    value={testObjectType}
-                    onChange={(e) => setTestObjectType(e.target.value)}
-                    className="w-full border rounded px-2 py-1.5 text-sm"
-                  >
-                    <option value="">请选择</option>
-                    {testObjectTypes.map((ot) => (
-                      <option key={ot.name} value={ot.name}>
-                        {ot.display_name || ot.name}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm bg-gray-100 text-gray-700">
+                    {testObjectType || '—'}
+                    {testObjectType && (
+                      <span className="text-xs text-gray-500 ml-1">（由函数首参推断）</span>
+                    )}
+                  </div>
+                  {!testObjectType && selectedFn && getParams(selectedFn).length > 0 && (
+                    <p className="text-xs text-amber-600 mt-0.5">无法从函数首参推断根类型，请检查本体中对象类型与 link 定义</p>
+                  )}
+                  {testObjectType && testObjectTypes.length > 0 && !testObjectTypes.some((ot) => ot.name === testObjectType) && (
+                    <p className="text-xs text-amber-600 mt-0.5">当前模型下不存在对象类型「{testObjectType}」</p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-xs text-gray-500 mb-0.5">实例</label>
@@ -1042,7 +1066,7 @@ export default function FunctionsView() {
                 className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md bg-indigo-600 text-white text-sm hover:bg-indigo-700 disabled:opacity-50"
               >
                 <PlayIcon className="w-4 h-4" />
-                {testRunning ? '执行中...' : '用该实例数据运行'}
+                {testRunning ? '执行中...' : '用实例数据运行'}
               </button>
             </div>
 

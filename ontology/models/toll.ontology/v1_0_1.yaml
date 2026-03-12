@@ -3705,7 +3705,7 @@ functions:
         type: list<GantryTransaction>
         description: null
         default: null
-      - name: split_details
+      - name: split_time
         type: list<SplitDetail>
         description: null
         default: null

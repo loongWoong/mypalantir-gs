@@ -110,6 +110,13 @@
             <version>5.15.0</version>
         </dependency>
 
+        <!-- Google CEL (Common Expression Language) for expression evaluation -->
+        <dependency>
+            <groupId>dev.cel</groupId>
+            <artifactId>cel</artifactId>
+            <version>0.9.1</version>
+        </dependency>
+
         <!-- BouncyCastle for SM2 encryption -->
         <dependency>
             <groupId>org.bouncycastle</groupId>

@@ -436,6 +436,7 @@ export default function RulesView() {
                       entities={entitiesForEditor}
                       relations={relationsForEditor}
                       functions={functionsForEditor}
+                      rules={rules.map((r) => ({ name: r.name, display_name: r.display_name, expr: getRuleExpr(r) }))}
                     />
                   </div>
                 </div>

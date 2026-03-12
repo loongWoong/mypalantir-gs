@@ -862,6 +862,22 @@ export const reasoningApi = {
     );
     return response.data.data;
   },
+
+  /**
+   * CEL 表达式按实例求值（用于衍生属性等验证）。
+   * 使用当前本体模型下指定根对象类型与实例 ID 构建上下文（实例 + 关联数据 + 衍生属性）并求值，用于「基于实例数据求值」校验。
+   */
+  evaluateCelWithInstance: async (
+    expr: string,
+    objectType: string,
+    instanceId: string
+  ): Promise<unknown> => {
+    const response = await apiClient.post<ApiResponse<unknown>>(
+      '/reasoning/cel/evaluate-with-instance',
+      { expr: expr ?? '', object_type: objectType, instance_id: instanceId }
+    );
+    return response.data.data;
+  },
 };
 
 // Agent API

@@ -11,6 +11,8 @@ import type { SwrlVisualRule, SwrlCondition, SwrlConclusion } from '../../utils/
 import {
   swrlVisualToExpr,
   swrlExprToVisual,
+  fallbackVisualFromExpr,
+  getConclusionFromRuleExpr,
 } from '../../utils/ruleExprEditor';
 /** 供下拉使用的实体摘要（属性可为衍生属性） */
 export interface EntityOption {
@@ -48,6 +50,8 @@ export interface RuleExpressionEditorProps {
   relations?: RelationOption[];
   /** 函数列表（封装组件，仅展示不可改实现），用于规则前件中的函数条件 */
   functions?: FunctionOption[];
+  /** 当前本体下全部规则（name, display_name, expr），用于析取条件中展示“某规则的结论” */
+  rules?: { name: string; display_name?: string; expr: string }[];
   disabled?: boolean;
 }
 
@@ -80,13 +84,14 @@ export function RuleExpressionEditor({
   entities = [],
   relations = [],
   functions = [],
+  rules = [],
   disabled = false,
 }: RuleExpressionEditorProps) {
   const isSwrl = language === 'swrl';
   const [editMode, setEditMode] = useState<'visual' | 'advanced'>(isSwrl ? 'visual' : 'advanced');
   const [visualRule, setVisualRule] = useState<SwrlVisualRule>(() => {
     if (!isSwrl || !expr.trim()) return { ...DEFAULT_VISUAL_RULE };
-    const parsed = swrlExprToVisual(expr);
+    const parsed = swrlExprToVisual(expr, rules);
     return parsed ?? { ...DEFAULT_VISUAL_RULE };
   });
   /** 额外变量（如 ?v）对应的实体类型，用于下拉与自然语言 */
@@ -116,18 +121,17 @@ export function RuleExpressionEditor({
       setParseWarning(null);
       return;
     }
-    const parsed = swrlExprToVisual(expr);
+    const parsed = swrlExprToVisual(expr, rules);
     if (parsed) {
-      // 结论 predicate 固定为 check_status，解析后统一规范化
-      setVisualRule({
-        ...parsed,
-        conclusion: { ...parsed.conclusion, predicate: 'check_status' },
-      });
+      setVisualRule(parsed);
       setParseWarning(null);
     } else {
+      // 解析失败时清空条件，避免显示上一条规则的内容；尝试从 expr 提取主体与结论
+      const fallback = fallbackVisualFromExpr(expr);
+      setVisualRule(fallback);
       setParseWarning('当前表达式无法解析为可视化形式，请使用「高级」模式编辑。');
     }
-  }, [expr, language, isSwrl]);
+  }, [expr, language, isSwrl, rules]);
 
   // 唯一的 visual → expr 同步出口，避免 useEffect 监听 visualRule 造成的双重触发。
   const setVisualRuleAndFlush = useCallback((next: SwrlVisualRule) => {
@@ -209,6 +213,25 @@ export function RuleExpressionEditor({
     });
   };
 
+  /** 添加“满足某规则的结论”条件（规则嵌套） */
+  const addRuleConclusionCondition = (rule: { name: string; display_name?: string; expr: string }) => {
+    const c = getConclusionFromRuleExpr(rule.expr);
+    if (!c) return;
+    setVisualRuleAndFlush({
+      ...visualRule,
+      conditions: [
+        ...visualRule.conditions,
+        {
+          kind: 'ruleConclusion',
+          ruleName: rule.name,
+          varName: visualRule.subjectVar,
+          predicate: c.predicate,
+          value: c.value,
+        },
+      ],
+    });
+  };
+
   const updateCondition = (index: number, upd: Partial<SwrlCondition> | SwrlCondition) => {
     const next = [...visualRule.conditions];
     const cur = next[index];
@@ -225,6 +248,18 @@ export function RuleExpressionEditor({
       next[index] = { kind: 'predicate', predicate: '', varName: visualRule.subjectVar, value: true };
     } else if (cur.kind === 'function' && 'expectedValue' in upd) {
       next[index] = { ...cur, expectedValue: upd.expectedValue as boolean };
+    } else if (cur.kind === 'ruleConclusion' && 'ruleName' in upd && upd.ruleName) {
+      const r = rules.find((x) => x.name === upd.ruleName);
+      const c = r ? getConclusionFromRuleExpr(r.expr) : null;
+      if (c)
+        next[index] = {
+          kind: 'ruleConclusion',
+          ruleName: r!.name,
+          varName: cur.varName,
+          predicate: c.predicate,
+          value: c.value,
+        };
+      else next[index] = { ...cur, ...upd } as SwrlCondition;
     } else {
       next[index] = { ...cur, ...upd } as SwrlCondition;
     }
@@ -257,10 +292,7 @@ export function RuleExpressionEditor({
     }
     const parsed = swrlExprToVisual(expr);
     if (parsed) {
-      setVisualRule({
-        ...parsed,
-        conclusion: { ...parsed.conclusion, predicate: 'check_status' },
-      });
+      setVisualRule(parsed);
       setParseWarning(null);
       setEditMode('visual');
       setShowSwitchConfirm(false);
@@ -321,7 +353,7 @@ export function RuleExpressionEditor({
             </button>
             <button
               type="button"
-              onClick={switchToVisual}
+              onClick={() => switchToVisual()}
               className={`flex items-center gap-1 px-2 py-1 text-xs rounded ${
                 editMode === 'visual' ? 'bg-white shadow text-blue-700' : 'text-gray-600'
               }`}
@@ -443,11 +475,32 @@ export function RuleExpressionEditor({
                     ))}
                   </select>
                 )}
+                {rules.length > 0 && (
+                  <select
+                    value=""
+                    onChange={(e) => {
+                      const name = e.target.value;
+                      if (!name) return;
+                      const rule = rules.find((r) => r.name === name);
+                      if (rule) addRuleConclusionCondition(rule);
+                      e.target.value = '';
+                    }}
+                    disabled={disabled}
+                    className="text-xs border rounded px-2 py-1 text-amber-700 hover:text-amber-800 border-amber-300"
+                  >
+                    <option value="">添加规则结论条件 ▼</option>
+                    {rules.map((r) => (
+                      <option key={r.name} value={r.name}>
+                        {r.display_name || r.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
             </div>
             <div className="space-y-3">
               {visualRule.conditions.length === 0 ? (
-                <div className="text-gray-500 text-sm py-2">暂无条件，可添加「属性/衍生属性条件」或「函数条件」</div>
+                <div className="text-gray-500 text-sm py-2">暂无条件，可添加「属性/衍生属性条件」「函数条件」或「规则结论条件」</div>
               ) : (
                 visualRule.conditions.map((c, i) => (
                   <div key={i} className="flex items-start gap-2 p-3 bg-white border rounded-lg min-w-0 overflow-hidden">
@@ -479,6 +532,62 @@ export function RuleExpressionEditor({
                           <option value="true">是 (true)</option>
                           <option value="false">否 (false)</option>
                         </select>
+                      </div>
+                    ) : c.kind === 'ruleConclusion' ? (
+                      <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0 rounded bg-amber-50 border border-amber-200 px-3 py-2">
+                        <span className="text-amber-800 text-sm shrink-0">规则</span>
+                        <select
+                          value={c.ruleName}
+                          onChange={(e) => updateCondition(i, { ruleName: e.target.value })}
+                          disabled={disabled}
+                          className="border border-amber-300 rounded px-2 py-1.5 text-sm bg-white min-w-[180px]"
+                        >
+                          {rules.map((r) => (
+                            <option key={r.name} value={r.name}>
+                              {r.display_name || r.name}
+                            </option>
+                          ))}
+                        </select>
+                        <span className="text-amber-800 text-sm">的结论</span>
+                        <span className="text-amber-700 font-medium">
+                          （{c.predicate} = {String(c.value)}）
+                        </span>
+                      </div>
+                    ) : c.kind === 'disjunction' ? (
+                      <div className="flex flex-wrap items-start gap-2 flex-1 min-w-0 rounded bg-amber-50 border border-amber-200 px-3 py-2">
+                        <span className="text-amber-800 text-sm">（</span>
+                        {c.disjuncts.map((d, di) => (
+                          <React.Fragment key={di}>
+                            {di > 0 && <span className="text-amber-800 text-sm"> 或 </span>}
+                            {d.kind === 'predicate' && (
+                              <span className="text-sm font-mono text-gray-700">
+                                {d.predicate}(?{d.varName}, {String(d.value)})
+                              </span>
+                            )}
+                            {d.kind === 'ruleConclusion' && (() => {
+                              const r = rules.find((x) => x.name === d.ruleName);
+                              return (
+                                <span className="text-sm">
+                                  规则「{r?.display_name || r?.name || d.ruleName}」的结论
+                                  <span className="text-amber-700 font-medium ml-1">
+                                    （{d.predicate} = {String(d.value)}）
+                                  </span>
+                                </span>
+                              );
+                            })()}
+                            {d.kind === 'function' && (
+                              <span className="text-xs font-mono">
+                                {d.funcName}({d.argExprs.join(', ')}) == {String(d.expectedValue)}
+                              </span>
+                            )}
+                            {d.kind === 'relation' && (
+                              <span className="text-sm">
+                                {d.predicate}(?{d.var1}, ?{d.var2})
+                              </span>
+                            )}
+                          </React.Fragment>
+                        ))}
+                        <span className="text-amber-800 text-sm">）</span>
                       </div>
                     ) : c.kind === 'predicate' ? (
                       <div className="flex flex-wrap items-center gap-1.5 flex-1">
@@ -642,9 +751,13 @@ export function RuleExpressionEditor({
                 ))}
               </select>
               <span className="text-gray-600 text-sm">的</span>
-              <span className="inline-flex items-center px-2 py-1.5 text-sm font-medium text-gray-800 bg-gray-100 border border-gray-200 rounded">
-                check_status
-              </span>
+              <input
+                value={visualRule.conclusion.predicate}
+                onChange={(e) => setConclusion({ predicate: e.target.value })}
+                disabled={disabled}
+                placeholder="谓词名"
+                className="border rounded px-2 py-1.5 text-sm font-medium bg-gray-100 border-gray-200 min-w-[140px]"
+              />
               <span className="text-gray-600 text-sm">设为</span>
               <select
                 value={

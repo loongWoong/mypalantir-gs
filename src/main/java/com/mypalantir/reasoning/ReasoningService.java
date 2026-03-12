@@ -1,8 +1,11 @@
 package com.mypalantir.reasoning;
 
 import com.mypalantir.meta.*;
-import com.mypalantir.reasoning.cel.CelEvaluator;
-import com.mypalantir.reasoning.cel.CelFunctionAdapter;
+import com.mypalantir.reasoning.cel.engine.CelEvalContext;
+import com.mypalantir.reasoning.cel.engine.CelEvaluationService;
+import com.mypalantir.reasoning.cel.engine.CelFunctionRegistry;
+import com.mypalantir.reasoning.cel.engine.ConfigurableCelFunctionRegistry;
+import com.mypalantir.reasoning.cel.engine.RegistryBackedCelFunction;
 import com.mypalantir.reasoning.engine.ForwardChainEngine;
 import com.mypalantir.reasoning.engine.InferenceResult;
 import com.mypalantir.reasoning.function.FunctionRegistry;
@@ -34,7 +37,8 @@ public class ReasoningService {
     private final Loader loader;
     private final QueryService queryService;
     private final FunctionRegistry functionRegistry;
-    private final CelEvaluator celEvaluator;
+    private final CelEvaluationService celEvaluationService;
+    private final ConfigurableCelFunctionRegistry celFunctionRegistry;
     private final ScriptFunctionRunner scriptFunctionRunner;
 
     /** 按当前本体文件路径缓存：切换 schema 后重新解析 */
@@ -43,17 +47,40 @@ public class ReasoningService {
     private volatile Map<String, String> functionDisplayNames = Map.of();
 
     public ReasoningService(Loader loader, QueryService queryService, FunctionRegistry functionRegistry,
+                            CelEvaluationService celEvaluationService,
+                            ConfigurableCelFunctionRegistry celFunctionRegistry,
                             ScriptFunctionRunner scriptFunctionRunner) {
         this.loader = loader;
         this.queryService = queryService;
         this.functionRegistry = functionRegistry;
+        this.celEvaluationService = celEvaluationService;
+        this.celFunctionRegistry = celFunctionRegistry;
         this.scriptFunctionRunner = scriptFunctionRunner != null ? scriptFunctionRunner : new ScriptFunctionRunner();
-        this.celEvaluator = new CelEvaluator(new CelFunctionAdapter(functionRegistry));
     }
 
     @PostConstruct
     public void initialize() {
         registerBuiltinFunctions();
+        registerCelBridgeFunctions();
+    }
+
+    /** 将 FunctionRegistry 中已注册的本体函数暴露为 CEL 可调用的扩展（多参数重载） */
+    private void registerCelBridgeFunctions() {
+        for (String name : functionRegistry.getFunctionNames()) {
+            for (int arity = 1; arity <= RegistryBackedCelFunction.MAX_ARITY; arity++) {
+                celFunctionRegistry.registerOverload(name, new RegistryBackedCelFunction(name, functionRegistry, arity));
+            }
+        }
+    }
+
+    /** 构建 CEL 求值环境：instance 属性 + links + 已计算的衍生属性 */
+    private static Map<String, Object> buildCelEnv(Map<String, Object> instance,
+                                                    Map<String, List<Map<String, Object>>> linkedData,
+                                                    Map<String, Object> derivedValues) {
+        Map<String, Object> env = new HashMap<>(instance != null ? instance : Map.of());
+        if (linkedData != null) env.put("links", linkedData);
+        if (derivedValues != null) env.putAll(derivedValues);
+        return env;
     }
 
     /**
@@ -424,7 +451,11 @@ public class ReasoningService {
             for (Property prop : ot.getProperties()) {
                 if (prop.isDerived() && prop.getExpr() != null) {
                     try {
-                        Object value = celEvaluator.evaluate(prop.getExpr(), instance, linkedData);
+                        Map<String, Object> env = buildCelEnv(instance, linkedData, derived);
+                        CelEvalContext ctx = new CelEvalContext();
+                        ctx.setInstance(instance);
+                        ctx.setLinks(linkedData);
+                        Object value = celEvaluationService.evaluate(prop.getExpr(), env, ctx);
                         derived.put(prop.getName(), value);
                     } catch (Exception e) {
                         System.err.println("Failed to evaluate derived property '" + prop.getName() + "': " + e.getMessage());
@@ -438,7 +469,8 @@ public class ReasoningService {
     }
 
     /**
-     * 校验 CEL 表达式是否可解析/求值（用空上下文试运行）。
+     * 校验 CEL 表达式是否合法（仅编译检查，不求值）。
+     * 声明变量 {@code links}，故 {@code size(links.path_has_path_details)} 等可通过校验。
      * 用于前端「查询验证」与脚本编辑时的即时校验。
      */
     public Map<String, Object> validateCel(String expr) {
@@ -449,12 +481,12 @@ public class ReasoningService {
             return result;
         }
         try {
-            celEvaluator.evaluate(expr.trim(), Map.of(), Map.of());
+            celEvaluationService.validateCompile(expr.trim());
             result.put("valid", true);
             result.put("message", "表达式合法");
         } catch (Exception e) {
             result.put("valid", false);
-            result.put("message", e.getMessage() != null ? e.getMessage() : "求值失败");
+            result.put("message", e.getMessage() != null ? e.getMessage() : "编译失败");
         }
         return result;
     }
@@ -465,8 +497,12 @@ public class ReasoningService {
     public Object evaluateCel(String expr, Map<String, Object> properties,
                               Map<String, List<Map<String, Object>>> linkedData) {
         if (expr == null || expr.isBlank()) return null;
-        return celEvaluator.evaluate(expr.trim(), properties != null ? properties : Map.of(),
-            linkedData != null ? linkedData : Map.of());
+        Map<String, Object> env = buildCelEnv(properties != null ? properties : Map.of(),
+                linkedData != null ? linkedData : Map.of(), null);
+        CelEvalContext ctx = new CelEvalContext();
+        ctx.setInstance(properties != null ? properties : Map.of());
+        ctx.setLinks(linkedData);
+        return celEvaluationService.evaluate(expr.trim(), env, ctx);
     }
 
     /**
@@ -478,7 +514,13 @@ public class ReasoningService {
         InstanceContext ctx = buildInstanceContext(objectType, instanceId);
         Map<String, Object> properties = new HashMap<>(ctx.instance);
         properties.putAll(ctx.derivedValues != null ? ctx.derivedValues : Map.of());
-        return celEvaluator.evaluate(expr.trim(), properties, ctx.linkedData != null ? ctx.linkedData : Map.of());
+        Map<String, Object> env = buildCelEnv(properties, ctx.linkedData != null ? ctx.linkedData : Map.of(), ctx.derivedValues);
+        CelEvalContext celCtx = new CelEvalContext();
+        celCtx.setObjectType(objectType);
+        celCtx.setInstanceId(instanceId);
+        celCtx.setInstance(ctx.instance);
+        celCtx.setLinks(ctx.linkedData);
+        return celEvaluationService.evaluate(expr.trim(), env, celCtx);
     }
 
     /**

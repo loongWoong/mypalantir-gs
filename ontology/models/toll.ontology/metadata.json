@@ -1,0 +1,27 @@
+{
+  "versions" : [ {
+    "version" : "1.0",
+    "namespace" : "com.tollcenter.ontology",
+    "filename" : "toll.ontology",
+    "file_path" : "ontology\\models\\toll.ontology\\v1_0.yaml",
+    "previous_version" : null,
+    "commit_message" : null,
+    "author" : null,
+    "timestamp" : 1773285778096,
+    "workspace_id" : null,
+    "workspace_name" : null,
+    "changes" : [ "初始版本" ]
+  }, {
+    "version" : "1.0.1",
+    "namespace" : "com.tollcenter.ontology",
+    "filename" : "toll.ontology",
+    "file_path" : "ontology\\models\\toll.ontology\\v1_0_1.yaml",
+    "previous_version" : "1.0",
+    "commit_message" : null,
+    "author" : null,
+    "timestamp" : 1773297170486,
+    "workspace_id" : null,
+    "workspace_name" : null,
+    "changes" : [ "版本: 1.0 → 1.0.1" ]
+  } ]
+}
