@@ -92,9 +92,11 @@ public class AgentService {
                 boolean isDiagnosticMode = toolCallCount > 0 || extractSection(llmResponse, "Action") != null;
                 if (isDiagnosticMode && toolCallCount < MIN_TOOL_CALLS) {
                     logger.info("Step {}: LLM tried to answer early (toolCalls={}), rejecting", i + 1, toolCallCount);
+                    List<String> rootTypes = agentTools.listRootTypes();
+                    String typeExamples = rootTypes.isEmpty() ? "推理对象" : String.join("/", rootTypes);
                     String reject = "你还没有充分调查。请继续按诊断步骤调用工具排查：" +
-                            (toolCallCount == 0 ? "先用 query_instance 查询当前本体的推理对象（如 Path/Passage）基本信息。" :
-                             toolCallCount == 1 ? "接下来用 query_links 查询门架交易和拆分明细。" :
+                            (toolCallCount == 0 ? "先用 query_instance 查询当前本体的推理对象（" + typeExamples + "）基本信息。" :
+                             toolCallCount == 1 ? "接下来用 query_links 查询关联数据。" :
                              "接下来用 call_function 调用诊断函数进一步排查。");
                     conversation.append(llmResponse).append("\nObservation: ").append(reject).append("\n\n");
                     continue;
@@ -211,6 +213,7 @@ public class AgentService {
     }
 
     private String buildSystemPrompt() {
+        String dataModel = agentTools.getDataModelDescription();
         return """
             你是高速公路收费拆分异常诊断助手。你可以回答用户的一般性问题，也可以帮助诊断拆分异常。
 
@@ -242,9 +245,9 @@ public class AgentService {
             Thought: 总结
             Answer: 回答内容
 
-            ## 数据模型（用于理解工具参数）
+            ## 数据模型（用于理解工具参数，来自当前加载的本体）
 
-            - Passage（通行路径）关联：passage_has_gantry_transactions, passage_has_split_details, passage_has_entry, passage_has_exit
+            """ + dataModel + """
 
             ## 推理要求
 

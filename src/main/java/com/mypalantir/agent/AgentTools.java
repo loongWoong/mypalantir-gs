@@ -52,7 +52,7 @@ public class AgentTools {
     }
 
     /**
-     * 查询实例数据（type 为当前本体的对象类型，如 Path、Passage）
+     * 查询实例数据（type 为当前本体的对象类型）
      * args: { "type": "类型名", "id": "实例ID" }
      */
     private String queryInstance(Map<String, Object> args) throws Exception {
@@ -93,13 +93,9 @@ public class AgentTools {
     }
 
     /**
-     * 调用诊断函数（object_type、instance_id 为当前本体的类型与实例，与 query_instance 一致）
-     * args: { "object_type": "Path", "instance_id": "PASS_LATE_001", "function": "check_route_consistency" }
-     * 兼容: { "passage_id": "PASS_LATE_001", "function": "..." } 视为 Passage + instance_id
-     *
-     * 数据准备逻辑与 ReasoningService.inferInstance 完全一致：
-     * 通过 buildInstanceContext 获取 instance、linkedData（出边+入边+别名+enriched）、derivedValues，
-     * 确保函数调用与推理引擎使用相同的 schema 和数据。
+     * 调用诊断函数（object_type、instance_id 为当前本体的类型与实例）
+     * args: { "object_type": "...", "instance_id": "...", "function": "..." }
+     * 兼容旧字段: passage_id → instance_id，object_type 默认取当前本体推理根类型
      */
     private String callFunction(Map<String, Object> args) throws Exception {
         String objectType = (String) args.get("object_type");
@@ -109,9 +105,9 @@ public class AgentTools {
         if (funcName == null) return "缺少参数 function";
         if (instanceId == null && passageId != null) {
             instanceId = passageId;
-            if (objectType == null) objectType = "Passage";
+            if (objectType == null) objectType = guessRootType();
         }
-        if (objectType == null || instanceId == null) return "缺少参数 object_type 与 instance_id（或 passage_id）";
+        if (objectType == null || instanceId == null) return "缺少参数 object_type 与 instance_id";
 
         FunctionRegistry registry = reasoningService.getFunctionRegistry();
         if (!registry.hasFunction(funcName)) return "函数 " + funcName + " 未注册";
@@ -187,7 +183,7 @@ public class AgentTools {
 
     /**
      * 自然语言数据查询
-     * args: { "query": "查询所有拆分异常的Passage" }
+     * args: { "query": "自然语言查询" }
      */
     private String queryData(Map<String, Object> args) throws Exception {
         String query = (String) args.get("query");
@@ -212,62 +208,128 @@ public class AgentTools {
 
     /**
      * 执行完整推理
-     * args: { "passage_id": "PASS_LATE_001" }
+     * args: { "object_type": "Path", "instance_id": "xxx" }
      */
     private String runInference(Map<String, Object> args) throws Exception {
         String objectType = (String) args.get("object_type");
         String instanceId = (String) args.get("instance_id");
-        String passageId = (String) args.get("passage_id");
-        if (instanceId == null && passageId != null) {
-            instanceId = passageId;
-            if (objectType == null) objectType = "Passage";
-        }
+        // 兼容旧字段名 passage_id
+        if (instanceId == null) instanceId = (String) args.get("passage_id");
+        if (objectType == null) objectType = guessRootType();
         if (objectType == null || instanceId == null)
-            return "缺少参数 object_type 与 instance_id（或 passage_id）";
+            return "缺少参数 object_type 与 instance_id";
 
         InferenceResult result = reasoningService.inferInstance(objectType, instanceId);
         return objectMapper.writeValueAsString(result.toMap());
     }
 
     /**
-     * 获取工具描述（用于 system prompt）；类型与关联随当前加载的本体变化。
+     * 获取当前本体中有推理规则的对象类型列表。
+     */
+    public List<String> listRootTypes() {
+        return reasoningService.listInferenceRootTypes();
+    }
+
+    /**
+     * 生成当前本体的数据模型描述（用于 system prompt），包含推理根类型名称及其关联。
+     */
+    public String getDataModelDescription() {
+        Loader loader = reasoningService.getLoader();
+        List<String> rootTypes = reasoningService.listInferenceRootTypes();
+        if (rootTypes.isEmpty()) {
+            return "- 数据模型以当前加载的本体为准";
+        }
+        StringBuilder sb = new StringBuilder();
+        for (String typeName : rootTypes) {
+            List<LinkType> outLinks = loader.getOutgoingLinks(typeName);
+            if (!outLinks.isEmpty()) {
+                List<String> linkNames = outLinks.stream().map(LinkType::getName).toList();
+                sb.append("- ").append(typeName).append("（推理对象）关联：")
+                  .append(String.join(", ", linkNames)).append("\n");
+            } else {
+                sb.append("- ").append(typeName).append("（推理对象）\n");
+            }
+        }
+        return sb.toString().stripTrailing();
+    }
+
+    /**
+     * 从当前本体推断推理根对象类型（第一个有推理规则的类型），不再硬编码 Passage。
+     */
+    private String guessRootType() {
+        List<String> rootTypes = reasoningService.listInferenceRootTypes();
+        return rootTypes.isEmpty() ? null : rootTypes.get(0);
+    }
+
+    /**
+     * 获取工具描述（用于 system prompt）；类型、关联、函数均从当前加载的本体动态生成。
      */
     public String getToolDescriptions() {
+        Loader loader = reasoningService.getLoader();
         List<String> rootTypes = reasoningService.listInferenceRootTypes();
-        String typeHint = rootTypes.isEmpty() ? "类型名、关联名以当前本体为准" : "推理对象类型示例: " + String.join(", ", rootTypes);
-        return """
-            1. query_instance - 查询实例基本数据
-               参数: {"type": "类型名", "id": "实例ID"}
-               """ + typeHint + """
+        String typeHint = rootTypes.isEmpty()
+                ? "类型名、关联名以当前本体为准"
+                : "当前本体推理对象类型: " + String.join(", ", rootTypes);
 
-            2. query_links - 查询关联数据
-               参数: {"type": "类型", "id": "ID", "link": "关联名"}
-               关联名由当前本体定义，可用 search_rules 查看规则中出现的 link 名
+        String primaryType = rootTypes.isEmpty() ? "对象" : rootTypes.get(0);
 
-            3. search_rules - 搜索当前本体的SWRL规则
-               参数: {"keyword": "关键词"}
+        // 动态生成关联名列表
+        String linkDesc = "关联名由当前本体定义";
+        if (!rootTypes.isEmpty()) {
+            List<LinkType> outLinks = loader.getOutgoingLinks(primaryType);
+            if (!outLinks.isEmpty()) {
+                List<String> linkNames = outLinks.stream().map(LinkType::getName).toList();
+                linkDesc = primaryType + " 的关联: " + String.join(", ", linkNames);
+            }
+        }
 
-            4. call_function - 调用诊断函数
-               参数: {"passage_id": "通行路径ID", "function": "函数名"}
-               可用函数:
-               - is_single_province_etc: 判断是否单省ETC交易
-               - is_obu_billing_mode1: 判断OBU计费方式
-               - check_route_consistency: 检查拆分路径与门架路径一致性
-               - detect_duplicate_intervals: 检测门架收费单元重复
-               - check_gantry_hex_continuity: 检查门架HEX编码连续性
-               - check_gantry_count_complete: 检查门架数量完整性
-               - detect_late_upload: 检测门架延迟上传
-               - check_fee_detail_consistency: 检查费用明细一致性
-               - check_rounding_mismatch: 检查四舍五入差异
-               - check_balance_continuity: 检查卡内余额连续性
+        // 动态生成函数列表
+        StringBuilder funcList = new StringBuilder();
+        List<FunctionDef> functions = loader.listFunctions();
+        if (!functions.isEmpty()) {
+            for (FunctionDef fd : functions) {
+                funcList.append("           - ").append(fd.getName());
+                if (fd.getDescription() != null && !fd.getDescription().isBlank()) {
+                    funcList.append(": ").append(fd.getDescription());
+                } else if (fd.getDisplayName() != null && !fd.getDisplayName().isBlank()) {
+                    funcList.append(": ").append(fd.getDisplayName());
+                }
+                funcList.append("\n");
+            }
+        } else {
+            Set<String> registered = reasoningService.getRegisteredFunctions();
+            for (String fn : registered) {
+                funcList.append("           - ").append(fn).append("\n");
+            }
+        }
 
-            5. run_inference - 执行完整规则引擎推理（一次性返回所有规则结果）
-               参数: {"passage_id": "通行路径ID"}
+        StringBuilder sb = new StringBuilder();
+        sb.append("1. query_instance - 查询实例基本数据\n");
+        sb.append("   参数: {\"type\": \"类型名\", \"id\": \"实例ID\"}\n");
+        sb.append("   ").append(typeHint).append("\n\n");
 
-            6. query_data - 用自然语言查询本体数据（支持过滤、聚合、排序等）
-               参数: {"query": "自然语言查询，如：查询所有拆分异常的Passage"}
-               示例: {"query": "显示入口站为S0085的所有Passage"}
-               适用场景: 需要按条件批量查询、统计、筛选数据时使用
-            """;
+        sb.append("2. query_links - 查询关联数据\n");
+        sb.append("   参数: {\"type\": \"类型\", \"id\": \"ID\", \"link\": \"关联名\"}\n");
+        sb.append("   ").append(linkDesc).append("\n\n");
+
+        sb.append("3. search_rules - 搜索当前本体的SWRL规则\n");
+        sb.append("   参数: {\"keyword\": \"关键词\"}\n\n");
+
+        sb.append("4. call_function - 调用诊断函数\n");
+        sb.append("   参数: {\"object_type\": \"").append(primaryType)
+          .append("\", \"instance_id\": \"实例ID\", \"function\": \"函数名\"}\n");
+        sb.append("   可用函数:\n");
+        sb.append(funcList);
+        sb.append("\n");
+
+        sb.append("5. run_inference - 执行完整规则引擎推理（一次性返回所有规则结果）\n");
+        sb.append("   参数: {\"object_type\": \"").append(primaryType)
+          .append("\", \"instance_id\": \"实例ID\"}\n\n");
+
+        sb.append("6. query_data - 用自然语言查询本体数据（支持过滤、聚合、排序等）\n");
+        sb.append("   参数: {\"query\": \"自然语言查询\"}\n");
+        sb.append("   适用场景: 需要按条件批量查询、统计、筛选数据时使用\n");
+
+        return sb.toString();
     }
 }
