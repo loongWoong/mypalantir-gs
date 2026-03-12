@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { agentApi, type AgentStep } from '../api/client';
 
 interface ChatMessage {
@@ -10,9 +11,10 @@ interface ChatMessage {
 }
 
 const EXAMPLE_QUESTIONS = [
-  '帮我查一下 PASS_LATE_001 为什么拆分异常',
-  '分析 PASS_LATE_001 的门架交易数据',
-  '查看系统有哪些拆分异常诊断规则',
+  '诊断 PASS_LATE_001 的拆分异常原因',
+  '查询 PASS_LATE_001 的门架交易明细',
+  '查询所有通行记录',
+  '统计每个入口站的通行数量',
 ];
 
 export default function AgentChat() {
@@ -91,8 +93,8 @@ export default function AgentChat() {
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full text-gray-400">
             <div className="text-4xl mb-4">🤖</div>
-            <div className="text-lg font-medium mb-2">诊断助手</div>
-            <div className="text-sm mb-6">基于 SWRL 规则知识的 ReAct 推理 Agent</div>
+            <div className="text-lg font-medium mb-2">智能助手</div>
+            <div className="text-sm mb-6">基于本体知识的 ReAct 推理 Agent，支持数据查询与异常诊断</div>
             <div className="flex flex-wrap gap-2 justify-center">
               {EXAMPLE_QUESTIONS.map((q, i) => (
                 <button
@@ -127,7 +129,7 @@ export default function AgentChat() {
                       <div className="text-sm whitespace-pre-wrap">{msg.content}</div>
                     ) : (
                       <div className="text-sm prose prose-sm prose-gray max-w-none">
-                        <ReactMarkdown>{msg.content}</ReactMarkdown>
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
                       </div>
                     )
                   )}

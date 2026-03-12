@@ -5,6 +5,10 @@ import com.mypalantir.meta.*;
 import com.mypalantir.reasoning.ReasoningService;
 import com.mypalantir.reasoning.engine.InferenceResult;
 import com.mypalantir.reasoning.function.FunctionRegistry;
+import com.mypalantir.query.OntologyQuery;
+import com.mypalantir.service.NaturalLanguageQueryService;
+import com.mypalantir.service.QueryService;
+import com.mypalantir.query.QueryExecutor;
 import org.springframework.stereotype.Component;
 
 import java.util.*;
@@ -17,12 +21,15 @@ import java.util.*;
 public class AgentTools {
 
     private final ReasoningService reasoningService;
-    private final Loader loader;
+    private final QueryService queryService;
+    private final NaturalLanguageQueryService nlqService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public AgentTools(ReasoningService reasoningService, Loader loader) {
+    public AgentTools(ReasoningService reasoningService, QueryService queryService,
+                      NaturalLanguageQueryService nlqService) {
         this.reasoningService = reasoningService;
-        this.loader = loader;
+        this.queryService = queryService;
+        this.nlqService = nlqService;
     }
 
     /**
@@ -36,6 +43,7 @@ public class AgentTools {
                 case "search_rules" -> searchRules(args);
                 case "call_function" -> callFunction(args);
                 case "run_inference" -> runInference(args);
+                case "query_data" -> queryData(args);
                 default -> "未知工具: " + toolName;
             };
         } catch (Exception e) {
@@ -159,49 +167,33 @@ public class AgentTools {
     }
 
     /**
-     * 从 linkedData 中按目标类型名后缀动态查找对应的关联列表。
-     * 遍历当前 schema 的 LinkType，找到 sourceType=objectType 且 targetType 以 suffix 结尾的关联，
-     * 再从 linkedData 中取对应数据（支持 snake_case 与 PascalCase 两种 key 形式）。
+     * 自然语言数据查询
+     * args: { "query": "查询所有拆分异常的Passage" }
      */
-    private List<Map<String, Object>> resolveLinkedByTargetSuffix(
-            Map<String, List<Map<String, Object>>> linkedData,
-            String objectType,
-            String targetTypeSuffix) {
-        OntologySchema schema = loader.getSchema();
-        if (schema == null || schema.getLinkTypes() == null) return List.of();
+    private String queryData(Map<String, Object> args) throws Exception {
+        String query = (String) args.get("query");
+        if (query == null) return "缺少参数 query";
 
-        for (LinkType lt : schema.getLinkTypes()) {
-            if (!objectType.equals(lt.getSourceType())) continue;
-            String target = lt.getTargetType();
-            if (target == null || !target.endsWith(targetTypeSuffix)) continue;
-            // 尝试 snake_case 和 PascalCase 两种 key
-            List<Map<String, Object>> list = linkedData.get(lt.getName());
-            if (list != null && !list.isEmpty()) return list;
-            // 尝试 PascalCase 别名
-            String pascal = toPascalLinkKey(lt.getName());
-            list = linkedData.get(pascal);
-            if (list != null && !list.isEmpty()) return list;
+        try {
+            OntologyQuery ontologyQuery = nlqService.convertToQuery(query);
+            // 转换为 Map 执行
+            Map<String, Object> queryMap = objectMapper.convertValue(ontologyQuery, new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {});
+            // 移除 null 值
+            queryMap.values().removeIf(Objects::isNull);
+            QueryExecutor.QueryResult result = queryService.executeQuery(queryMap);
+            Map<String, Object> resp = new LinkedHashMap<>();
+            resp.put("columns", result.getColumns());
+            resp.put("rowCount", result.getRowCount());
+            resp.put("rows", result.getRows());
+            return objectMapper.writeValueAsString(resp);
+        } catch (NaturalLanguageQueryService.NaturalLanguageQueryException e) {
+            return "查询失败: " + e.getMessage();
         }
-        return List.of();
-    }
-
-    /** 小写 link 名转 PascalCase（与 ReasoningService.toPascalLinkKey 保持一致） */
-    private static String toPascalLinkKey(String linkName) {
-        if (linkName == null || linkName.isEmpty()) return linkName;
-        StringBuilder sb = new StringBuilder();
-        boolean cap = true;
-        for (char c : linkName.toCharArray()) {
-            if (c == '_') { sb.append(c); cap = true; continue; }
-            sb.append(cap ? Character.toUpperCase(c) : c);
-            cap = false;
-        }
-        return sb.toString();
     }
 
     /**
-     * 执行完整推理（使用当前本体的对象类型与实例 ID；规则来自当前加载的 schema）
-     * args: { "object_type": "Path", "instance_id": "PASS_LATE_001" }
-     * 兼容: { "passage_id": "PASS_LATE_001" } 视为 Passage
+     * 执行完整推理
+     * args: { "passage_id": "PASS_LATE_001" }
      */
     private String runInference(Map<String, Object> args) throws Exception {
         String objectType = (String) args.get("object_type");
@@ -237,13 +229,26 @@ public class AgentTools {
                参数: {"keyword": "关键词"}
 
             4. call_function - 调用诊断函数
-               参数: {"object_type": "类型名", "instance_id": "实例ID", "function": "函数名"}
-               或: {"passage_id": "实例ID", "function": "函数名"}（等价 object_type=Passage）
-               可用函数以当前本体注册为准（如 check_route_consistency, detect_late_upload 等）
+               参数: {"passage_id": "通行路径ID", "function": "函数名"}
+               可用函数:
+               - is_single_province_etc: 判断是否单省ETC交易
+               - is_obu_billing_mode1: 判断OBU计费方式
+               - check_route_consistency: 检查拆分路径与门架路径一致性
+               - detect_duplicate_intervals: 检测门架收费单元重复
+               - check_gantry_hex_continuity: 检查门架HEX编码连续性
+               - check_gantry_count_complete: 检查门架数量完整性
+               - detect_late_upload: 检测门架延迟上传
+               - check_fee_detail_consistency: 检查费用明细一致性
+               - check_rounding_mismatch: 检查四舍五入差异
+               - check_balance_continuity: 检查卡内余额连续性
 
-            5. run_inference - 执行完整规则引擎推理（使用当前本体的规则）
-               参数: {"object_type": "类型名", "instance_id": "实例ID"}
-               或: {"passage_id": "实例ID"}（等价 object_type=Passage）
+            5. run_inference - 执行完整规则引擎推理（一次性返回所有规则结果）
+               参数: {"passage_id": "通行路径ID"}
+
+            6. query_data - 用自然语言查询本体数据（支持过滤、聚合、排序等）
+               参数: {"query": "自然语言查询，如：查询所有拆分异常的Passage"}
+               示例: {"query": "显示入口站为S0085的所有Passage"}
+               适用场景: 需要按条件批量查询、统计、筛选数据时使用
             """;
     }
 }
