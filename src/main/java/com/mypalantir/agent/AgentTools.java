@@ -130,6 +130,25 @@ public class AgentTools {
     }
 
     /**
+     * 从 linkedData 中按目标类型后缀匹配关联数据。
+     * 例如 targetSuffix="GantryTransaction" 会匹配 key 中包含该后缀的 link。
+     */
+    private List<Map<String, Object>> resolveLinkedByTargetSuffix(
+            Map<String, List<Map<String, Object>>> linkedData,
+            String objectType,
+            String targetSuffix) {
+        if (linkedData == null) return List.of();
+        String suffixLower = targetSuffix.toLowerCase();
+        for (Map.Entry<String, List<Map<String, Object>>> entry : linkedData.entrySet()) {
+            String key = entry.getKey().replace("_", "").toLowerCase();
+            if (key.contains(suffixLower.replace("_", "").toLowerCase())) {
+                return entry.getValue() != null ? entry.getValue() : List.of();
+            }
+        }
+        return List.of();
+    }
+
+    /**
      * 根据函数名和 InstanceContext 动态构建参数列表。
      * 通过 schema 的 LinkType 定义识别关联数据类型，避免硬编码目标类型名称字符串。
      */

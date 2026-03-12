@@ -22,6 +22,7 @@ public class AgentService {
 
     private static final Logger logger = LoggerFactory.getLogger(AgentService.class);
     private static final int MAX_STEPS = 15;
+    private static final int MIN_TOOL_CALLS = 2;
 
     private final LLMService llmService;
     private final AgentTools agentTools;
