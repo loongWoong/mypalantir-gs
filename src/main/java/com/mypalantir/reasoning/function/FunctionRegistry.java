@@ -40,12 +40,14 @@ public class FunctionRegistry {
     }
 
     /**
-     * 获取函数（先查 builtin，再查 script）
+     * 获取函数（先查 script，再查 builtin）。
+     * script 优先：当 schema 显式声明 implementation=script 时，脚本版本会注册到 scriptFunctions，
+     * 优先于同名 builtin 被调用，确保 schema 专属逻辑覆盖通用 builtin 实现。
      */
     public OntologyFunction getFunction(String name) {
-        OntologyFunction fn = functions.get(name);
+        OntologyFunction fn = scriptFunctions.get(name);
         if (fn != null) return fn;
-        return scriptFunctions.get(name);
+        return functions.get(name);
     }
 
     /**

@@ -84,6 +84,14 @@ export function CelExprBuilder({
     return ent?.attributes ?? [];
   };
 
+  const ensureFuncArgs = (side: 'left' | 'right') => {
+    const v = side === 'left' ? visual.left : visual.right;
+    const existing = (v as any).funcArgs as CelOperand['funcArgs'] | undefined;
+    if (existing && existing.length > 0) return existing;
+    // 默认仅创建一个参数位，避免界面上无意义地出现「参数2」
+    return [{ kind: 'link', linkType: '' } as any];
+  };
+
   const setLeft = (upd: Partial<CelVisualExpr['left']>) =>
     setVisual((v) => {
       const next = { ...v, left: { ...v.left, ...upd } };
@@ -172,6 +180,7 @@ export function CelExprBuilder({
             <option value="sum">聚合合计</option>
             <option value="sort">集合排序</option>
             <option value="variable">变量/属性引用</option>
+            <option value="function_call">函数调用</option>
           </select>
           {visual.left.kind === 'variable' ? (
             <input
@@ -182,6 +191,180 @@ export function CelExprBuilder({
               placeholder="属性名或衍生属性名"
               className="border rounded px-2 py-1.5 text-sm min-w-[150px] font-mono"
             />
+          ) : visual.left.kind === 'function_call' ? (
+            <>
+              {(() => {
+                const funcArgs = ensureFuncArgs('left');
+                const arg1 = funcArgs[0];
+                const arg2 = funcArgs[1];
+                return (
+                  <>
+                    <input
+                      type="text"
+                      value={visual.left.funcName ?? ''}
+                      onChange={(e) =>
+                        setLeft({
+                          funcName: e.target.value,
+                          funcArgs,
+                        })
+                      }
+                      disabled={disabled}
+                      placeholder="函数名，如 detect_late_upload"
+                      className="border rounded px-2 py-1.5 text-sm min-w-[180px] font-mono"
+                    />
+                    <span className="text-xs text-gray-500 ml-1">参数1：</span>
+                    <select
+                      value={arg1.kind}
+                      onChange={(e) =>
+                        setLeft({
+                          funcArgs: [
+                            {
+                              ...arg1,
+                              kind: e.target.value as any,
+                            },
+                            arg2,
+                          ],
+                        })
+                      }
+                      disabled={disabled}
+                      className="border rounded px-2 py-1.5 text-sm"
+                    >
+                      <option value="link">关系</option>
+                      <option value="variable">变量/属性</option>
+                    </select>
+                    {arg1.kind === 'link' ? (
+                      <select
+                        value={arg1.linkType ?? ''}
+                        onChange={(e) =>
+                          setLeft({
+                            funcArgs: [
+                              { ...arg1, linkType: e.target.value },
+                              arg2,
+                            ],
+                          })
+                        }
+                        disabled={disabled}
+                        className="border rounded px-2 py-1.5 text-sm min-w-[130px]"
+                      >
+                        <option value="">请选择关系</option>
+                        {relations.map((r) => (
+                          <option key={r.name} value={r.name}>
+                            {relationDisplay(r)}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        value={arg1.variableName ?? ''}
+                        onChange={(e) =>
+                          setLeft({
+                            funcArgs: [
+                              { ...arg1, variableName: e.target.value },
+                              arg2,
+                            ],
+                          })
+                        }
+                        disabled={disabled}
+                        placeholder="变量/属性名，如 split_time"
+                        className="border rounded px-2 py-1.5 text-sm min-w-[150px] font-mono"
+                      />
+                    )}
+                    {/* 参数2：真正需要第二个参数时才显示，避免所有函数都固定有「参数2」 */}
+                    {arg2 ? (
+                      <>
+                        <span className="text-xs text-gray-500 ml-2">参数2（可选）：</span>
+                        <select
+                          value={arg2.kind}
+                          onChange={(e) =>
+                            setLeft({
+                              funcArgs: [
+                                arg1,
+                                {
+                                  ...arg2,
+                                  kind: e.target.value as any,
+                                },
+                              ],
+                            })
+                          }
+                          disabled={disabled}
+                          className="border rounded px-2 py-1.5 text-sm"
+                        >
+                          <option value="link">关系</option>
+                          <option value="variable">变量/属性</option>
+                        </select>
+                        {arg2.kind === 'link' ? (
+                          <select
+                            value={arg2.linkType ?? ''}
+                            onChange={(e) =>
+                              setLeft({
+                                funcArgs: [
+                                  arg1,
+                                  { ...arg2, linkType: e.target.value },
+                                ],
+                              })
+                            }
+                            disabled={disabled}
+                            className="border rounded px-2 py-1.5 text-sm min-w-[130px]"
+                          >
+                            <option value="">请选择关系</option>
+                            {relations.map((r) => (
+                              <option key={r.name} value={r.name}>
+                                {relationDisplay(r)}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <input
+                            type="text"
+                            value={arg2.variableName ?? ''}
+                            onChange={(e) =>
+                              setLeft({
+                                funcArgs: [
+                                  arg1,
+                                  { ...arg2, variableName: e.target.value },
+                                ],
+                              })
+                            }
+                            disabled={disabled}
+                            placeholder="变量/属性名，如 split_time"
+                            className="border rounded px-2 py-1.5 text-sm min-w-[150px] font-mono"
+                          />
+                        )}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setLeft({
+                              funcArgs: [arg1],
+                            })
+                          }
+                          disabled={disabled}
+                          className="ml-2 text-xs text-gray-500 hover:text-gray-700"
+                        >
+                          移除参数2
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setLeft({
+                            funcArgs: [
+                              arg1,
+                              { kind: 'variable', variableName: '' } as any,
+                            ],
+                          })
+                        }
+                        disabled={disabled}
+                        className="ml-2 text-xs text-blue-600 hover:text-blue-800"
+                      >
+                        + 添加参数2
+                      </button>
+                    )}
+                  </>
+                );
+              })()}
+            </>
           ) : (
           <>
           <select
@@ -253,27 +436,201 @@ export function CelExprBuilder({
             </select>
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-gray-600 text-sm">右侧</span>
-          <select
-            value={visual.right.kind}
-            onChange={(e) => setRight({ kind: e.target.value as CelOperand['kind'] })}
-            disabled={disabled}
-            className="border rounded px-2 py-1.5 text-sm"
-          >
-            <option value="size">关系数量</option>
-            <option value="sum">聚合合计</option>
-            <option value="sort">集合排序</option>
-            <option value="variable">变量/属性引用</option>
-          </select>
-          {visual.right.kind === 'variable' ? (
-            <input
-              type="text"
-              value={visual.right.variableName ?? ''}
-              onChange={(e) => setRight({ variableName: e.target.value })}
-              disabled={disabled}
-              placeholder="属性名或衍生属性名"
-              className="border rounded px-2 py-1.5 text-sm min-w-[150px] font-mono"
-            />
-          ) : (
+              <select
+                value={visual.right.kind}
+                onChange={(e) => setRight({ kind: e.target.value as CelOperand['kind'] })}
+                disabled={disabled}
+                className="border rounded px-2 py-1.5 text-sm"
+              >
+                <option value="size">关系数量</option>
+                <option value="sum">聚合合计</option>
+                <option value="sort">集合排序</option>
+                <option value="variable">变量/属性引用</option>
+                <option value="function_call">函数调用</option>
+              </select>
+              {visual.right.kind === 'variable' ? (
+                <input
+                  type="text"
+                  value={visual.right.variableName ?? ''}
+                  onChange={(e) => setRight({ variableName: e.target.value })}
+                  disabled={disabled}
+                  placeholder="属性名或衍生属性名"
+                  className="border rounded px-2 py-1.5 text-sm min-w-[150px] font-mono"
+                />
+              ) : visual.right.kind === 'function_call' ? (
+                <>
+                  {(() => {
+                    const funcArgs = ensureFuncArgs('right');
+                    const arg1 = funcArgs[0];
+                    const arg2 = funcArgs[1];
+                    return (
+                      <>
+                        <input
+                          type="text"
+                          value={visual.right.funcName ?? ''}
+                          onChange={(e) =>
+                            setRight({
+                              funcName: e.target.value,
+                              funcArgs,
+                            })
+                          }
+                          disabled={disabled}
+                          placeholder="函数名，如 detect_late_upload"
+                          className="border rounded px-2 py-1.5 text-sm min-w-[180px] font-mono"
+                        />
+                        <span className="text-xs text-gray-500 ml-1">参数1：</span>
+                        <select
+                          value={arg1.kind}
+                          onChange={(e) =>
+                            setRight({
+                              funcArgs: [
+                                {
+                                  ...arg1,
+                                  kind: e.target.value as any,
+                                },
+                                arg2,
+                              ],
+                            })
+                          }
+                          disabled={disabled}
+                          className="border rounded px-2 py-1.5 text-sm"
+                        >
+                          <option value="link">关系</option>
+                          <option value="variable">变量/属性</option>
+                        </select>
+                        {arg1.kind === 'link' ? (
+                          <select
+                            value={arg1.linkType ?? ''}
+                            onChange={(e) =>
+                              setRight({
+                                funcArgs: [
+                                  { ...arg1, linkType: e.target.value },
+                                  arg2,
+                                ],
+                              })
+                            }
+                            disabled={disabled}
+                            className="border rounded px-2 py-1.5 text-sm min-w-[130px]"
+                          >
+                            <option value="">请选择关系</option>
+                            {relations.map((r) => (
+                              <option key={r.name} value={r.name}>
+                                {relationDisplay(r)}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <input
+                            type="text"
+                            value={arg1.variableName ?? ''}
+                            onChange={(e) =>
+                              setRight({
+                                funcArgs: [
+                                  { ...arg1, variableName: e.target.value },
+                                  arg2,
+                                ],
+                              })
+                            }
+                            disabled={disabled}
+                            placeholder="变量/属性名，如 split_time"
+                            className="border rounded px-2 py-1.5 text-sm min-w-[150px] font-mono"
+                          />
+                        )}
+                        {arg2 ? (
+                          <>
+                            <span className="text-xs text-gray-500 ml-2">参数2（可选）：</span>
+                            <select
+                              value={arg2.kind}
+                              onChange={(e) =>
+                                setRight({
+                                  funcArgs: [
+                                    arg1,
+                                    {
+                                      ...arg2,
+                                      kind: e.target.value as any,
+                                    },
+                                  ],
+                                })
+                              }
+                              disabled={disabled}
+                              className="border rounded px-2 py-1.5 text-sm"
+                            >
+                              <option value="link">关系</option>
+                              <option value="variable">变量/属性</option>
+                            </select>
+                            {arg2.kind === 'link' ? (
+                              <select
+                                value={arg2.linkType ?? ''}
+                                onChange={(e) =>
+                                  setRight({
+                                    funcArgs: [
+                                      arg1,
+                                      { ...arg2, linkType: e.target.value },
+                                    ],
+                                  })
+                                }
+                                disabled={disabled}
+                                className="border rounded px-2 py-1.5 text-sm min-w-[130px]"
+                              >
+                                <option value="">请选择关系</option>
+                                {relations.map((r) => (
+                                  <option key={r.name} value={r.name}>
+                                    {relationDisplay(r)}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <input
+                                type="text"
+                                value={arg2.variableName ?? ''}
+                                onChange={(e) =>
+                                  setRight({
+                                    funcArgs: [
+                                      arg1,
+                                      { ...arg2, variableName: e.target.value },
+                                    ],
+                                  })
+                                }
+                                disabled={disabled}
+                                placeholder="变量/属性名，如 split_time"
+                                className="border rounded px-2 py-1.5 text-sm min-w-[150px] font-mono"
+                              />
+                            )}
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setRight({
+                                  funcArgs: [arg1],
+                                })
+                              }
+                              disabled={disabled}
+                              className="ml-2 text-xs text-gray-500 hover:text-gray-700"
+                            >
+                              移除参数2
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setRight({
+                                funcArgs: [
+                                  arg1,
+                                  { kind: 'variable', variableName: '' } as any,
+                                ],
+                              })
+                            }
+                            disabled={disabled}
+                            className="ml-2 text-xs text-blue-600 hover:text-blue-800"
+                          >
+                            + 添加参数2
+                          </button>
+                        )}
+                      </>
+                    );
+                  })()}
+                </>
+              ) : (
           <>
           <select
             value={visual.right.linkType}

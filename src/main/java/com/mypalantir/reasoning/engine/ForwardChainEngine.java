@@ -51,11 +51,22 @@ public class ForwardChainEngine {
         String mainVar = "?p";
 
         // 初始化：将衍生属性值作为初始事实
+        System.out.println("[ForwardChain] Initializing working memory with " + (derivedValues != null ? derivedValues.size() : 0) + " derived facts");
         if (derivedValues != null) {
             for (Map.Entry<String, Object> entry : derivedValues.entrySet()) {
                 memory.addFact(new Fact(entry.getKey(), mainVar, entry.getValue()));
+                System.out.println("[ForwardChain]   fact: " + entry.getKey() + "(" + mainVar + ") = " + entry.getValue());
             }
         }
+
+        System.out.println("[ForwardChain] linkedData keys: " + (linkedData != null ? linkedData.keySet() : "null"));
+        if (linkedData != null) {
+            for (Map.Entry<String, List<Map<String, Object>>> le : linkedData.entrySet()) {
+                System.out.println("[ForwardChain]   " + le.getKey() + " -> " + le.getValue().size() + " records");
+            }
+        }
+
+        System.out.println("[ForwardChain] Rules to evaluate: " + rules.size());
 
         // 前向链循环（严格分层：新事实在下一 cycle 才可见）
         int cycle = 0;
@@ -63,22 +74,36 @@ public class ForwardChainEngine {
         do {
             cycle++;
             newFactsProduced = false;
+            System.out.println("\n[ForwardChain] ===== Cycle " + cycle + " =====");
             InferenceResult.CycleDetail cycleDetail = new InferenceResult.CycleDetail(cycle);
             List<Fact> pendingFacts = new ArrayList<>();
 
             // 对当前工作内存做快照，本轮规则只匹配快照中的事实
             WorkingMemory snapshot = memory.snapshot();
+            System.out.println("[ForwardChain] Working memory snapshot: " + snapshot.getAllFacts().size() + " facts");
 
             for (SWRLRule rule : rules) {
                 snapshot.clearBindings();
                 snapshot.bind(mainVar, instanceData);
 
+                System.out.println("\n[ForwardChain] --- Evaluating rule: " + rule.getName() + " ---");
+                System.out.println("[ForwardChain]   Antecedents (" + rule.getAntecedents().size() + "):");
+                for (int ai = 0; ai < rule.getAntecedents().size(); ai++) {
+                    System.out.println("[ForwardChain]     [" + ai + "] " + rule.getAntecedents().get(ai));
+                }
+
                 List<InferenceResult.MatchDetail> matchDetails = matchAntecedents(rule.getAntecedents(), snapshot, instanceData, linkedData, mainVar, functionCallCache, rule.getName());
                 boolean matched = matchDetails != null;
+
                 if (matched) {
-                    // 触发规则：产生后件事实（暂存，不立即加入工作内存）
                     Fact newFact = fireConsequent(rule.getConsequent(), snapshot, mainVar);
                     boolean isNew = newFact != null && !memory.containsFact(newFact) && !pendingFacts.contains(newFact);
+                    System.out.println("[ForwardChain]   MATCHED! consequent: " + newFact + " | isNew=" + isNew);
+                    if (matchDetails != null) {
+                        for (InferenceResult.MatchDetail md : matchDetails) {
+                            System.out.println("[ForwardChain]     condition: " + md.condition() + " | matched=" + md.matched() + " | actual=" + md.actualValue());
+                        }
+                    }
                     cycleDetail.addEvaluation(new InferenceResult.RuleEvaluation(
                         rule.getName(), rule.getDisplayName(), true, newFact, isNew, matchDetails));
                     if (isNew) {
@@ -87,20 +112,24 @@ public class ForwardChainEngine {
                         newFactsProduced = true;
                     }
                 } else {
+                    System.out.println("[ForwardChain]   NOT matched. First failing antecedent details:");
                     cycleDetail.addEvaluation(new InferenceResult.RuleEvaluation(
                         rule.getName(), rule.getDisplayName(), false, null, false));
                 }
             }
 
             // 轮次结束后，将本轮新事实合并到工作内存
+            System.out.println("\n[ForwardChain] Cycle " + cycle + " produced " + pendingFacts.size() + " new facts");
             for (Fact fact : pendingFacts) {
                 memory.addFact(fact);
+                System.out.println("[ForwardChain]   new fact: " + fact);
             }
 
             cycleDetail.setNewFactsProduced(newFactsProduced);
             result.addCycleDetail(cycleDetail);
         } while (newFactsProduced && cycle < MAX_CYCLES);
 
+        System.out.println("\n[ForwardChain] Forward chaining complete. Total cycles: " + cycle);
         result.setCycleCount(cycle);
         return result;
     }
@@ -122,7 +151,11 @@ public class ForwardChainEngine {
 
             AtomMatchResult amr = matchAtomWithDetail(atom, memory, instanceData, linkedData, mainVar, functionCallCache);
             details.add(new InferenceResult.MatchDetail(amr.condition, amr.matched, amr.actualValue, amr.description));
-            if (!amr.matched) return null;
+            System.out.println("[ForwardChain]     antecedent: " + amr.condition + " | matched=" + amr.matched + " | actual=" + amr.actualValue + " | " + (amr.description != null ? amr.description : ""));
+            if (!amr.matched) {
+                System.out.println("[ForwardChain]     >> FAILED at: " + amr.condition + " (rule " + ruleName + ")");
+                return null;
+            }
         }
         return details;
     }

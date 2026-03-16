@@ -23,13 +23,14 @@ public class AgentTools {
     private final ReasoningService reasoningService;
     private final QueryService queryService;
     private final NaturalLanguageQueryService nlqService;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper;
 
     public AgentTools(ReasoningService reasoningService, QueryService queryService,
-                      NaturalLanguageQueryService nlqService) {
+                      NaturalLanguageQueryService nlqService, ObjectMapper objectMapper) {
         this.reasoningService = reasoningService;
         this.queryService = queryService;
         this.nlqService = nlqService;
+        this.objectMapper = objectMapper;
     }
 
     /**
@@ -96,6 +97,11 @@ public class AgentTools {
      * 调用诊断函数（object_type、instance_id 为当前本体的类型与实例）
      * args: { "object_type": "...", "instance_id": "...", "function": "..." }
      * 兼容旧字段: passage_id → instance_id，object_type 默认取当前本体推理根类型
+     *
+     * 委托给 ReasoningService.testFunctionWithInstance，与推理引擎使用完全一致的调用链：
+     *   buildInstanceContext（含 enrichGantryTransactionWithTollItems）
+     *   → resolveFunctionArgsFromContext（按 schema 函数定义动态解析参数，兼容 JS 脚本函数）
+     *   → functionRegistry.call
      */
     private String callFunction(Map<String, Object> args) throws Exception {
         String objectType = (String) args.get("object_type");
@@ -112,73 +118,12 @@ public class AgentTools {
         FunctionRegistry registry = reasoningService.getFunctionRegistry();
         if (!registry.hasFunction(funcName)) return "函数 " + funcName + " 未注册";
 
-        // 使用与推理引擎完全一致的数据准备逻辑（出边+入边+别名+enrich+衍生属性）
-        ReasoningService.InstanceContext ctx;
         try {
-            ctx = reasoningService.buildInstanceContext(objectType, instanceId);
+            Object result = reasoningService.testFunctionWithInstance(funcName, objectType, instanceId);
+            return funcName + " → " + toReadableString(result);
         } catch (IllegalArgumentException e) {
             return objectType + " " + instanceId + " 不存在";
         }
-
-        List<Object> funcArgs = buildFunctionArgsFromContext(funcName, ctx, objectType);
-        Object result = registry.call(funcName, funcArgs);
-        return funcName + " → " + result;
-    }
-
-    /**
-     * 从 linkedData 中按目标类型后缀匹配关联数据。
-     * 例如 targetSuffix="GantryTransaction" 会匹配 key 中包含该后缀的 link。
-     */
-    private List<Map<String, Object>> resolveLinkedByTargetSuffix(
-            Map<String, List<Map<String, Object>>> linkedData,
-            String objectType,
-            String targetSuffix) {
-        if (linkedData == null) return List.of();
-        String suffixLower = targetSuffix.toLowerCase();
-        for (Map.Entry<String, List<Map<String, Object>>> entry : linkedData.entrySet()) {
-            String key = entry.getKey().replace("_", "").toLowerCase();
-            if (key.contains(suffixLower.replace("_", "").toLowerCase())) {
-                return entry.getValue() != null ? entry.getValue() : List.of();
-            }
-        }
-        return List.of();
-    }
-
-    /**
-     * 根据函数名和 InstanceContext 动态构建参数列表。
-     * 通过 schema 的 LinkType 定义识别关联数据类型，避免硬编码目标类型名称字符串。
-     */
-    private List<Object> buildFunctionArgsFromContext(String funcName,
-                                                       ReasoningService.InstanceContext ctx,
-                                                       String objectType) {
-        Map<String, Object> instance = ctx.instance;
-        Map<String, List<Map<String, Object>>> linkedData = ctx.linkedData;
-
-        // 从 schema 动态识别各类关联数据（按目标类型名后缀匹配，而非硬编码字符串）
-        List<Map<String, Object>> gantryTxs = resolveLinkedByTargetSuffix(linkedData, objectType, "GantryTransaction");
-        List<Map<String, Object>> splitDetails = resolveLinkedByTargetSuffix(linkedData, objectType, "SplitDetail");
-
-        // 衍生属性中的 pro_split_time 优先从 derivedValues 取，其次从 splitDetails 取
-        Object proSplitTime = ctx.derivedValues.get("pro_split_time");
-        if (proSplitTime == null && !splitDetails.isEmpty()) {
-            proSplitTime = splitDetails.get(0).get("pro_split_time");
-        }
-
-        // 按函数签名构建参数（函数签名由 schema 中 functions 定义，此处按已注册的内置函数约定）
-        return switch (funcName) {
-            case "is_single_province_etc", "is_obu_billing_mode1" ->
-                List.of(instance);
-            case "check_route_consistency", "check_fee_detail_consistency" ->
-                List.of(splitDetails, gantryTxs);
-            case "detect_duplicate_intervals", "check_gantry_hex_continuity",
-                 "check_gantry_count_complete", "check_balance_continuity" ->
-                List.of(gantryTxs);
-            case "check_rounding_mismatch" ->
-                List.of(gantryTxs, 0.95);
-            case "detect_late_upload" ->
-                List.of(gantryTxs, proSplitTime != null ? proSplitTime : "");
-            default -> List.of(instance);
-        };
     }
 
     /**
@@ -262,6 +207,44 @@ public class AgentTools {
     }
 
     /**
+     * 将函数返回值转为可读字符串，兼容 Nashorn ScriptObjectMirror（JS 数组/对象）。
+     * ScriptObjectMirror 直接 toString() 输出 "[object Array]"，需要遍历转换。
+     * 使用反射判断类型，避免对 nashorn-core 产生编译期强依赖。
+     */
+    private String toReadableString(Object result) {
+        if (result == null) return "null";
+        // 通过类名反射判断是否为 Nashorn ScriptObjectMirror，避免编译期强依赖
+        String className = result.getClass().getName();
+        if (className.contains("ScriptObjectMirror")) {
+            try {
+                // isArray()
+                boolean isArray = (boolean) result.getClass().getMethod("isArray").invoke(result);
+                if (isArray) {
+                    int size = (int) result.getClass().getMethod("size").invoke(result);
+                    List<Object> list = new ArrayList<>();
+                    java.lang.reflect.Method getSlot = result.getClass().getMethod("getSlot", int.class);
+                    for (int i = 0; i < size; i++) {
+                        list.add(getSlot.invoke(result, i));
+                    }
+                    return list.toString();
+                }
+            } catch (Exception ignored) {
+                // 反射失败时降级为 toString
+            }
+            return result.toString();
+        }
+        // 普通 Map/List 用 JSON 序列化
+        if (result instanceof Map || result instanceof List) {
+            try {
+                return objectMapper.writeValueAsString(result);
+            } catch (Exception e) {
+                return result.toString();
+            }
+        }
+        return result.toString();
+    }
+
+    /**
      * 获取工具描述（用于 system prompt）；类型、关联、函数均从当前加载的本体动态生成。
      */
     public String getToolDescriptions() {
@@ -283,23 +266,31 @@ public class AgentTools {
             }
         }
 
-        // 动态生成函数列表
+        // 触发 schema 懒解析，确保脚本函数已注册到 functionRegistry
+        reasoningService.getParsedRules();
+
+        // 动态生成函数列表：优先从 schema 定义取描述，以 functionRegistry 中实际注册的函数为准
         StringBuilder funcList = new StringBuilder();
-        List<FunctionDef> functions = loader.listFunctions();
-        if (!functions.isEmpty()) {
-            for (FunctionDef fd : functions) {
-                funcList.append("           - ").append(fd.getName());
-                if (fd.getDescription() != null && !fd.getDescription().isBlank()) {
-                    funcList.append(": ").append(fd.getDescription());
-                } else if (fd.getDisplayName() != null && !fd.getDisplayName().isBlank()) {
-                    funcList.append(": ").append(fd.getDisplayName());
-                }
-                funcList.append("\n");
-            }
-        } else {
-            Set<String> registered = reasoningService.getRegisteredFunctions();
+        Map<String, String> displayNames = reasoningService.getFunctionDisplayNames();
+        List<FunctionDef> schemaDefs = loader.listFunctions();
+        Map<String, FunctionDef> defMap = new LinkedHashMap<>();
+        for (FunctionDef fd : schemaDefs) {
+            defMap.put(fd.getName(), fd);
+        }
+        Set<String> registered = reasoningService.getRegisteredFunctions();
+        if (!registered.isEmpty()) {
             for (String fn : registered) {
-                funcList.append("           - ").append(fn).append("\n");
+                funcList.append("           - ").append(fn);
+                FunctionDef fd = defMap.get(fn);
+                String desc = null;
+                if (fd != null) {
+                    desc = fd.getDescription() != null && !fd.getDescription().isBlank()
+                            ? fd.getDescription()
+                            : (fd.getDisplayName() != null && !fd.getDisplayName().isBlank() ? fd.getDisplayName() : null);
+                }
+                if (desc == null) desc = displayNames.get(fn);
+                if (desc != null) funcList.append(": ").append(desc);
+                funcList.append("\n");
             }
         }
 

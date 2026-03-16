@@ -1,9 +1,19 @@
 /**
  * CEL 表达式可视化编辑：结构定义与 expr 互转
- * 支持：关系数量比较、聚合合计比较、集合排序比较
+ * 支持：关系数量比较、聚合合计比较、集合排序比较、函数调用（函数名 + 关系 / 变量 / 混合参数）
  */
 
-export type CelOperandKind = 'size' | 'sum' | 'sort' | 'variable';
+export type CelOperandKind = 'size' | 'sum' | 'sort' | 'variable' | 'function_call';
+
+export type CelFuncArgKind = 'link' | 'variable';
+
+export interface CelFuncArg {
+  kind: CelFuncArgKind;
+  /** kind=link 时的关系名，如 has_gantry_transaction */
+  linkType?: string;
+  /** kind=variable 时的变量/属性名，如 split_time */
+  variableName?: string;
+}
 
 export interface CelOperand {
   kind: CelOperandKind;
@@ -16,6 +26,14 @@ export interface CelOperand {
   useDouble?: boolean;
   /** variable 类型时的变量/属性名引用（如衍生属性名） */
   variableName?: string;
+  /** function_call 类型时的函数名 */
+  funcName?: string;
+  /**
+   * function_call 参数列表：
+   * - 支持多个参数
+   * - 每个参数可为关系（links.xxx）或变量/属性名
+   */
+  funcArgs?: CelFuncArg[];
 }
 
 export type CelExprMode = 'single' | 'compare';
@@ -48,6 +66,40 @@ function celOperandToExpr(op: CelOperand, defaultAlias: string): string {
   if (op.kind === 'variable') {
     return op.variableName ?? '';
   }
+  if (op.kind === 'function_call') {
+    const funcName = (op.funcName ?? '').trim();
+    if (!funcName) return '';
+    // 优先使用 funcArgs（多参数），兼容旧的单参数字段
+    const args: CelFuncArg[] = (() => {
+      if (op.funcArgs && op.funcArgs.length > 0) {
+        return op.funcArgs;
+      }
+      // 兼容旧结构：只有 funcArgKind / funcArgLinkType / funcArgVariableName
+      const argKind: CelFuncArgKind = (op as any).funcArgKind ?? 'link';
+      if (argKind === 'link') {
+        const lt = ((op as any).funcArgLinkType ?? '').trim();
+        if (!lt) return [];
+        return [{ kind: 'link', linkType: lt }];
+      }
+      const v = ((op as any).funcArgVariableName ?? '').trim();
+      if (!v) return [];
+      return [{ kind: 'variable', variableName: v }];
+    })();
+    if (args.length === 0) return '';
+    const argExprs = args
+      .map((a) => {
+        if (a.kind === 'link') {
+          const lt = (a.linkType ?? '').trim();
+          if (!lt) return '';
+          return `links.${lt}`;
+        }
+        const v = (a.variableName ?? '').trim();
+        return v || '';
+      })
+      .filter((s) => s);
+    if (argExprs.length === 0) return '';
+    return `${funcName}(${argExprs.join(', ')})`;
+  }
   return '';
 }
 
@@ -75,6 +127,36 @@ function parseOperand(s: string): CelOperand | null {
 
   const sortMatch = t.match(/^links\.(\w+)\s*\.map\s*\(\s*(\w+)\s*,\s*\w+\.(\w+)\s*\)\.sort\(\)$/);
   if (sortMatch) return { kind: 'sort', linkType: sortMatch[1], alias: sortMatch[2], property: sortMatch[3] };
+
+  // 函数调用：支持多参数，如 detect_late_upload(links.has_gantry_transaction, split_time)
+  const funcCallMatch = t.match(/^([a-zA-Z_]\w*)\s*\(\s*(.+)\s*\)$/);
+  if (funcCallMatch) {
+    const funcName = funcCallMatch[1];
+    const argsRaw = funcCallMatch[2];
+    const argStrs = argsRaw.split(',').map((x) => x.trim()).filter((x) => x.length > 0);
+    const funcArgs: CelFuncArg[] = [];
+    for (const arg of argStrs) {
+      const linkMatch = arg.match(/^links\.(\w+)$/);
+      if (linkMatch) {
+        funcArgs.push({ kind: 'link', linkType: linkMatch[1] });
+        continue;
+      }
+      const varMatch = arg.match(/^[a-zA-Z_]\w*$/);
+      if (varMatch) {
+        funcArgs.push({ kind: 'variable', variableName: varMatch[0] });
+        continue;
+      }
+      // 对于暂不识别的复杂参数，先按变量名兜底展示原文
+      funcArgs.push({ kind: 'variable', variableName: arg });
+    }
+    if (funcArgs.length === 0) return null;
+    return {
+      kind: 'function_call',
+      linkType: '',
+      funcName,
+      funcArgs,
+    };
+  }
 
   const varMatch = t.match(/^([a-zA-Z_]\w*)$/);
   if (varMatch) return { kind: 'variable', linkType: '', variableName: varMatch[1] };

@@ -117,6 +117,13 @@
             <version>0.9.1</version>
         </dependency>
 
+        <!-- JavaScript engine for ontology script functions (Nashorn on Java 15+) -->
+        <dependency>
+            <groupId>org.openjdk.nashorn</groupId>
+            <artifactId>nashorn-core</artifactId>
+            <version>15.4</version>
+        </dependency>
+
         <!-- BouncyCastle for SM2 encryption -->
         <dependency>
             <groupId>org.bouncycastle</groupId>

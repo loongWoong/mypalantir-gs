@@ -20,6 +20,8 @@
     "@tailwindcss/typography": "^0.5.19",
     "autoprefixer": "^10.4.23",
     "axios": "^1.13.2",
+    "@monaco-editor/react": "^4.7.0",
+    "monaco-editor": "^0.52.0",
     "estree-util-is-identifier-name": "^3.0.0",
     "extend": "^3.0.0",
     "html2canvas": "^1.4.1",

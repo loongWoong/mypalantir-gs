@@ -24,6 +24,11 @@ public class ConfigurableCelFunctionRegistry implements CelFunctionRegistry {
     private final Map<String, List<CelFunction>> functionsByName = new ConcurrentHashMap<>();
 
     @Override
+    public void clear() {
+        functionsByName.clear();
+    }
+
+    @Override
     public void register(String name, CelFunction function) {
         functionsByName.computeIfAbsent(name, k -> new ArrayList<>()).clear();
         functionsByName.get(name).add(function);
@@ -43,11 +48,19 @@ public class ConfigurableCelFunctionRegistry implements CelFunctionRegistry {
             List<CelOverloadDecl> overloadDecls = new ArrayList<>();
             for (CelFunction fn : overloads) {
                 CelFunctionMetadata m = fn.getMetadata();
-                overloadDecls.add(CelOverloadDecl.newMemberOverload(
-                        m.getOverloadId(),
-                        m.getDoc() != null ? m.getDoc() : "",
-                        m.getResultType(),
-                        m.getParameterTypes().toArray(new dev.cel.common.types.CelType[0])));
+                if (m.isMember()) {
+                    overloadDecls.add(CelOverloadDecl.newMemberOverload(
+                            m.getOverloadId(),
+                            m.getDoc() != null ? m.getDoc() : "",
+                            m.getResultType(),
+                            m.getParameterTypes().toArray(new dev.cel.common.types.CelType[0])));
+                } else {
+                    overloadDecls.add(CelOverloadDecl.newGlobalOverload(
+                            m.getOverloadId(),
+                            m.getDoc() != null ? m.getDoc() : "",
+                            m.getResultType(),
+                            m.getParameterTypes().toArray(new dev.cel.common.types.CelType[0])));
+                }
             }
             CelFunctionMetadata first = overloads.get(0).getMetadata();
             decls.add(CelFunctionDecl.newFunctionDeclaration(
@@ -62,10 +75,12 @@ public class ConfigurableCelFunctionRegistry implements CelFunctionRegistry {
         for (List<CelFunction> overloads : functionsByName.values()) {
             for (CelFunction fn : overloads) {
                 String overloadId = fn.getMetadata().getOverloadId();
+                int paramCount = fn.getMetadata().getParameterTypes().size();
+                List<Class<?>> argTypes = new ArrayList<>(Collections.nCopies(Math.max(paramCount, 1), Object.class));
                 runtimeBuilder.addFunctionBindings(
                         CelRuntime.CelFunctionBinding.from(
                                 overloadId,
-                                Collections.singletonList(Object.class),
+                                argTypes,
                                 args -> fn.evaluate(args, CelEvalContext.getCurrent())));
             }
         }

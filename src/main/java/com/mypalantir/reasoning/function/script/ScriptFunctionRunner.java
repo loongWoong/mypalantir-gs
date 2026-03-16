@@ -44,7 +44,12 @@ public class ScriptFunctionRunner {
         ScriptEngine engine = getOrCreateEngine(scriptPath);
         engine.eval(content);
         Invocable inv = (Invocable) engine;
-        Object result = inv.invokeFunction("execute", args != null ? args : List.of());
+        Object result;
+        try {
+            result = inv.invokeFunction("run", args != null ? args.toArray() : new Object[0]);
+        } catch (NoSuchMethodException e1) {
+            result = inv.invokeFunction("execute", args != null ? args : List.of());
+        }
         return result;
     }
 
@@ -77,13 +82,14 @@ public class ScriptFunctionRunner {
 
     private ScriptEngine getOrCreateEngine(String scriptPath) {
         return engineCache.computeIfAbsent(scriptPath, k -> {
-            ScriptEngineManager manager = new ScriptEngineManager();
+            ClassLoader cl = Thread.currentThread().getContextClassLoader();
+            ScriptEngineManager manager = new ScriptEngineManager(cl != null ? cl : getClass().getClassLoader());
             ScriptEngine engine = manager.getEngineByName(JS_ENGINE_NAME);
+            if (engine == null) engine = manager.getEngineByName("nashorn");
+            if (engine == null) engine = manager.getEngineByName("Nashorn");
+            if (engine == null) engine = manager.getEngineByExtension("js");
             if (engine == null) {
-                engine = manager.getEngineByExtension("js");
-            }
-            if (engine == null) {
-                throw new IllegalStateException("No JavaScript script engine available (add nashorn or graaljs dependency)");
+                throw new IllegalStateException("No JavaScript script engine available (add org.openjdk.nashorn:nashorn-core dependency)");
             }
             return engine;
         });

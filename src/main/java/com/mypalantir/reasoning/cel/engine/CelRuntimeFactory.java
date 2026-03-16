@@ -62,6 +62,8 @@ public class CelRuntimeFactory {
             CelCompiler compiler = compilerBuilder.build();
             CelValidationResult result = compiler.compile(expr);
             if (result.hasError()) {
+                String errMsg = result.getErrors().isEmpty() ? "unknown" : result.getErrors().get(0).getMessage();
+                System.err.println("[CEL] Compilation failed for expr: " + expr + " | error: " + errMsg);
                 return null;
             }
             CelAbstractSyntaxTree ast = result.getAst();

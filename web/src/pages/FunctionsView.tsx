@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import Editor from '@monaco-editor/react';
 import type {
   OntologyBuilderPayload,
   FunctionPayload,
@@ -65,22 +66,20 @@ function getOntologyScriptFolder(ontologyFilename: string): string {
 
 /**
  * 解析用于加载/保存的脚本路径（相对 ontology/functions/script/）：
- * builtin 时从系统默认路径加载：本体文件同名文件夹下的函数同名脚本，即 {ontologyScriptFolder}/{name}.js。
+ * - 若 ontology 中已显式配置 script_path，则优先使用该路径（如 obu_split_analysis.ontology/detect_late_upload.js）；
+ * - 否则 builtin 函数从默认路径加载：本体文件同名文件夹下的函数同名脚本，即 {ontologyScriptFolder}/{name}.js。
  */
 function getEffectiveScriptPath(fn: FunctionPayload | null, ontologyFilename?: string): string {
   if (!fn?.name) return '';
+  if (fn.script_path && fn.script_path.trim()) {
+    return fn.script_path.trim();
+  }
   const impl = getImplementation(fn);
   if (impl === 'builtin') {
     const folder = getOntologyScriptFolder(ontologyFilename ?? '');
     return `${folder}/${fn.name}.js`;
   }
   return '';
-}
-
-/** 是否应显示脚本编辑区：所有 builtin 函数均展示脚本编辑（从 ontology/functions/script/{本体同名}/{name}.js 加载），不依赖 script_configured */
-function shouldShowScriptEditor(fn: FunctionPayload | null): boolean {
-  if (!fn?.name) return false;
-  return getImplementation(fn) === 'builtin';
 }
 
 /** 从规则 SWRL 表达式中解析“作用域”（第一个谓词的主语类型），与 RulesView 一致 */
@@ -167,12 +166,15 @@ export default function FunctionsView() {
   const [scriptLoading, setScriptLoading] = useState(false);
   const [scriptSaving, setScriptSaving] = useState(false);
   const [scriptError, setScriptError] = useState<string | null>(null);
+  const [scriptModalOpen, setScriptModalOpen] = useState(false);
 
   const functions = schema?.functions ?? [];
   const rules = schema?.rules ?? [];
   const selectedFn = selectedIndex !== null && functions[selectedIndex] ? functions[selectedIndex] : null;
   const objectTypes = schema?.object_types ?? [];
   const linkTypes = schema?.link_types ?? [];
+
+  const canEditScript = !!(selectedFn && getEffectiveScriptPath(selectedFn, selectedFilename));
 
   const toggleGroupCollapse = (groupName: string) => {
     setCollapsedGroups((prev) => {
@@ -451,7 +453,7 @@ export default function FunctionsView() {
     const fn = selectedFn;
     if (!fn) return;
     const path = getEffectiveScriptPath(fn, selectedFilename);
-    if (!path || !shouldShowScriptEditor(fn)) {
+    if (!path) {
       setScriptContent('');
       setScriptError(null);
       return;
@@ -469,21 +471,12 @@ export default function FunctionsView() {
     } finally {
       setScriptLoading(false);
     }
-  }, [selectedFn?.script_path, selectedFn?.script_configured, selectedFn?.name, selectedFn, selectedIndex, selectedFilename]);
-
-  useEffect(() => {
-    if (selectedFn && shouldShowScriptEditor(selectedFn) && getEffectiveScriptPath(selectedFn, selectedFilename)) {
-      loadScriptContent();
-    } else {
-      setScriptContent('');
-      setScriptError(null);
-    }
-  }, [selectedFn?.name, selectedFn?.script_path, selectedFn?.script_configured, selectedFilename, loadScriptContent]);
+  }, [selectedFn, selectedFilename]);
 
   const saveScriptContent = useCallback(async () => {
     if (!selectedFn) return;
     const path = getEffectiveScriptPath(selectedFn, selectedFilename);
-    if (!path || !shouldShowScriptEditor(selectedFn)) return;
+    if (!path) return;
     setScriptSaving(true);
     setScriptError(null);
     try {
@@ -683,6 +676,21 @@ export default function FunctionsView() {
                   <div className="flex items-center justify-between flex-wrap gap-2">
                     <h3 className="text-xl font-bold text-gray-900">{selectedFn.display_name || selectedFn.name}</h3>
                     <div className="flex items-center gap-2">
+                      {canEditScript && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setScriptModalOpen(true);
+                            loadScriptContent();
+                          }}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-slate-100 text-slate-800 text-sm hover:bg-slate-200"
+                        >
+                          <span className="w-4 h-4 border border-slate-500 rounded-sm flex items-center justify-center text-[10px] mr-0.5">
+                            {'</>'}
+                          </span>
+                          编辑脚本
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={openTestModal}
@@ -752,47 +760,7 @@ export default function FunctionsView() {
                       <option value="external">external（外部服务）</option>
                     </select>
                   </div>
-                  {shouldShowScriptEditor(selectedFn) && (
-                    <>
-                        <div className="border border-gray-200 rounded-lg overflow-hidden bg-gray-50/50">
-                          <div className="flex items-center justify-between px-3 py-2 bg-gray-100 border-b border-gray-200">
-                            <span className="text-sm font-medium text-gray-700">脚本编辑</span>
-                            <div className="flex items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={loadScriptContent}
-                                disabled={scriptLoading}
-                                className="text-xs px-2 py-1 rounded border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50"
-                              >
-                                {scriptLoading ? '加载中...' : '重新加载'}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={saveScriptContent}
-                                disabled={scriptSaving}
-                                className="text-xs px-2 py-1 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
-                              >
-                                {scriptSaving ? '保存中...' : '保存脚本'}
-                              </button>
-                            </div>
-                          </div>
-                          {scriptError && (
-                            <p className="text-xs text-red-600 px-3 py-1 bg-red-50 border-b border-red-100">{scriptError}</p>
-                          )}
-                          <textarea
-                            value={scriptContent}
-                            onChange={(e) => setScriptContent(e.target.value)}
-                            className="w-full h-64 p-3 text-sm font-mono border-0 focus:ring-0 focus:outline-none resize-y min-h-[200px]"
-                            placeholder="function execute(args) { ... }"
-                            spellCheck={false}
-                          />
-                          <p className="text-xs text-gray-500 px-3 pb-2">
-                            约定：定义 execute(args)，args 为参数列表，返回 boolean/number/string 等。
-                            <span className="block mt-1">路径：ontology/functions/script/{getEffectiveScriptPath(selectedFn, selectedFilename)}</span>
-                          </p>
-                        </div>
-                    </>
-                  )}
+                  {/* 脚本编辑改为弹窗形式，“编辑脚本”按钮触发，便于聚焦编辑 JS 逻辑 */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">出参（返回类型）</label>
                     <input
@@ -1111,6 +1079,88 @@ export default function FunctionsView() {
                 )}
               </div>
             )}
+          </div>
+        </div>
+      )}
+      {/* 函数脚本编辑弹窗 */}
+      {scriptModalOpen && selectedFn && canEditScript && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40"
+          onClick={() => setScriptModalOpen(false)}
+        >
+          <div
+            className="bg-white rounded-lg shadow-xl max-w-3xl w-full p-5 space-y-4 max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-900">
+                编辑脚本：{selectedFn.name}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setScriptModalOpen(false)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <XMarkIcon className="w-5 h-5" />
+              </button>
+            </div>
+            <p className="text-xs text-gray-500">
+              约定：定义 <code className="bg-gray-100 px-1 rounded">execute(args)</code> 或
+              <code className="bg-gray-100 px-1 rounded ml-1">run(...args)</code>，args 为参数列表，返回 boolean/number/string 等。
+              <span className="block mt-1">
+                路径：ontology/functions/script/{getEffectiveScriptPath(selectedFn, selectedFilename)}
+              </span>
+            </p>
+            {scriptError && (
+              <p className="text-xs text-red-600 px-3 py-1 bg-red-50 border border-red-100 rounded">
+                {scriptError}
+              </p>
+            )}
+            <div className="border border-gray-200 rounded-lg overflow-hidden">
+              <Editor
+                height="420px"
+                defaultLanguage="javascript"
+                value={scriptContent}
+                onChange={(value) => setScriptContent(value ?? '')}
+                theme="vs-dark"
+                options={{
+                  minimap: { enabled: false },
+                  fontSize: 13,
+                  automaticLayout: true,
+                  scrollBeyondLastLine: false,
+                  wordWrap: 'on',
+                }}
+              />
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={loadScriptContent}
+                  disabled={scriptLoading}
+                  className="text-xs px-3 py-1.5 rounded border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50"
+                >
+                  {scriptLoading ? '加载中...' : '重新加载'}
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await saveScriptContent();
+                  }}
+                  disabled={scriptSaving}
+                  className="text-xs px-3 py-1.5 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {scriptSaving ? '保存中...' : '保存脚本'}
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={() => setScriptModalOpen(false)}
+                className="px-3 py-1.5 rounded-md border border-gray-300 text-xs hover:bg-gray-50"
+              >
+                关闭
+              </button>
+            </div>
           </div>
         </div>
       )}

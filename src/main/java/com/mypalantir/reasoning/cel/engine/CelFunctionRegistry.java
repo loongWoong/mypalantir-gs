@@ -18,4 +18,7 @@ public interface CelFunctionRegistry {
     Collection<CelFunctionDecl> getFunctionDeclarations();
 
     void addFunctionBindings(CelRuntimeBuilder runtimeBuilder);
+
+    /** 清除所有已注册的函数声明与绑定 */
+    default void clear() {}
 }

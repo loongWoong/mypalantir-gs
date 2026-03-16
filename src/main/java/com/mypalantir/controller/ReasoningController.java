@@ -34,8 +34,10 @@ public class ReasoningController {
             return ApiResponse.error(400, "object_type and instance_id are required (or passage_id for backward compat)");
         }
         try {
-            InferenceResult result = reasoningService.inferInstance(objectType, instanceId);
-            return ApiResponse.success(result.toMap());
+            var withContext = reasoningService.inferInstanceWithLinkedData(objectType, instanceId);
+            Map<String, Object> response = new LinkedHashMap<>(withContext.result().toMap());
+            response.put("linkedDataSummary", withContext.linkedDataSummary());
+            return ApiResponse.success(response);
         } catch (Exception e) {
             return ApiResponse.error(500, "Inference failed: " + e.getMessage());
         }
@@ -55,6 +57,43 @@ public class ReasoningController {
             return ApiResponse.success(results);
         } catch (Exception e) {
             return ApiResponse.error(500, "Batch inference failed: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 批量推理（全量同步）：遍历所有实例，同步返回每条实例的规则摘要，供前端分组展示。
+     * POST /api/reasoning/batch-all-sync
+     * Body: { "object_type": "Passage" }
+     */
+    @PostMapping("/batch-all-sync")
+    public ApiResponse<List<Map<String, Object>>> inferBatchAllSync(@RequestBody Map<String, Object> request) {
+        String objectType = request.containsKey("object_type") ? String.valueOf(request.get("object_type")) : "Passage";
+        try {
+            List<Map<String, Object>> results = reasoningService.inferBatchAllSync(objectType);
+            return ApiResponse.success(results);
+        } catch (Exception e) {
+            return ApiResponse.error(500, "Batch-all-sync inference failed: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 批量推理（全量）：异步遍历指定类型的所有实例，结果写入 logs/Reasoning.log
+     * POST /api/reasoning/batch-all
+     * Body: { "object_type": "Passage" }
+     */
+    @PostMapping("/batch-all")
+    public ApiResponse<Map<String, Object>> inferBatchAll(@RequestBody Map<String, Object> request) {
+        String objectType = request.containsKey("object_type") ? String.valueOf(request.get("object_type")) : "Passage";
+        try {
+            reasoningService.inferBatchAllAsync(objectType);
+            Map<String, Object> resp = new java.util.LinkedHashMap<>();
+            resp.put("status", "started");
+            resp.put("object_type", objectType);
+            resp.put("log", "logs/Reasoning.log");
+            resp.put("message", "批量推理已在后台启动，结果将写入 logs/Reasoning.log");
+            return ApiResponse.success(resp);
+        } catch (Exception e) {
+            return ApiResponse.error(500, "Batch-all inference failed: " + e.getMessage());
         }
     }
 

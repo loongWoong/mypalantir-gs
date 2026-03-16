@@ -769,11 +769,22 @@ export interface InferenceResult {
   cycles: CycleDetail[];
   trace: TraceEntry[];
   facts: Record<string, any>;
+  /** 加载关联数据摘要：link 名称 -> { count, displayName }（推理 API 返回） */
+  linkedDataSummary?: Record<string, { count: number; displayName?: string }>;
 }
 
 export interface ReasoningStatus {
   parsedRules: number;
   registeredFunctions: string[];
+}
+
+/** 批量推理单条实例摘要 */
+export interface BatchInstanceResult {
+  instanceId: string;
+  firedRules: string[];
+  facts: Record<string, any>;
+  cycleCount?: number;
+  error?: string;
 }
 
 export const reasoningApi = {
@@ -799,6 +810,24 @@ export const reasoningApi = {
     const response = await apiClient.post<ApiResponse<Record<string, any>[]>>(
       '/reasoning/batch',
       { object_type: objectType, limit }
+    );
+    return response.data.data;
+  },
+
+  /** 批量推理（全量）：异步遍历所有实例，结果写入 logs/Reasoning.log */
+  batchAll: async (objectType: string): Promise<{ status: string; log: string; message: string }> => {
+    const response = await apiClient.post<ApiResponse<{ status: string; log: string; message: string }>>(
+      '/reasoning/batch-all',
+      { object_type: objectType }
+    );
+    return response.data.data;
+  },
+
+  /** 批量推理（全量同步）：遍历所有实例，同步返回每条实例的规则摘要，供前端分组展示 */
+  batchAllSync: async (objectType: string): Promise<BatchInstanceResult[]> => {
+    const response = await apiClient.post<ApiResponse<BatchInstanceResult[]>>(
+      '/reasoning/batch-all-sync',
+      { object_type: objectType }
     );
     return response.data.data;
   },
