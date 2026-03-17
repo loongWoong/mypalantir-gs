@@ -120,3 +120,4 @@ data/**/*.lock.db
 
 test-reports/
 .env*
+.claude*
