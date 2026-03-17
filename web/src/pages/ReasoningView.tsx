@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { reasoningApi, instanceApi } from '../api/client';
-import type { InferenceResult, ReasoningStatus, Instance, CycleDetail, MatchDetail, BatchInstanceResult } from '../api/client';
+import type { InferenceResult, ReasoningStatus, Instance, CycleDetail, BatchInstanceResult } from '../api/client';
 
 // 根据触发规则列表生成分组签名（排序后 join，保证顺序无关）
 function ruleSignature(firedRules: string[]): string {

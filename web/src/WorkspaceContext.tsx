@@ -12,7 +12,7 @@ export interface Workspace {
   raw: Instance;
 }
 
-interface WorkspaceContextValue {
+export interface WorkspaceContextValue {
   workspaces: Workspace[];
   selectedWorkspaceId: string | null;
   selectedWorkspace: Workspace | null;

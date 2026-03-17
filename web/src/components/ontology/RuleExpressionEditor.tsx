@@ -4,7 +4,6 @@ import {
   TrashIcon,
   CodeBracketIcon,
   Squares2X2Icon,
-  ClipboardDocumentIcon,
   ExclamationTriangleIcon,
 } from '@heroicons/react/24/outline';
 import type { SwrlVisualRule, SwrlCondition, SwrlConclusion } from '../../utils/ruleExprEditor';
@@ -98,7 +97,6 @@ export function RuleExpressionEditor({
   const [extraVarEntityTypes, setExtraVarEntityTypes] = useState<Record<string, string>>({});
   const [parseWarning, setParseWarning] = useState<string | null>(null);
   const [showSwitchConfirm, setShowSwitchConfirm] = useState(false);
-  const [copiedPreview, setCopiedPreview] = useState(false);
 
   const entityList = entities.length > 0 ? entities : entityTypeNames.map((n) => ({ name: n, attributes: [] }));
   const getEntity = useCallback((name: string) => entityList.find((e) => e.name === name), [entityList]);
@@ -304,13 +302,6 @@ export function RuleExpressionEditor({
       setEditMode('visual');
       setShowSwitchConfirm(false);
     }
-  };
-
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text).then(() => {
-      setCopiedPreview(true);
-      setTimeout(() => setCopiedPreview(false), 2000);
-    });
   };
 
   /** 某变量对应的实体类型 */

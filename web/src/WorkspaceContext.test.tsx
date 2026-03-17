@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRoot } from 'react-dom/client';
 import { act } from 'react';
-import { WorkspaceProvider, useWorkspace } from './WorkspaceContext';
+import { WorkspaceProvider, useWorkspace, type WorkspaceContextValue } from './WorkspaceContext';
 
 const mockList = vi.fn();
 const mockUpdate = vi.fn();
@@ -57,7 +57,7 @@ describe('WorkspaceContext', () => {
     ];
     mockList.mockResolvedValueOnce({ items, total: 1 });
 
-    let captured: ReturnType<typeof useWorkspace> | null = null;
+    let captured: WorkspaceContextValue | null = null;
     root = createRoot(container);
     act(() => {
       root.render(
@@ -73,12 +73,12 @@ describe('WorkspaceContext', () => {
     expect(mockList).toHaveBeenCalledWith('workspace', 0, 100);
     expect(captured).not.toBeNull();
     if (!captured) return;
-    
-    expect(captured.workspaces).toHaveLength(1);
-    expect(captured.workspaces[0].id).toBe('w1');
-    expect(captured.workspaces[0].name).toBe('WS1');
-    expect(captured.workspaces[0].object_types).toEqual(['Vehicle']);
-    expect(captured.workspaces[0].link_types).toEqual(['owns']);
+    const c = captured;
+    expect(c.workspaces).toHaveLength(1);
+    expect(c.workspaces[0].id).toBe('w1');
+    expect(c.workspaces[0].name).toBe('WS1');
+    expect(c.workspaces[0].object_types).toEqual(['Vehicle']);
+    expect(c.workspaces[0].link_types).toEqual(['owns']);
   });
 
   it('object_types 为对象时提取键名', async () => {
@@ -93,7 +93,7 @@ describe('WorkspaceContext', () => {
       total: 1,
     });
 
-    let captured: ReturnType<typeof useWorkspace> | null = null;
+    let captured: WorkspaceContextValue | null = null;
     root = createRoot(container);
     act(() => {
       root.render(
@@ -107,9 +107,9 @@ describe('WorkspaceContext', () => {
 
     expect(captured).not.toBeNull();
     if (!captured) return;
-
-    expect(captured.workspaces[0].object_types).toEqual(expect.arrayContaining(['Vehicle', 'Person']));
-    expect(captured.workspaces[0].object_types).toHaveLength(2);
+    const c = captured;
+    expect(c.workspaces[0].object_types).toEqual(expect.arrayContaining(['Vehicle', 'Person']));
+    expect(c.workspaces[0].object_types).toHaveLength(2);
   });
 
   it('updateWorkspace 调用 update 并刷新', async () => {
@@ -117,7 +117,7 @@ describe('WorkspaceContext', () => {
     mockList.mockResolvedValue({ items, total: 1 });
     mockUpdate.mockResolvedValue({});
 
-    let captured: ReturnType<typeof useWorkspace> | null = null;
+    let captured: WorkspaceContextValue | null = null;
     root = createRoot(container);
     act(() => {
       root.render(
@@ -149,7 +149,7 @@ describe('WorkspaceContext', () => {
       total: 2,
     });
 
-    let captured: ReturnType<typeof useWorkspace> | null = null;
+    let captured: WorkspaceContextValue | null = null;
     root = createRoot(container);
     act(() => {
       root.render(
@@ -163,9 +163,9 @@ describe('WorkspaceContext', () => {
 
     expect(captured).not.toBeNull();
     if (!captured) return;
-
+    const c = captured;
     act(() => {
-      captured!.setSelectedWorkspaceId('w2');
+      c.setSelectedWorkspaceId('w2');
     });
 
     // 重新捕获
@@ -178,8 +178,8 @@ describe('WorkspaceContext', () => {
     // 但 context update 是异步的 state update
     await flushPromises();
 
-    expect(captured.selectedWorkspaceId).toBe('w2');
-    expect(captured.selectedWorkspace?.id).toBe('w2');
-    expect(captured.selectedWorkspace?.name).toBe('B');
+    expect(captured!.selectedWorkspaceId).toBe('w2');
+    expect(captured!.selectedWorkspace?.id).toBe('w2');
+    expect(captured!.selectedWorkspace?.name).toBe('B');
   });
 });
