@@ -119,3 +119,4 @@ data/**/*.trace.db
 data/**/*.lock.db
 
 test-reports/
+.env*

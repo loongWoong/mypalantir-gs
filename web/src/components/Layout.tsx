@@ -14,6 +14,7 @@ import {
   SparklesIcon,
   BuildingOfficeIcon,
   ArrowPathIcon,
+  ArrowRightOnRectangleIcon,
   MapPinIcon,
   UserIcon,
   TruckIcon,
@@ -34,6 +35,7 @@ import type { ObjectType, LinkType, ModelInfo, CurrentModel } from '../api/clien
 import { schemaApi, modelApi } from '../api/client';
 import { useEffect } from 'react';
 import { useWorkspace } from '../WorkspaceContext';
+import { useAuth } from '../AuthContext';
 import WorkspaceDialog from './WorkspaceDialog';
 
 interface LayoutProps {
@@ -54,6 +56,7 @@ export default function Layout({ children }: LayoutProps) {
   const [switchingModel, setSwitchingModel] = useState(false);
   
   const { workspaces, selectedWorkspaceId, selectedWorkspace, setSelectedWorkspaceId, refreshWorkspaces } = useWorkspace();
+  const { logout } = useAuth();
 
   const loadSchemaData = async () => {
     try {
@@ -521,6 +524,7 @@ export default function Layout({ children }: LayoutProps) {
             </h2>
           </div>
           
+          <div className="flex items-center gap-4">
           {/* 模型选择器 */}
           {currentModel && models.length > 0 ? (
             <div className="flex items-center space-x-3">
@@ -550,6 +554,15 @@ export default function Layout({ children }: LayoutProps) {
           ) : (
             <div className="text-xs text-gray-400 animate-pulse">加载模型中...</div>
           )}
+          <button
+            onClick={logout}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition"
+            title="退出登录"
+          >
+            <ArrowRightOnRectangleIcon className="w-4 h-4" />
+            退出
+          </button>
+          </div>
         </header>
 
         {/* Content area */}
