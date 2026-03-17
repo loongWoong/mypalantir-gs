@@ -48,7 +48,13 @@ public class AgentTools {
                 default -> "未知工具: " + toolName;
             };
         } catch (Exception e) {
-            return "工具执行错误: " + e.getMessage();
+            String msg = e.getMessage();
+            if (msg != null && (msg.contains("Communications link failure") || msg.contains("Connection refused"))) {
+                return "工具执行错误: 数据库连接失败，无法访问 MySQL。" +
+                    " 请检查：1) MySQL 服务是否已启动 2) .env 或数据映射中的 host/port 是否正确 3) 网络/防火墙是否可达。" +
+                    " 详见 docs/TROUBLESHOOTING_AGENT_QUERY_DATABASE.md 原始错误: " + msg;
+            }
+            return "工具执行错误: " + msg;
         }
     }
 

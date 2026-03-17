@@ -67,9 +67,12 @@ public class QueryParser {
         }
         
         if (map.containsKey("links")) {
-            @SuppressWarnings("unchecked")
-            List<Map<String, Object>> links = (List<Map<String, Object>>) map.get("links");
-            query.setLinks(parseLinkQueries(links));
+            Object linksObj = map.get("links");
+            if (linksObj instanceof List) {
+                @SuppressWarnings("unchecked")
+                List<Map<String, Object>> links = (List<Map<String, Object>>) linksObj;
+                query.setLinks(parseLinkQueries(links));
+            }
         }
         
         if (map.containsKey("group_by")) {
@@ -117,6 +120,9 @@ public class QueryParser {
 
     private List<OntologyQuery.LinkQuery> parseLinkQueries(List<Map<String, Object>> links) {
         List<OntologyQuery.LinkQuery> result = new ArrayList<>();
+        if (links == null) {
+            return result;
+        }
         for (Map<String, Object> linkMap : links) {
             OntologyQuery.LinkQuery linkQuery = new OntologyQuery.LinkQuery();
             
@@ -141,9 +147,12 @@ public class QueryParser {
             }
             
             if (linkMap.containsKey("links")) {
-                @SuppressWarnings("unchecked")
-                List<Map<String, Object>> nestedLinks = (List<Map<String, Object>>) linkMap.get("links");
-                linkQuery.setLinks(parseLinkQueries(nestedLinks));
+                Object nested = linkMap.get("links");
+                if (nested instanceof List) {
+                    @SuppressWarnings("unchecked")
+                    List<Map<String, Object>> nestedLinks = (List<Map<String, Object>>) nested;
+                    linkQuery.setLinks(parseLinkQueries(nestedLinks));
+                }
             }
             
             result.add(linkQuery);
@@ -153,6 +162,9 @@ public class QueryParser {
 
     private List<OntologyQuery.OrderBy> parseOrderBy(List<Map<String, Object>> orderByList) {
         List<OntologyQuery.OrderBy> result = new ArrayList<>();
+        if (orderByList == null) {
+            return result;
+        }
         for (Map<String, Object> orderByMap : orderByList) {
             String field = (String) orderByMap.get("field");
             String direction = orderByMap.containsKey("direction") 
