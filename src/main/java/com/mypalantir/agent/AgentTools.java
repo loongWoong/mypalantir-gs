@@ -175,11 +175,8 @@ public class AgentTools {
 
         try {
             OntologyQuery ontologyQuery = nlqService.convertToQuery(query);
-            // 转换为 Map 执行
-            Map<String, Object> queryMap = objectMapper.convertValue(ontologyQuery, new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {});
-            // 移除 null 值
-            queryMap.values().removeIf(Objects::isNull);
-            QueryExecutor.QueryResult result = queryService.executeQuery(queryMap);
+            // 直接使用 OntologyQuery 执行，避免 Map 循环转换导致字段名（如 group_by/groupBy）丢失
+            QueryExecutor.QueryResult result = queryService.executeQuery(ontologyQuery);
             Map<String, Object> resp = new LinkedHashMap<>();
             resp.put("columns", result.getColumns());
             resp.put("rowCount", result.getRowCount());

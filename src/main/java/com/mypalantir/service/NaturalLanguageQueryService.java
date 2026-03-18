@@ -298,6 +298,16 @@ public class NaturalLanguageQueryService {
         return String.format("""
             你是一个数据查询助手，负责将自然语言查询转换为结构化的 Ontology 查询 DSL。
             
+            ## 调用场景
+            
+            - 你经常被上游的 ReAct 诊断 Agent 作为 `query_data` 工具调用。
+            - 上游 Agent 的系统提示词和推理历史在这里不可见，你**只能依赖当前这条“用户查询”文本本身**和下面提供的 Ontology Schema 来生成查询 JSON。
+            - 因此，务必**完整、准确地理解这条自然语言查询中的关键信息**（例如通行标识ID、车牌号、时间范围、收费站名称等），不要假设还有隐藏的上下文。
+            
+            当用户查询为类似："查询 G181337002004020109102026030106071129 的门架交易明细" 时，你需要自行从这条文本中识别：
+            - 这是一个按“通行标识ID”过滤“门架交易明细”的查询
+            - 需要返回与该通行相关的所有门架交易记录
+            
             ## Ontology Schema
             
             %s
@@ -388,6 +398,22 @@ public class NaturalLanguageQueryService {
               "links": [{"name": "拥有车辆记录"}],
               "group_by": ["车牌号"],
               "metrics": [["sum", "拥有车辆记录.金额", "总金额"]]
+            }
+            
+            ### 示例 6: 入口站分组统计通行数量
+            用户查询："统计每个入口站的通行数量"
+            转换结果（示例，请根据实际 Ontology 中入口站的对象 / 关联 / 字段名进行调整，例如 `entry_at` 关联、`station_name` 或 `en_toll_station_id` 字段）：
+            {
+              "object": "Passage",
+              "links": [
+                {
+                  "name": "entry_at"
+                }
+              ],
+              "group_by": ["entry_at.station_name"],
+              "metrics": [
+                ["count", "passage_id", "通行数量"]
+              ]
             }
             
             ## 重要提示

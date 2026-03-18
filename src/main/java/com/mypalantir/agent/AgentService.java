@@ -96,6 +96,17 @@ public class AgentService {
 
         int stepIndex = 0;
         int toolCallCount = 0;
+        // 基于关键词的简单意图预判：查询/统计 → 数据查询；为什么/原因/诊断/排查/异常 → 诊断
+        boolean looksLikeDataQuery = userMessage != null &&
+                (userMessage.contains("查询") || userMessage.contains("统计")
+                        || userMessage.contains("查看") || userMessage.contains("显示") || userMessage.contains("列出"))
+                && !(userMessage.contains("为什么") || userMessage.contains("原因")
+                     || userMessage.contains("诊断") || userMessage.contains("排查") || userMessage.contains("异常"));
+        boolean looksLikeDiagnostic = !looksLikeDataQuery && userMessage != null &&
+                (userMessage.contains("为什么") || userMessage.contains("原因")
+                        || userMessage.contains("诊断") || userMessage.contains("排查") || userMessage.contains("异常"));
+        // 是否已经使用过除 query_data 之外的诊断类工具（用来区分“单纯数据查询”与“真正进入诊断流程”）
+        boolean usedNonQueryDataTool = false;
         for (int i = 0; i < MAX_STEPS; i++) {
             String llmResponse;
             long llmStart = System.currentTimeMillis();
@@ -118,7 +129,9 @@ public class AgentService {
             if (answer != null) {
                 // 如果已经调过工具（诊断模式）但次数不够，拒绝给结论
                 // 如果从未调过工具（非诊断问题，如"你是谁"），直接放行
-                boolean isDiagnosticMode = toolCallCount > 0 || extractSection(llmResponse, "Action") != null;
+                // 对于纯数据查询（看起来是查询/统计类且只使用了 query_data），不强制最小工具次数，避免无意义的“继续排查”
+                boolean isDiagnosticMode = (looksLikeDiagnostic || usedNonQueryDataTool)
+                        && (toolCallCount > 0 || extractSection(llmResponse, "Action") != null);
                 if (isDiagnosticMode && toolCallCount < MIN_TOOL_CALLS) {
                     logger.info("Step {}: LLM tried to answer early (toolCalls={}), rejecting", i + 1, toolCallCount);
                     List<String> rootTypes = agentTools.listRootTypes();
@@ -181,6 +194,9 @@ public class AgentService {
             // 执行工具
             toolCallCount++;
             long toolStart = System.currentTimeMillis();
+            if (toolName != null && !"query_data".equals(toolName)) {
+                usedNonQueryDataTool = true;
+            }
             String observation = agentTools.executeTool(toolName, toolArgs != null ? toolArgs : Map.of());
             long toolElapsed = System.currentTimeMillis() - toolStart;
             logger.info("Step {}: tool={}, observation length={}, 工具耗时={}ms", i + 1, toolName, observation.length(), toolElapsed);
@@ -255,8 +271,11 @@ public class AgentService {
             根据用户的**动词/意图**判断模式，而不是仅看是否提到了ID：
 
             1. **一般性问题**（"你是谁"、"什么是拆分"等）→ 直接用 Answer 回答，不调用工具。
-            2. **数据查询**（"查询"、"查看"、"显示"、"列出" + 数据）→ 使用 query_data 或 query_instance/query_links 获取数据后直接展示，不进入诊断流程。
-               - 例："查询某通行ID的路径明细"、"查看所有通行记录"、"显示门架交易数据"、"统计每个入口站的通行数量"
+            2. **数据查询**（"查询"、"查看"、"显示"、"列出"、"统计" + 数据）→ **这是纯数据查询，不是诊断**，不需要解释异常原因。
+               - **硬性要求：凡是以"查询"/"统计"开头的请求，如果可以用 `query_data` 完成，就必须**优先调用一次 `query_data` 获取数据。
+               - 只有在 `query_data` 明显无法满足该请求时，才可以再考虑使用 `query_instance` / `query_links` 等其他工具补充。
+               - 例："查询某通行ID的路径明细"、"查询某通行ID的门架交易明细"、"查看所有通行记录"、"显示门架交易数据"、"统计每个入口站的通行数量"
+               - 特别强调：当用户说“查询 某通行ID 的门架交易明细”时，**首先用 `query_data` 查询该通行ID相关的门架交易数据**；如果 `query_data` 返回为空或模型判断语义不匹配，再酌情调用 `query_links` 等工具。
             3. **诊断排查**（"为什么"、"诊断"、"排查"、"分析异常原因"）→ 进入诊断模式，按诊断步骤逐步调用工具。
                - 例："帮我查一下某通行ID为什么拆分异常"、"排查某通行ID的异常原因"
 
@@ -285,7 +304,7 @@ public class AgentService {
             ## 推理要求
 
             - 根据用户意图自主决定调用哪些工具、调用顺序和调用次数
-            - 数据查询类请求：获取数据后直接展示
+            - 数据查询类请求：**必须优先尝试使用 `query_data` 获取数据**，然后直接展示结果，而不是先用其他工具
             - 诊断类请求：先获取数据，再用 search_rules 检索相关诊断规则了解异常判定逻辑，然后根据规则选择合适的 call_function 验证假设
             - Thought 中要体现分析推理过程（发现了什么、推测什么原因、为什么要做下一步），而不仅仅是"我要调用某工具"
             - 每次只输出一个 Action

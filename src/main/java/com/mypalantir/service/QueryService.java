@@ -41,12 +41,19 @@ public class QueryService {
     }
 
     /**
-     * 执行查询
+     * 执行查询（Map 形式的 DSL）
      */
     public QueryExecutor.QueryResult executeQuery(Map<String, Object> queryMap) throws Exception {
         // 解析查询
         OntologyQuery query = parser.parseMap(queryMap);
-        
+        // 复用统一的执行逻辑
+        return executeQuery(query);
+    }
+
+    /**
+     * 执行查询（直接使用 OntologyQuery，避免 Map → OntologyQuery 的信息丢失）
+     */
+    public QueryExecutor.QueryResult executeQuery(OntologyQuery query) throws Exception {
         // 调试：打印解析后的查询
         System.out.println("\n" + "=".repeat(80));
         System.out.println("=== Parsed OntologyQuery ===");
