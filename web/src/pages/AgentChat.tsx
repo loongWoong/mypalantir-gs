@@ -14,7 +14,7 @@ const EXAMPLE_QUESTIONS = [
   '诊断 G000237004001020107102026030106075950 的拆分异常原因',
   '诊断 G181337002004020109102026030106071129 的拆分异常原因',
   '查询 G181337002004020109102026030106071129 的门架交易明细',
-  '查询所有通行记录',
+  '查询G181337002004020109102026030106071129所有通行记录',
   '统计每个入口站的通行数量',
 ];
 
@@ -88,7 +88,7 @@ export default function AgentChat() {
   };
 
   return (
-    <div className="h-full flex flex-col max-w-4xl mx-auto">
+    <div className="h-full w-full flex flex-col">
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {messages.length === 0 && (

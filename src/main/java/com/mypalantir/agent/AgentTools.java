@@ -34,27 +34,56 @@ public class AgentTools {
     }
 
     /**
-     * 执行工具调用
+     * 执行工具调用，并将调用过程与结果写入 logs/Agent.log，便于分析 Agent 行为。
      */
     public String executeTool(String toolName, Map<String, Object> args) {
-        try {
-            return switch (toolName) {
-                case "query_instance" -> queryInstance(args);
-                case "query_links" -> queryLinks(args);
-                case "search_rules" -> searchRules(args);
-                case "call_function" -> callFunction(args);
-                case "run_inference" -> runInference(args);
-                case "query_data" -> queryData(args);
-                default -> "未知工具: " + toolName;
-            };
-        } catch (Exception e) {
-            String msg = e.getMessage();
-            if (msg != null && (msg.contains("Communications link failure") || msg.contains("Connection refused"))) {
-                return "工具执行错误: 数据库连接失败，无法访问 MySQL。" +
-                    " 请检查：1) MySQL 服务是否已启动 2) .env 或数据映射中的 host/port 是否正确 3) 网络/防火墙是否可达。" +
-                    " 详见 docs/TROUBLESHOOTING_AGENT_QUERY_DATABASE.md 原始错误: " + msg;
+        try (AgentLogger log = AgentLogger.open()) {
+            log.beginCall(toolName, args);
+            String result;
+            try {
+                result = switch (toolName) {
+                    case "query_instance" -> queryInstance(args);
+                    case "query_links" -> queryLinks(args);
+                    case "search_rules" -> searchRules(args);
+                    case "call_function" -> callFunction(args);
+                    case "run_inference" -> runInference(args);
+                    case "query_data" -> queryData(args);
+                    default -> "未知工具: " + toolName;
+                };
+                log.result(result);
+                return result;
+            } catch (Exception e) {
+                log.error(e);
+                String msg = e.getMessage();
+                if (msg != null && (msg.contains("Communications link failure") || msg.contains("Connection refused"))) {
+                    return "工具执行错误: 数据库连接失败，无法访问 MySQL。" +
+                        " 请检查：1) MySQL 服务是否已启动 2) .env 或数据映射中的 host/port 是否正确 3) 网络/防火墙是否可达。" +
+                        " 详见 docs/TROUBLESHOOTING_AGENT_QUERY_DATABASE.md 原始错误: " + msg;
+                }
+                return "工具执行错误: " + msg;
             }
-            return "工具执行错误: " + msg;
+        } catch (Exception e) {
+            // 日志写入失败时，不影响核心功能，只在控制台提示
+            System.err.println("[AgentTools] AgentLogger open failed: " + e.getMessage());
+            try {
+                return switch (toolName) {
+                    case "query_instance" -> queryInstance(args);
+                    case "query_links" -> queryLinks(args);
+                    case "search_rules" -> searchRules(args);
+                    case "call_function" -> callFunction(args);
+                    case "run_inference" -> runInference(args);
+                    case "query_data" -> queryData(args);
+                    default -> "未知工具: " + toolName;
+                };
+            } catch (Exception ex) {
+                String msg = ex.getMessage();
+                if (msg != null && (msg.contains("Communications link failure") || msg.contains("Connection refused"))) {
+                    return "工具执行错误: 数据库连接失败，无法访问 MySQL。" +
+                        " 请检查：1) MySQL 服务是否已启动 2) .env 或数据映射中的 host/port 是否正确 3) 网络/防火墙是否可达。" +
+                        " 详见 docs/TROUBLESHOOTING_AGENT_QUERY_DATABASE.md 原始错误: " + msg;
+                }
+                return "工具执行错误: " + msg;
+            }
         }
     }
 
@@ -102,7 +131,7 @@ public class AgentTools {
     /**
      * 调用诊断函数（object_type、instance_id 为当前本体的类型与实例）
      * args: { "object_type": "...", "instance_id": "...", "function": "..." }
-     * 兼容旧字段: passage_id → instance_id，object_type 默认取当前本体推理根类型
+     * 兼容旧字段: 本体主键属性名 → instance_id，object_type 默认取当前本体推理根类型
      *
      * 委托给 ReasoningService.testFunctionWithInstance，与推理引擎使用完全一致的调用链：
      *   buildInstanceContext（含 enrichGantryTransactionWithTollItems）
@@ -112,12 +141,15 @@ public class AgentTools {
     private String callFunction(Map<String, Object> args) throws Exception {
         String objectType = (String) args.get("object_type");
         String instanceId = (String) args.get("instance_id");
-        String passageId = (String) args.get("passage_id");
         String funcName = (String) args.get("function");
         if (funcName == null) return "缺少参数 function";
-        if (instanceId == null && passageId != null) {
-            instanceId = passageId;
+        // 若 instance_id 未提供，尝试从本体主键属性名中读取（动态兼容，不硬编码字段名）
+        if (instanceId == null) {
             if (objectType == null) objectType = guessRootType();
+            if (objectType != null) {
+                String idPropName = resolveIdPropertyName(objectType);
+                if (idPropName != null) instanceId = (String) args.get(idPropName);
+            }
         }
         if (objectType == null || instanceId == null) return "缺少参数 object_type 与 instance_id";
 
@@ -126,7 +158,8 @@ public class AgentTools {
 
         try {
             Object result = reasoningService.testFunctionWithInstance(funcName, objectType, instanceId);
-            return funcName + " → " + toReadableString(result);
+            return "【调试用结果，仅用于查看底层数据，请以 run_inference 的结论为准】"
+                + funcName + " → " + toReadableString(result);
         } catch (IllegalArgumentException e) {
             return objectType + " " + instanceId + " 不存在";
         }
@@ -164,14 +197,113 @@ public class AgentTools {
     private String runInference(Map<String, Object> args) throws Exception {
         String objectType = (String) args.get("object_type");
         String instanceId = (String) args.get("instance_id");
-        // 兼容旧字段名 passage_id
-        if (instanceId == null) instanceId = (String) args.get("passage_id");
         if (objectType == null) objectType = guessRootType();
+        // 若 instance_id 未提供，尝试从本体主键属性名中读取（动态兼容，不硬编码字段名）
+        if (instanceId == null && objectType != null) {
+            String idPropName = resolveIdPropertyName(objectType);
+            if (idPropName != null) instanceId = (String) args.get(idPropName);
+        }
         if (objectType == null || instanceId == null)
             return "缺少参数 object_type 与 instance_id";
 
         InferenceResult result = reasoningService.inferInstance(objectType, instanceId);
-        return objectMapper.writeValueAsString(result.toMap());
+
+        // 为 Agent 提供「严格对齐引擎」的结构化中文诊断说明，避免模型自行脑补细节
+        var resultMap = result.toMap();
+        @SuppressWarnings("unchecked")
+        Map<String, Object> facts = (Map<String, Object>) resultMap.getOrDefault("facts", Map.of());
+
+        Object splitCount = facts.get("split_detail_count");
+        Object gantryCount = facts.get("gantry_transaction_count");
+        Object countEqual = facts.get("count_equal");
+        Object seqEqual = facts.get("sequence_equal");
+        Object abnormalFlag = facts.get("is_abnormal_passage");
+
+        // 收集所有 has_abnormal_reason 事实，作为最终异常原因列表
+        List<String> abnormalReasons = new ArrayList<>();
+        for (com.mypalantir.reasoning.engine.Fact f : result.getProducedFacts()) {
+            if ("has_abnormal_reason".equals(f.getPredicate())) {
+                abnormalReasons.add(String.valueOf(f.getValue()));
+            }
+        }
+
+        // 收集触发的规则，并关联 YAML 中的 display_name / description，方便前端或 Agent 直接使用
+        Loader loader = reasoningService.getLoader();
+        OntologySchema schema = loader.getSchema();
+        Map<String, com.mypalantir.meta.Rule> ruleDefs = new LinkedHashMap<>();
+        if (schema != null && schema.getRules() != null) {
+            for (com.mypalantir.meta.Rule r : schema.getRules()) {
+                if (r.getName() != null) {
+                    ruleDefs.put(r.getName(), r);
+                }
+            }
+        }
+
+        List<String> firedRules = new ArrayList<>();
+        for (InferenceResult.TraceEntry entry : result.getTrace()) {
+            String name = entry.ruleName();
+            if (!firedRules.contains(name)) {
+                firedRules.add(name);
+            }
+        }
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("对象类型: ").append(objectType)
+          .append("，实例ID: ").append(instanceId).append("\n\n");
+
+        sb.append("一、基础事实\n");
+        if (splitCount != null || gantryCount != null) {
+            if (splitCount != null) {
+                sb.append("  - split_detail_count (拆分明细数量) = ").append(splitCount).append("\n");
+            }
+            if (gantryCount != null) {
+                sb.append("  - gantry_transaction_count (门架交易数量) = ").append(gantryCount).append("\n");
+            }
+        }
+        if (countEqual != null || seqEqual != null) {
+            if (countEqual != null) {
+                sb.append("  - count_equal (个数是否一致) = ").append(countEqual).append("\n");
+            }
+            if (seqEqual != null) {
+                sb.append("  - sequence_equal (序列是否一致) = ").append(seqEqual).append("\n");
+            }
+        }
+        if (abnormalFlag != null) {
+            sb.append("  - is_abnormal_passage (是否判定为异常通行) = ").append(abnormalFlag).append("\n");
+        }
+        sb.append("\n");
+
+        sb.append("二、触发的规则\n");
+        if (firedRules.isEmpty()) {
+            sb.append("  - 本次推理未触发任何规则。\n\n");
+        } else {
+            for (String ruleName : firedRules) {
+                com.mypalantir.meta.Rule rd = ruleDefs.get(ruleName);
+                String displayName = rd != null && rd.getDisplayName() != null ? rd.getDisplayName() : "";
+                String desc = rd != null && rd.getDescription() != null ? rd.getDescription() : "";
+                sb.append("  - ").append(ruleName);
+                if (!displayName.isBlank()) sb.append(" | ").append(displayName);
+                if (!desc.isBlank()) sb.append(" | ").append(desc);
+                sb.append("\n");
+            }
+            sb.append("\n");
+        }
+
+        sb.append("三、推理结论\n");
+        if (!abnormalReasons.isEmpty()) {
+            sb.append("  - 诊断为异常通行。异常原因列表：\n");
+            for (String reason : abnormalReasons) {
+                sb.append("    * ").append(reason).append("\n");
+            }
+        } else if (Boolean.FALSE.equals(abnormalFlag)) {
+            sb.append("  - 诊断为正常通行（未产生任何异常原因）。\n");
+        } else {
+            sb.append("  - 当前本体规则未给出明确的异常原因，仅可参考以上基础事实与触发规则。\n");
+        }
+
+        sb.append("\n（以上内容严格来源于推理引擎的 InferenceResult：基础衍生属性、触发规则及 has_abnormal_reason 事实，不包含模型自行推断的路径细节。）");
+
+        return sb.toString();
     }
 
     /**
@@ -210,6 +342,29 @@ public class AgentTools {
     private String guessRootType() {
         List<String> rootTypes = reasoningService.listInferenceRootTypes();
         return rootTypes.isEmpty() ? null : rootTypes.get(0);
+    }
+
+    /**
+     * 从本体模型中动态解析指定对象类型的主键属性名。
+     * 取该类型第一个非衍生（derived=false）且必填（required=true）的属性名，
+     * 避免硬编码 passage_id / pass_id 等具体字段名。
+     *
+     * @param objectTypeName 对象类型名
+     * @return 主键属性名，若无法确定则返回 null
+     */
+    private String resolveIdPropertyName(String objectTypeName) {
+        try {
+            Loader loader = reasoningService.getLoader();
+            ObjectType objectType = loader.getObjectType(objectTypeName);
+            if (objectType.getProperties() == null) return null;
+            return objectType.getProperties().stream()
+                    .filter(p -> !p.isDerived() && p.isRequired())
+                    .map(com.mypalantir.meta.Property::getName)
+                    .findFirst()
+                    .orElse(null);
+        } catch (Loader.NotFoundException e) {
+            return null;
+        }
     }
 
     /**
@@ -309,17 +464,17 @@ public class AgentTools {
         sb.append("   参数: {\"type\": \"类型\", \"id\": \"ID\", \"link\": \"关联名\"}\n");
         sb.append("   ").append(linkDesc).append("\n\n");
 
-        sb.append("3. search_rules - 搜索当前本体的SWRL规则\n");
+        sb.append("3. search_rules - 搜索当前本体的SWRL规则（调试用，帮助你查看有哪些规则与描述）\n");
         sb.append("   参数: {\"keyword\": \"关键词\"}\n\n");
 
-        sb.append("4. call_function - 调用诊断函数\n");
+        sb.append("4. call_function - 调用诊断函数（调试/验证用，不应用于推翻 run_inference 的结论）\n");
         sb.append("   参数: {\"object_type\": \"").append(primaryType)
           .append("\", \"instance_id\": \"实例ID\", \"function\": \"函数名\"}\n");
         sb.append("   可用函数:\n");
         sb.append(funcList);
         sb.append("\n");
 
-        sb.append("5. run_inference - 执行完整规则引擎推理（一次性返回所有规则结果）\n");
+        sb.append("5. run_inference - 执行完整规则引擎推理（一次性返回所有规则结果，诊断结论以此为准）\n");
         sb.append("   参数: {\"object_type\": \"").append(primaryType)
           .append("\", \"instance_id\": \"实例ID\"}\n\n");
 
