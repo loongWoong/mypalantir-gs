@@ -950,8 +950,15 @@ export const agentApi = {
     return response.data.data;
   },
 
-  chatStream: (message: string, onEvent: (event: AgentSSEEvent) => void, onDone: () => void) => {
-    const url = `${API_BASE_URL}/agent/chat/stream?message=${encodeURIComponent(message)}`;
+  chatStream: (
+    message: string,
+    onEvent: (event: AgentSSEEvent) => void,
+    onDone: () => void,
+    conversationId?: string
+  ) => {
+    const params = new URLSearchParams({ message });
+    if (conversationId) params.append('conversationId', conversationId);
+    const url = `${API_BASE_URL}/agent/chat/stream?${params.toString()}`;
     const eventSource = new EventSource(url);
 
     eventSource.addEventListener('step', (e) => {

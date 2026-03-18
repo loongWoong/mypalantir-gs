@@ -22,6 +22,7 @@ export default function AgentChat() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [conversationId] = useState(() => crypto.randomUUID());
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const cancelRef = useRef<(() => void) | null>(null);
 
@@ -81,7 +82,8 @@ export default function AgentChat() {
           updated[updated.length - 1] = last;
           return updated;
         });
-      }
+      },
+      conversationId
     );
 
     cancelRef.current = cancel;

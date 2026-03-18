@@ -7,7 +7,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -27,6 +32,13 @@ public class AgentService {
     private final LLMService llmService;
     private final AgentTools agentTools;
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    /**
+     * 会话上下文：按 conversationId 维护 LLM 侧的对话历史，支持多轮对话。
+     * key 为前端生成的 conversationId（每个浏览器 Tab 独立），值为当前对话串。
+     * 不跨 conversationId 共享，天然支持多用户并发访问。
+     */
+    private final Map<String, String> conversationStore = new ConcurrentHashMap<>();
 
     public AgentService(LLMService llmService, AgentTools agentTools) {
         this.llmService = llmService;
@@ -53,11 +65,28 @@ public class AgentService {
     }
 
     /**
-     * 流式执行 ReAct 循环，每步通过回调通知
+     * 流式执行 ReAct 循环，每步通过回调通知。
+     * 支持按 conversationId 维护多轮对话上下文；不同 conversationId 彼此隔离。
+     *
+     * @param conversationId 会话ID；为 null/空 时按单轮对话处理（不保留历史）
+     * @param userMessage    本轮用户输入
+     * @param onEvent        SSE 事件回调
      */
-    public void chatStream(String userMessage, Consumer<AgentEvent> onEvent) {
+    public void chatStream(String conversationId, String userMessage, Consumer<AgentEvent> onEvent) {
         String systemPrompt = buildSystemPrompt();
         StringBuilder conversation = new StringBuilder();
+
+        boolean hasConversationId = conversationId != null && !conversationId.isBlank();
+        if (hasConversationId) {
+            String history = conversationStore.get(conversationId);
+            if (history != null && !history.isBlank()) {
+                conversation.append(history);
+                if (!history.endsWith("\n\n")) {
+                    conversation.append("\n\n");
+                }
+            }
+        }
+
         conversation.append("用户问题: ").append(userMessage).append("\n\n");
         conversation.append("请开始你的推理。\n");
 
@@ -110,6 +139,10 @@ public class AgentService {
                 long totalElapsed = System.currentTimeMillis() - totalStart;
                 logger.info("=== Agent finished === 总耗时={}ms, 步数={}, 工具调用={}次", totalElapsed, i + 1, toolCallCount);
                 onEvent.accept(AgentEvent.answer(answer));
+                if (hasConversationId) {
+                    conversation.append(llmResponse).append("\n\n");
+                    conversationStore.put(conversationId, conversation.toString());
+                }
                 return;
             }
 
@@ -175,7 +208,7 @@ public class AgentService {
         List<AgentResponse.AgentStep> steps = new ArrayList<>();
         final String[] finalAnswer = {null};
 
-        chatStream(userMessage, event -> {
+        chatStream(null, userMessage, event -> {
             switch (event.type()) {
                 case "step" -> {
                     String thought = (String) event.data().get("thought");

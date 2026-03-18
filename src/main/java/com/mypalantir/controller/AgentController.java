@@ -44,15 +44,16 @@ public class AgentController {
 
     /**
      * Agent 对话（SSE 流式版本）
-     * GET /api/v1/agent/chat/stream?message=xxx
+     * GET /api/v1/agent/chat/stream?message=xxx&conversationId=uuid
      */
     @GetMapping(value = "/chat/stream", produces = "text/event-stream")
-    public SseEmitter chatStream(@RequestParam String message) {
+    public SseEmitter chatStream(@RequestParam String message,
+                                 @RequestParam(required = false) String conversationId) {
         SseEmitter emitter = new SseEmitter(300_000L); // 5 min timeout
 
         executor.execute(() -> {
             try {
-                agentService.chatStream(message, event -> {
+                agentService.chatStream(conversationId, message, event -> {
                     try {
                         String json = objectMapper.writeValueAsString(event.data());
                         emitter.send(SseEmitter.event()
