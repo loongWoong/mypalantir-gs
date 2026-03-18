@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { agentApi, type AgentStep } from '../api/client';
+import { agentApi, agentConversationApi, type AgentStep, type ChatHistoryMessage } from '../api/client';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -18,13 +18,32 @@ const EXAMPLE_QUESTIONS = [
   '统计每个入口站的通行数量',
 ];
 
-export default function AgentChat() {
+interface AgentChatProps {
+  conversationId: string;
+}
+
+export default function AgentChat({ conversationId }: AgentChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [conversationId] = useState(() => crypto.randomUUID());
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const cancelRef = useRef<(() => void) | null>(null);
+
+  // 加载历史消息
+  useEffect(() => {
+    let cancelled = false;
+    agentConversationApi.messages(conversationId).then((history: ChatHistoryMessage[]) => {
+      if (cancelled) return;
+      const mapped: ChatMessage[] = history.map((m) => ({
+        role: m.role,
+        content: m.content,
+      }));
+      setMessages(mapped);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [conversationId]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });

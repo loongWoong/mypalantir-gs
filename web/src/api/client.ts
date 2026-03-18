@@ -10,6 +10,22 @@ const apiClient = axios.create({
   },
 });
 
+// 简单客户端ID，用于后端按用户隔离对话空间（无登录场景）
+const getClientId = (): string => {
+  const key = 'clientId';
+  let id = localStorage.getItem(key);
+  if (!id) {
+    id = crypto.randomUUID();
+    localStorage.setItem(key, id);
+  }
+  return id;
+};
+
+apiClient.interceptors.request.use((config) => {
+  (config.headers as any)['X-Client-Id'] = getClientId();
+  return config;
+});
+
 // 类型定义（匹配后端返回的小写字段名）
 export interface ObjectType {
   name: string;
@@ -927,6 +943,53 @@ export interface AgentSSEEvent {
   data: any;
 }
 
+// Conversation API
+export interface ConversationSummary {
+  id: string;
+  title: string;
+  lastPreview?: string;
+  createdAt: number;
+  updatedAt: number;
+  status: string;
+}
+
+export interface ChatHistoryMessage {
+  id: number;
+  role: 'user' | 'assistant';
+  content: string;
+  createdAt: number;
+}
+
+export const agentConversationApi = {
+  create: async (title?: string): Promise<ConversationSummary> => {
+    const response = await apiClient.post<ApiResponse<{ id: string; title: string }>>(
+      '/agent/conversations',
+      title ? { title } : {}
+    );
+    const data = response.data.data;
+    return {
+      id: data.id,
+      title: data.title,
+      lastPreview: '',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      status: 'active',
+    };
+  },
+
+  list: async (): Promise<ConversationSummary[]> => {
+    const response = await apiClient.get<ApiResponse<ConversationSummary[]>>('/agent/conversations');
+    return response.data.data;
+  },
+
+  messages: async (conversationId: string): Promise<ChatHistoryMessage[]> => {
+    const response = await apiClient.get<ApiResponse<{ conversationId: string; messages: ChatHistoryMessage[] }>>(
+      `/agent/conversations/${conversationId}/messages`
+    );
+    return response.data.data.messages;
+  },
+};
+
 export const agentApi = {
   chat: async (message: string): Promise<AgentChatResponse> => {
     const response = await apiClient.post<ApiResponse<AgentChatResponse>>(
@@ -954,10 +1017,9 @@ export const agentApi = {
     message: string,
     onEvent: (event: AgentSSEEvent) => void,
     onDone: () => void,
-    conversationId?: string
+    conversationId: string
   ) => {
-    const params = new URLSearchParams({ message });
-    if (conversationId) params.append('conversationId', conversationId);
+    const params = new URLSearchParams({ message, conversationId });
     const url = `${API_BASE_URL}/agent/chat/stream?${params.toString()}`;
     const eventSource = new EventSource(url);
 

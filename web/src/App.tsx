@@ -19,7 +19,7 @@ import OntologyBuilder from './pages/OntologyBuilder';
 import RulesView from './pages/RulesView';
 import FunctionsView from './pages/FunctionsView';
 import ReasoningView from './pages/ReasoningView';
-import AgentChat from './pages/AgentChat';
+import AgentChatPage from './pages/AgentChatPage';
 import CelPlayground from './pages/CelPlayground';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -61,7 +61,7 @@ function App() {
                   <Route path="functions" element={<FunctionsView />} />
                   <Route path="cel-playground" element={<CelPlayground />} />
                   <Route path="reasoning" element={<ReasoningView />} />
-                  <Route path="agent" element={<AgentChat />} />
+                  <Route path="agent" element={<AgentChatPage />} />
                 </Routes>
               </Layout>
             </ProtectedRoute>

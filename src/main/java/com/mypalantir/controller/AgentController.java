@@ -3,6 +3,8 @@ package com.mypalantir.controller;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mypalantir.agent.AgentResponse;
 import com.mypalantir.agent.AgentService;
+import com.mypalantir.repository.AgentMessageRepository;
+import com.mypalantir.repository.AgentConversationRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.web.bind.annotation.*;
@@ -18,11 +20,17 @@ public class AgentController {
 
     private static final Logger logger = LoggerFactory.getLogger(AgentController.class);
     private final AgentService agentService;
+    private final AgentMessageRepository messageRepository;
+    private final AgentConversationRepository conversationRepository;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final ExecutorService executor = Executors.newCachedThreadPool();
 
-    public AgentController(AgentService agentService) {
+    public AgentController(AgentService agentService,
+                           AgentMessageRepository messageRepository,
+                           AgentConversationRepository conversationRepository) {
         this.agentService = agentService;
+        this.messageRepository = messageRepository;
+        this.conversationRepository = conversationRepository;
     }
 
     /**
@@ -48,8 +56,18 @@ public class AgentController {
      */
     @GetMapping(value = "/chat/stream", produces = "text/event-stream")
     public SseEmitter chatStream(@RequestParam String message,
-                                 @RequestParam(required = false) String conversationId) {
+                                 @RequestParam String conversationId) {
         SseEmitter emitter = new SseEmitter(300_000L); // 5 min timeout
+
+        if (conversationId != null && !conversationId.isBlank()) {
+            // 首条用户消息到达时，如果标题还是默认值，则用该问题更新会话标题
+            try {
+                conversationRepository.updateTitleIfDefault(conversationId, message);
+            } catch (Exception e) {
+                logger.warn("Failed to update conversation title: {}", e.getMessage());
+            }
+            messageRepository.saveMessage(conversationId, "user", message);
+        }
 
         executor.execute(() -> {
             try {
@@ -59,6 +77,13 @@ public class AgentController {
                         emitter.send(SseEmitter.event()
                                 .name(event.type())
                                 .data(json));
+
+                        if ("answer".equals(event.type()) && conversationId != null && !conversationId.isBlank()) {
+                            String answer = (String) event.data().get("answer");
+                            messageRepository.saveMessage(conversationId, "assistant", answer);
+                            String preview = answer != null && answer.length() > 100 ? answer.substring(0, 100) : answer;
+                            conversationRepository.updateConversationPreview(conversationId, preview);
+                        }
                     } catch (Exception e) {
                         logger.error("Failed to send SSE event: {}", e.getMessage());
                     }
