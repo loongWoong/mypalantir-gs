@@ -14,6 +14,9 @@ public class Config {
     private int serverPort = 8080;
     private String serverMode = "debug";
 
+    @Value("${APP_VERSION:v0.2.1}")
+    private String appVersion;
+
     @Value("${schema.file.path:./ontology/schema.yaml}")
     private String schemaFilePath;
     
@@ -71,6 +74,11 @@ public class Config {
     @PostConstruct
     public void init() {
         // 从 .env 文件或环境变量中读取 Neo4j 配置，覆盖默认值
+        String envAppVersion = EnvConfig.get("APP_VERSION");
+        if (envAppVersion != null && !envAppVersion.isEmpty()) {
+            this.appVersion = envAppVersion;
+        }
+
         String envUri = EnvConfig.get("NEO4J_URI");
         if (envUri != null && !envUri.isEmpty()) {
             this.neo4jUri = envUri;
@@ -165,6 +173,10 @@ public class Config {
 
     public boolean isDomeEnabled() {
         return domeEnabled;
+    }
+
+    public String getAppVersion() {
+        return appVersion;
     }
 
     public void setDomeEnabled(boolean domeEnabled) {

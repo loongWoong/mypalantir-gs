@@ -1,12 +1,14 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { LockClosedIcon, UserCircleIcon } from '@heroicons/react/24/outline';
 import { useAuth } from '../AuthContext';
+import { appApi } from '../api/client';
 
 export default function LoginPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [appVersion, setAppVersion] = useState<string>('');
   const { login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -23,12 +25,31 @@ export default function LoginPage() {
     }
   };
 
+  useEffect(() => {
+    let cancelled = false;
+    const loadAppInfo = async () => {
+      try {
+        const info = await appApi.getAppInfo();
+        if (!cancelled) setAppVersion(info.appVersion);
+      } catch (e) {
+        console.error('Failed to load app info:', e);
+      }
+    };
+    loadAppInfo();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/50">
       <div className="w-full max-w-sm">
         <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-8">
           <div className="text-center mb-8">
-            <h1 className="text-2xl font-bold text-gray-800">MyPalantir</h1>
+            <h1 className="text-2xl font-bold text-gray-800 flex items-baseline justify-center gap-2">
+              <span>MyPalantir</span>
+              {appVersion && <span className="text-xs font-semibold text-gray-500">{appVersion}</span>}
+            </h1>
             <p className="text-gray-500 text-sm mt-1">请输入账号和密码登录</p>
           </div>
 

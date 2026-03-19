@@ -43,6 +43,10 @@ public class LLMService {
 
     @Value("${llm.max.tokens:1024}")
     private int maxTokens;
+
+    // LLM 返回内容的日志预览截断长度（从 .env 读取）
+    @Value("${LLM_CONTENT_PREVIEW_CHARS:1000}")
+    private int contentPreviewChars;
     
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
@@ -189,8 +193,9 @@ public class LLMService {
             logger.info("=== LLM API Response ===");
             logger.info("Response received successfully");
             logger.info("Content length: {} characters", result.length());
-            logger.info("Content preview (first 1000 chars): {}", 
-                result.length() > 1000 ? result.substring(0, 1000) + "..." : result);
+            int previewChars = contentPreviewChars > 0 ? contentPreviewChars : 1000;
+            logger.info("Content preview (first {} chars): {}", 
+                previewChars, result.length() > previewChars ? result.substring(0, previewChars) + "..." : result);
             
             // 检查响应是否可能有问题
             if (result == null || result.trim().isEmpty()) {

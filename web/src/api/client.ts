@@ -1099,4 +1099,16 @@ export const comparisonApi = {
   },
 };
 
+// App info API
+export interface AppInfo {
+  appVersion: string;
+}
+
+export const appApi = {
+  getAppInfo: async (): Promise<AppInfo> => {
+    const response = await apiClient.get<ApiResponse<AppInfo>>('/app/info');
+    return response.data.data;
+  },
+};
+
 export default apiClient;

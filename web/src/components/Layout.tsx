@@ -32,7 +32,7 @@ import {
   CodeBracketSquareIcon
 } from '@heroicons/react/24/outline';
 import type { ObjectType, LinkType, ModelInfo, CurrentModel } from '../api/client';
-import { schemaApi, modelApi } from '../api/client';
+import { schemaApi, modelApi, appApi } from '../api/client';
 import { useEffect } from 'react';
 import { useWorkspace } from '../WorkspaceContext';
 import { useAuth } from '../AuthContext';
@@ -48,6 +48,7 @@ export default function Layout({ children }: LayoutProps) {
   const [objectTypes, setObjectTypes] = useState<ObjectType[]>([]);
   const [linkTypes, setLinkTypes] = useState<LinkType[]>([]);
   const [loading, setLoading] = useState(true);
+  const [appVersion, setAppVersion] = useState<string>('');
   const [workspaceDialogOpen, setWorkspaceDialogOpen] = useState(false);
   const [editingWorkspaceId, setEditingWorkspaceId] = useState<string | undefined>(undefined);
   const [workspaceDropdownOpen, setWorkspaceDropdownOpen] = useState(false);
@@ -91,6 +92,22 @@ export default function Layout({ children }: LayoutProps) {
       }
     };
     loadData();
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadAppInfo = async () => {
+      try {
+        const info = await appApi.getAppInfo();
+        if (!cancelled) setAppVersion(info.appVersion);
+      } catch (error) {
+        console.error('Failed to load app info:', error);
+      }
+    };
+    loadAppInfo();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const handleModelSwitch = async (modelId: string) => {
@@ -204,7 +221,10 @@ export default function Layout({ children }: LayoutProps) {
       >
         <div className="p-4 border-b border-gray-200">
           <div className="flex items-center justify-between mb-3">
-            <h1 className="text-xl font-bold text-text">MyPalantir</h1>
+            <h1 className="text-xl font-bold text-text flex items-baseline gap-2">
+              <span>MyPalantir</span>
+              {appVersion && <span className="text-xs font-semibold text-gray-500">{appVersion}</span>}
+            </h1>
             <button
               onClick={() => setSidebarOpen(false)}
               className="lg:hidden text-gray-500 hover:text-gray-700"
