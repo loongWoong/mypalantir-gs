@@ -203,18 +203,47 @@ public class AgentTools {
         if (objectType == null || instanceId == null)
             return "缺少参数 object_type 与 instance_id";
 
+        // 先构建实例上下文，获取 derivedValues（衍生属性计算结果）
+        ReasoningService.InstanceContext ctx = reasoningService.buildInstanceContext(objectType, instanceId);
+        Map<String, Object> derivedValues = ctx.derivedValues != null ? ctx.derivedValues : Map.of();
+
         InferenceResult result = reasoningService.inferInstance(objectType, instanceId);
 
-        // 为 Agent 提供「严格对齐引擎」的结构化中文诊断说明，避免模型自行脑补细节
-        var resultMap = result.toMap();
-        @SuppressWarnings("unchecked")
-        Map<String, Object> facts = (Map<String, Object>) resultMap.getOrDefault("facts", Map.of());
+        // 统一收集本次推理得到的“事实”，便于后续需要机器可读结构化结果时复用
+        Map<String, Object> facts = new LinkedHashMap<>(derivedValues);
 
+        // 优先从 derivedValues 读取衍生属性，取不到时回退到 producedFacts（规则引擎产生的事实）
         Object splitCount = facts.get("split_detail_count");
         Object gantryCount = facts.get("gantry_transaction_count");
         Object countEqual = facts.get("count_equal");
         Object seqEqual = facts.get("sequence_equal");
         Object abnormalFlag = facts.get("is_abnormal_passage");
+        // 从 producedFacts 补充 derivedValues 中缺失的字段，同时写回 facts
+        for (com.mypalantir.reasoning.engine.Fact f : result.getProducedFacts()) {
+            String p = f.getPredicate();
+            Object v = f.getValue();
+            switch (p) {
+                case "split_detail_count" -> {
+                    if (splitCount == null) splitCount = v;
+                }
+                case "gantry_transaction_count" -> {
+                    if (gantryCount == null) gantryCount = v;
+                }
+                case "count_equal" -> {
+                    if (countEqual == null) countEqual = v;
+                }
+                case "sequence_equal" -> {
+                    if (seqEqual == null) seqEqual = v;
+                }
+                case "is_abnormal_passage" -> {
+                    if (abnormalFlag == null) abnormalFlag = v;
+                }
+                default -> {
+                }
+            }
+            // 统一写入 facts，方便后续按 predicate 名访问
+            facts.put(p, v);
+        }
 
         // 收集所有 has_abnormal_reason 事实，作为最终异常原因列表
         List<String> abnormalReasons = new ArrayList<>();
@@ -223,6 +252,7 @@ public class AgentTools {
                 abnormalReasons.add(String.valueOf(f.getValue()));
             }
         }
+        facts.put("has_abnormal_reason", abnormalReasons);
 
         // 收集触发的规则，并关联 YAML 中的 display_name / description，方便前端或 Agent 直接使用
         Loader loader = reasoningService.getLoader();
@@ -236,11 +266,29 @@ public class AgentTools {
             }
         }
 
-        List<String> firedRules = new ArrayList<>();
+        // 从 CycleDetail 中提取每条已触发规则的 matchDetails（推理链路），key = ruleName
+
+        Map<String, List<Map<String, Object>>> firedRuleMatchDetails = new LinkedHashMap<>();
+        for (InferenceResult.CycleDetail cycle : result.getCycleDetails()) {
+            Map<String, Object> cycleMap = cycle.toMap();
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> ruleList = (List<Map<String, Object>>) cycleMap.get("rules");
+            if (ruleList == null) continue;
+            for (Map<String, Object> rme : ruleList) {
+                if (!Boolean.TRUE.equals(rme.get("matched"))) continue;
+                String rn = (String) rme.get("rule");
+                if (rn == null || firedRuleMatchDetails.containsKey(rn)) continue;
+                @SuppressWarnings("unchecked")
+                List<Map<String, Object>> details = (List<Map<String, Object>>) rme.get("matchDetails");
+                firedRuleMatchDetails.put(rn, details != null ? details : List.of());
+            }
+        }
+
+        List<String> firedRules = new ArrayList<>(firedRuleMatchDetails.keySet());
+        // 补充 trace 里有但 cycleDetails 未覆盖的规则名（兼容旧数据）
         for (InferenceResult.TraceEntry entry : result.getTrace()) {
-            String name = entry.ruleName();
-            if (!firedRules.contains(name)) {
-                firedRules.add(name);
+            if (!firedRules.contains(entry.ruleName())) {
+                firedRules.add(entry.ruleName());
             }
         }
 
@@ -270,7 +318,7 @@ public class AgentTools {
         }
         sb.append("\n");
 
-        sb.append("二、触发的规则\n");
+        sb.append("二、触发的规则（含推理链路）\n");
         if (firedRules.isEmpty()) {
             sb.append("  - 本次推理未触发任何规则。\n\n");
         } else {
@@ -278,10 +326,27 @@ public class AgentTools {
                 com.mypalantir.meta.Rule rd = ruleDefs.get(ruleName);
                 String displayName = rd != null && rd.getDisplayName() != null ? rd.getDisplayName() : "";
                 String desc = rd != null && rd.getDescription() != null ? rd.getDescription() : "";
-                sb.append("  - ").append(ruleName);
+                sb.append("  [规则] ").append(ruleName);
                 if (!displayName.isBlank()) sb.append(" | ").append(displayName);
                 if (!desc.isBlank()) sb.append(" | ").append(desc);
                 sb.append("\n");
+                // 输出该规则的每个判断条件和实际值（推理链路）
+                List<Map<String, Object>> details = firedRuleMatchDetails.get(ruleName);
+                if (details != null && !details.isEmpty()) {
+                    for (Map<String, Object> d : details) {
+                        String cond = String.valueOf(d.getOrDefault("condition", ""));
+                        String actual = String.valueOf(d.getOrDefault("actualValue", ""));
+                        String ddesc = String.valueOf(d.getOrDefault("description", ""));
+                        sb.append("    条件: ").append(cond);
+                        if (!actual.isBlank() && !"null".equals(actual)) {
+                            sb.append(" → 实际值: ").append(actual);
+                        }
+                        if (!ddesc.isBlank() && !"null".equals(ddesc)) {
+                            sb.append(" (").append(ddesc).append(")");
+                        }
+                        sb.append("\n");
+                    }
+                }
             }
             sb.append("\n");
         }
@@ -296,6 +361,22 @@ public class AgentTools {
             sb.append("  - 诊断为正常通行（未产生任何异常原因）。\n");
         } else {
             sb.append("  - 当前本体规则未给出明确的异常原因，仅可参考以上基础事实与触发规则。\n");
+        }
+
+        // 追加推理引擎实际计算的两个序列，避免 LLM 在"分析依据"中自行推断序列内容
+        FunctionRegistry registry = reasoningService.getFunctionRegistry();
+        if (registry.hasFunction("get_split_sequence")) {
+            try {
+                Object splitSeq = reasoningService.testFunctionWithInstance("get_split_sequence", objectType, instanceId);
+                sb.append("\n四、推理引擎计算的关键序列（分析依据必须严格引用这里的值，不得自行推断）\n");
+                sb.append("  - 拆分明细收费单元序列 (get_split_sequence) = ").append(toReadableString(splitSeq)).append("\n");
+                if (registry.hasFunction("get_actual_sequence")) {
+                    Object actualSeq = reasoningService.testFunctionWithInstance("get_actual_sequence", objectType, instanceId);
+                    sb.append("  - 门架交易实际收费单元序列 (get_actual_sequence) = ").append(toReadableString(actualSeq)).append("\n");
+                }
+            } catch (Exception e) {
+                sb.append("\n  （序列函数调用失败: ").append(e.getMessage()).append("）\n");
+            }
         }
 
         sb.append("\n（以上内容严格来源于推理引擎的 InferenceResult：基础衍生属性、触发规则及 has_abnormal_reason 事实，不包含模型自行推断的路径细节。）");
