@@ -23,7 +23,8 @@ import {
   CalculatorIcon,
   ShieldCheckIcon,
   CpuChipIcon,
-  ChatBubbleLeftRightIcon
+  ChatBubbleLeftRightIcon,
+  PresentationChartBarIcon
 } from '@heroicons/react/24/outline';
 import type { ObjectType, LinkType, ModelInfo, CurrentModel } from '../api/client';
 import { schemaApi, modelApi } from '../api/client';
@@ -210,6 +211,18 @@ export default function Layout({ children }: LayoutProps) {
               Agent
             </Link>
 
+            <Link
+              to="/dashboard"
+              className={`flex items-center px-3 py-2 rounded-lg mb-2 ${
+                isActive('/dashboard')
+                  ? 'bg-blue-50 text-blue-700'
+                  : 'text-gray-700 hover:bg-gray-100'
+              }`}
+            >
+              <PresentationChartBarIcon className="w-5 h-5 mr-3" />
+              Dashboard
+            </Link>
+
             {!loading && (
               <>
                 <div className="mt-4 mb-2">
@@ -280,6 +293,7 @@ export default function Layout({ children }: LayoutProps) {
               {location.pathname === '/query' && 'Query Builder'}
               {location.pathname === '/natural-language-query' && 'Natural Language Query'}
               {location.pathname === '/rules' && 'Rules'}
+              {location.pathname === '/dashboard' && 'AI Dashboard'}
             </h2>
           </div>
           
@@ -315,7 +329,7 @@ export default function Layout({ children }: LayoutProps) {
         </header>
 
         {/* Content area */}
-        <main className={`flex-1 ${location.pathname.startsWith('/schema-graph') ? 'overflow-hidden p-0' : 'overflow-y-auto p-6'}`}>{children}</main>
+        <main className={`flex-1 ${location.pathname.startsWith('/schema-graph') || location.pathname.startsWith('/dashboard') ? 'overflow-hidden p-0' : 'overflow-y-auto p-6'}`}>{children}</main>
       </div>
     </div>
   );

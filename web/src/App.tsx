@@ -11,6 +11,7 @@ import NaturalLanguageQuery from './pages/NaturalLanguageQuery';
 import RulesView from './pages/RulesView';
 import ReasoningView from './pages/ReasoningView';
 import AgentChat from './pages/AgentChat';
+import DashboardPage from './pages/DashboardPage';
 
 function App() {
   return (
@@ -29,6 +30,7 @@ function App() {
           <Route path="/rules" element={<RulesView />} />
           <Route path="/reasoning" element={<ReasoningView />} />
           <Route path="/agent" element={<AgentChat />} />
+          <Route path="/dashboard" element={<DashboardPage />} />
         </Routes>
       </Layout>
     </BrowserRouter>
