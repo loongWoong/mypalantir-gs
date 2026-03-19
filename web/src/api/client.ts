@@ -1099,6 +1099,73 @@ export const comparisonApi = {
   },
 };
 
+// Dashboard API
+export interface WidgetSpec {
+  type: 'line' | 'bar' | 'pie' | 'metric' | 'table';
+  title: string;
+  query: string;
+  size: '1x1' | '2x1' | '2x2' | '1x2';
+  options?: {
+    xField?: string;
+    yField?: string;
+    seriesField?: string;
+    valueField?: string;
+    nameField?: string;
+    labelField?: string;
+  };
+}
+
+export interface WidgetOperation {
+  action: 'add' | 'update' | 'remove';
+  widgetId: string;
+  spec?: Partial<WidgetSpec>;
+}
+
+export interface DashboardSSEEvent {
+  type: 'widget_ops' | 'message' | 'thinking' | 'error';
+  data: any;
+}
+
+export const dashboardApi = {
+  chatStream: (
+    message: string,
+    currentWidgets: { id: string; spec: WidgetSpec }[],
+    onEvent: (event: DashboardSSEEvent) => void,
+    onDone: () => void
+  ) => {
+    const widgetsParam = encodeURIComponent(JSON.stringify(currentWidgets));
+    const url = `${API_BASE_URL}/dashboard/chat/stream?message=${encodeURIComponent(message)}&widgets=${widgetsParam}`;
+    const eventSource = new EventSource(url);
+
+    eventSource.addEventListener('widget_ops', (e) => {
+      onEvent({ type: 'widget_ops', data: JSON.parse(e.data) });
+    });
+
+    eventSource.addEventListener('thinking', (e) => {
+      onEvent({ type: 'thinking', data: JSON.parse(e.data) });
+    });
+
+    eventSource.addEventListener('message', (e) => {
+      onEvent({ type: 'message', data: JSON.parse(e.data) });
+      eventSource.close();
+      onDone();
+    });
+
+    eventSource.addEventListener('error', (e) => {
+      if ((e as MessageEvent).data) {
+        onEvent({ type: 'error', data: JSON.parse((e as MessageEvent).data) });
+      }
+      eventSource.close();
+      onDone();
+    });
+
+    return () => {
+      eventSource.close();
+      onDone();
+    };
+  },
+};
+
 // App info API
 export interface AppInfo {
   appVersion: string;

@@ -15,12 +15,12 @@ import MetricDetail from './pages/MetricDetail';
 import NaturalLanguageQuery from './pages/NaturalLanguageQuery';
 import DataComparison from './pages/DataComparison';
 import OntologyBuilder from './pages/OntologyBuilder';
-
 import RulesView from './pages/RulesView';
 import FunctionsView from './pages/FunctionsView';
 import ReasoningView from './pages/ReasoningView';
 import AgentChatPage from './pages/AgentChatPage';
 import CelPlayground from './pages/CelPlayground';
+import DashboardPage from './pages/DashboardPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { pathname } = useLocation();
@@ -62,6 +62,7 @@ function App() {
                   <Route path="cel-playground" element={<CelPlayground />} />
                   <Route path="reasoning" element={<ReasoningView />} />
                   <Route path="agent" element={<AgentChatPage />} />
+                  <Route path="dashboard" element={<DashboardPage />} />
                 </Routes>
               </Layout>
             </ProtectedRoute>

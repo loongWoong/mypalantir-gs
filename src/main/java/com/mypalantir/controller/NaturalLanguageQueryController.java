@@ -53,11 +53,11 @@ public class NaturalLanguageQueryController {
             }
             
             // 将 OntologyQuery 转换为 Map 格式
-            Map<String, Object> queryMap = convertToMap(ontologyQuery);
-            
+            Map<String, Object> queryMap = naturalLanguageQueryService.convertToMap(ontologyQuery);
+
             // 执行查询
             QueryExecutor.QueryResult result = queryService.executeQuery(queryMap);
-            
+
             // 构建响应
             Map<String, Object> response = new HashMap<>();
             response.put("query", query);
@@ -65,9 +65,9 @@ public class NaturalLanguageQueryController {
             response.put("columns", result.getColumns());
             response.put("rows", result.getRows());
             response.put("rowCount", result.getRowCount());
-            
+
             return ResponseEntity.ok(ApiResponse.success(response));
-            
+
         } catch (NaturalLanguageQueryService.NaturalLanguageQueryException e) {
             logger.error("Natural language query conversion failed: {}", e.getMessage());
             return ResponseEntity.badRequest()
@@ -90,7 +90,7 @@ public class NaturalLanguageQueryController {
                 .body(ApiResponse.error(500, "查询执行失败: " + errorMessage));
         }
     }
-    
+
     /**
      * 仅转换自然语言查询为 OntologyQuery（不执行）
      * 用于调试和验证。支持 dataSourceType：raw=原始数据，sync=同步数据。
@@ -111,10 +111,9 @@ public class NaturalLanguageQueryController {
             if (dataSourceType != null && !dataSourceType.isEmpty()) {
                 ontologyQuery.setDataSourceType(dataSourceType);
             }
-            
             // 将 OntologyQuery 转换为 Map 格式
-            Map<String, Object> queryMap = convertToMap(ontologyQuery);
-            
+            Map<String, Object> queryMap = naturalLanguageQueryService.convertToMap(ontologyQuery);
+
             Map<String, Object> response = new HashMap<>();
             response.put("query", query);
             response.put("convertedQuery", queryMap);
@@ -135,72 +134,6 @@ public class NaturalLanguageQueryController {
             return ResponseEntity.status(500)
                 .body(ApiResponse.error(500, "转换失败: " + errorMessage));
         }
-    }
-    
-    /**
-     * 将 OntologyQuery 转换为 Map 格式
-     */
-    private Map<String, Object> convertToMap(OntologyQuery query) {
-        Map<String, Object> map = new HashMap<>();
-        
-        if (query.getObject() != null) {
-            map.put("object", query.getObject());
-        } else if (query.getFrom() != null) {
-            map.put("from", query.getFrom());
-        }
-        
-        if (query.getSelect() != null) {
-            map.put("select", query.getSelect());
-        }
-        
-        if (query.getLinks() != null) {
-            map.put("links", query.getLinks().stream().map(link -> {
-                Map<String, Object> linkMap = new HashMap<>();
-                linkMap.put("name", link.getName());
-                if (link.getObject() != null) {
-                    linkMap.put("object", link.getObject());
-                }
-                if (link.getSelect() != null) {
-                    linkMap.put("select", link.getSelect());
-                }
-                return linkMap;
-            }).toList());
-        }
-        
-        if (query.getGroupBy() != null) {
-            map.put("group_by", query.getGroupBy());
-        }
-        
-        if (query.getMetrics() != null) {
-            map.put("metrics", query.getMetrics());
-        }
-        
-        if (query.getFilter() != null) {
-            map.put("filter", query.getFilter());
-        }
-        
-        if (query.getOrderBy() != null) {
-            map.put("orderBy", query.getOrderBy().stream().map(order -> {
-                Map<String, Object> orderMap = new HashMap<>();
-                orderMap.put("field", order.getField());
-                orderMap.put("direction", order.getDirection());
-                return orderMap;
-            }).toList());
-        }
-        
-        if (query.getLimit() != null) {
-            map.put("limit", query.getLimit());
-        }
-        
-        if (query.getOffset() != null) {
-            map.put("offset", query.getOffset());
-        }
-        
-        if (query.getDataSourceType() != null && !query.getDataSourceType().isEmpty()) {
-            map.put("dataSourceType", query.getDataSourceType());
-        }
-        
-        return map;
     }
 }
 
