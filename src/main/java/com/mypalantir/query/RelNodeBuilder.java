@@ -1332,6 +1332,13 @@ public class RelNodeBuilder {
                     if (dateStr.isEmpty()) {
                         return rexBuilder.makeNullLiteral(type);
                     }
+                    // 支持 TODAY / YESTERDAY 等快捷关键字
+                    String normalized = dateStr.toUpperCase();
+                    if ("TODAY".equals(normalized)) {
+                        dateStr = java.time.LocalDate.now().toString();
+                    } else if ("YESTERDAY".equals(normalized)) {
+                        dateStr = java.time.LocalDate.now().minusDays(1).toString();
+                    }
                     try {
                         // 使用 LocalDate 避免时区问题
                         java.time.LocalDate localDate = java.time.LocalDate.parse(dateStr);
@@ -1358,6 +1365,13 @@ public class RelNodeBuilder {
                     // 如果字符串为空，返回 NULL
                     if (valueStr.isEmpty()) {
                         return rexBuilder.makeNullLiteral(type);
+                    }
+                    // 支持 TODAY / YESTERDAY 等快捷关键字
+                    String normalized = valueStr.toUpperCase();
+                    if ("TODAY".equals(normalized)) {
+                        valueStr = java.time.LocalDate.now().toString();
+                    } else if ("YESTERDAY".equals(normalized)) {
+                        valueStr = java.time.LocalDate.now().minusDays(1).toString();
                     }
                     try {
                         // 使用 LocalDate 避免时区问题
