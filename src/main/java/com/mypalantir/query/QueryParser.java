@@ -50,7 +50,7 @@ public class QueryParser {
         }
         
         // 支持 where 和 filter 两种方式（向后兼容）
-        if (map.containsKey("filter")) {
+        if (map.containsKey("filter") && map.get("filter") != null) {
             @SuppressWarnings("unchecked")
             List<Object> filter = (List<Object>) map.get("filter");
             query.setFilter(filter);
@@ -60,25 +60,25 @@ public class QueryParser {
             query.setWhere(where);
         }
         
-        if (map.containsKey("select")) {
+        if (map.containsKey("select") && map.get("select") != null) {
             @SuppressWarnings("unchecked")
             List<String> select = (List<String>) map.get("select");
             query.setSelect(select);
         }
         
-        if (map.containsKey("links")) {
+        if (map.containsKey("links") && map.get("links") != null) {
             @SuppressWarnings("unchecked")
             List<Map<String, Object>> links = (List<Map<String, Object>>) map.get("links");
             query.setLinks(parseLinkQueries(links));
         }
         
-        if (map.containsKey("group_by")) {
+        if (map.containsKey("group_by") && map.get("group_by") != null) {
             @SuppressWarnings("unchecked")
             List<String> groupBy = (List<String>) map.get("group_by");
             query.setGroupBy(groupBy);
         }
         
-        if (map.containsKey("metrics")) {
+        if (map.containsKey("metrics") && map.get("metrics") != null) {
             @SuppressWarnings("unchecked")
             List<Object> metrics = (List<Object>) map.get("metrics");
             query.setMetrics(metrics);
@@ -98,10 +98,10 @@ public class QueryParser {
             }
         }
         
-        if (map.containsKey("orderBy") || map.containsKey("order_by")) {
+        Object orderByRaw = map.getOrDefault("orderBy", map.get("order_by"));
+        if (orderByRaw != null) {
             @SuppressWarnings("unchecked")
-            List<Map<String, Object>> orderByList = (List<Map<String, Object>>) 
-                map.getOrDefault("orderBy", map.get("order_by"));
+            List<Map<String, Object>> orderByList = (List<Map<String, Object>>) orderByRaw;
             query.setOrderBy(parseOrderBy(orderByList));
         }
         

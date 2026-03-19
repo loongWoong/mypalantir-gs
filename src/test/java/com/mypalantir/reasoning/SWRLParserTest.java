@@ -40,7 +40,7 @@ class SWRLParserTest {
     @Test
     void testParseSimpleRule() {
         String expr = "Passage(?p) ∧ detail_count_matched(?p, true) ∧ interval_set_matched(?p, true) ∧ fee_matched(?p, true) → check_status(?p, \"正常\")";
-        SWRLRule rule = parser.parse("test_rule", expr);
+        SWRLRule rule = parser.parse("test_rule", "test_rule", expr);
 
         assertEquals("test_rule", rule.getName());
         assertEquals(4, rule.getAntecedents().size());
@@ -63,7 +63,7 @@ class SWRLParserTest {
     @Test
     void testParseFunctionCallRule() {
         String expr = "Passage(?p) ∧ is_single_province_etc(?p) == true → in_obu_split_scope(?p, true)";
-        SWRLRule rule = parser.parse("scope_rule", expr);
+        SWRLRule rule = parser.parse("scope_rule", "scope_rule", expr);
 
         assertEquals(2, rule.getAntecedents().size());
 
@@ -77,7 +77,7 @@ class SWRLParserTest {
     @Test
     void testParseDisjunctionRule() {
         String expr = "Passage(?p) ∧ (obu_route_cause(?p, \"ETC门架不完整\") ∨ obu_route_cause(?p, \"CPC门架不完整\")) → obu_incomplete_reason(?p, \"门架延迟上传\")";
-        SWRLRule rule = parser.parse("disjunction_rule", expr);
+        SWRLRule rule = parser.parse("disjunction_rule", "disjunction_rule", expr);
 
         // Find the disjunction atom
         Atom disjAtom = rule.getAntecedents().stream()
@@ -92,7 +92,7 @@ class SWRLParserTest {
     @Test
     void testParseInequalityRule() {
         String expr = "Passage(?p) ∧ obu_split_status(?p, ?status) ∧ (?status != \"正常\") ∧ entry_involves_vehicle(?p, ?v) → has_obu_split_abnormal(?v, true)";
-        SWRLRule rule = parser.parse("inequality_rule", expr);
+        SWRLRule rule = parser.parse("inequality_rule", "inequality_rule", expr);
 
         // Find inequality atom
         Atom ineqAtom = rule.getAntecedents().stream()

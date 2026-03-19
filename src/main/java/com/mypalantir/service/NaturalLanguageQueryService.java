@@ -377,6 +377,68 @@ public class NaturalLanguageQueryService {
     }
     
     /**
+     * 将 OntologyQuery 转换为 Map 格式（只包含非 null 字段）
+     */
+    public Map<String, Object> convertToMap(OntologyQuery query) {
+        Map<String, Object> map = new HashMap<>();
+
+        if (query.getObject() != null) {
+            map.put("object", query.getObject());
+        } else if (query.getFrom() != null) {
+            map.put("from", query.getFrom());
+        }
+
+        if (query.getSelect() != null) {
+            map.put("select", query.getSelect());
+        }
+
+        if (query.getLinks() != null) {
+            map.put("links", query.getLinks().stream().map(link -> {
+                Map<String, Object> linkMap = new HashMap<>();
+                linkMap.put("name", link.getName());
+                if (link.getObject() != null) {
+                    linkMap.put("object", link.getObject());
+                }
+                if (link.getSelect() != null) {
+                    linkMap.put("select", link.getSelect());
+                }
+                return linkMap;
+            }).toList());
+        }
+
+        if (query.getGroupBy() != null) {
+            map.put("group_by", query.getGroupBy());
+        }
+
+        if (query.getMetrics() != null) {
+            map.put("metrics", query.getMetrics());
+        }
+
+        if (query.getFilter() != null) {
+            map.put("filter", query.getFilter());
+        }
+
+        if (query.getOrderBy() != null) {
+            map.put("orderBy", query.getOrderBy().stream().map(order -> {
+                Map<String, Object> orderMap = new HashMap<>();
+                orderMap.put("field", order.getField());
+                orderMap.put("direction", order.getDirection());
+                return orderMap;
+            }).toList());
+        }
+
+        if (query.getLimit() != null) {
+            map.put("limit", query.getLimit());
+        }
+
+        if (query.getOffset() != null) {
+            map.put("offset", query.getOffset());
+        }
+
+        return map;
+    }
+
+    /**
      * 自然语言查询异常类
      */
     public static class NaturalLanguageQueryException extends Exception {

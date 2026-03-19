@@ -171,10 +171,7 @@ public class AgentTools {
 
         try {
             OntologyQuery ontologyQuery = nlqService.convertToQuery(query);
-            // 转换为 Map 执行
-            Map<String, Object> queryMap = objectMapper.convertValue(ontologyQuery, new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {});
-            // 移除 null 值
-            queryMap.values().removeIf(Objects::isNull);
+            Map<String, Object> queryMap = nlqService.convertToMap(ontologyQuery);
             QueryExecutor.QueryResult result = queryService.executeQuery(queryMap);
             Map<String, Object> resp = new LinkedHashMap<>();
             resp.put("columns", result.getColumns());
