@@ -3,9 +3,11 @@ package com.mypalantir.service;
 import com.mypalantir.meta.Loader;
 import com.mypalantir.meta.ObjectType;
 import com.mypalantir.repository.IInstanceStorage;
+import com.mypalantir.repository.Neo4jInstanceStorage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -13,6 +15,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.*;
+import java.util.concurrent.*;
 
 @Service
 public class MappedDataService {
@@ -29,6 +32,13 @@ public class MappedDataService {
 
     @Autowired
     private Loader loader;
+
+    /** 混合存储模式下用于同步抽取后写入 Neo4j 节点 */
+    @Autowired(required = false)
+    private Neo4jInstanceStorage neo4jStorage;
+
+    @Autowired(required = false)
+    private Environment environment;
 
     /**
      * 查询映射数据（原始数据）
@@ -356,6 +366,17 @@ public class MappedDataService {
         result.targetDatabaseId = (targetDatabaseId == null || targetDatabaseId.isEmpty()) 
             ? "default" : targetDatabaseId;
         
+        // 12. 混合存储模式：同步到 Neo4j（按 storage.neo4j.fields.default 等配置建立节点）
+        if (neo4jStorage != null && rowsInserted > 0) {
+            try {
+                int neo4jSynced = syncSyncTableToNeo4j(objectType, targetTableName, targetDatabaseId);
+                result.neo4jNodesSynced = neo4jSynced;
+                logger.info("Synced {} rows to Neo4j for object type {}", neo4jSynced, objectType);
+            } catch (Exception e) {
+                logger.warn("Failed to sync to Neo4j (sync table data is OK): {}", e.getMessage());
+            }
+        }
+        
         return result;
     }
 
@@ -556,45 +577,50 @@ public class MappedDataService {
             return 0;
         }
         
-        // 2. 构建插入SQL
+        // 2. 构建插入SQL（去重：多个源列映射到同一目标属性时只保留一次）
         List<String> targetColumns = new ArrayList<>();
         targetColumns.add("id");
+        java.util.Set<String> seen = new java.util.LinkedHashSet<>();
+        seen.add("id");
         for (String propertyName : columnPropertyMappings.values()) {
-            if (!"id".equals(propertyName)) {
+            if (!"id".equals(propertyName) && seen.add(propertyName)) {
                 targetColumns.add(propertyName);
             }
         }
         
-        // 3. 批量插入到目标数据库
+        // 3. 批量插入到目标数据库（JDBC batch + ON DUPLICATE KEY UPDATE，每 1000 条提交一次）
         int rowsInserted = 0;
-        String insertSql = buildInsertSql(targetTableName, targetColumns);
+        String upsertSql = buildInsertOrUpdateSql(targetTableName, targetColumns);
+        final int BATCH_SIZE = 1000;
         
         Connection targetConn = databaseMetadataService.getConnectionForDatabase(targetDatabaseId);
-        try (PreparedStatement pstmt = targetConn.prepareStatement(insertSql)) {
-            for (Map<String, Object> row : sourceRows) {
-                // 设置参数
-                setInsertParameters(pstmt, row, columnPropertyMappings, primaryKeyColumns, primaryKeyColumn, targetColumns);
-                
-                try {
-                    pstmt.executeUpdate();
-                    rowsInserted++;
-                } catch (SQLException e) {
-                    // 如果是主键冲突，使用ON DUPLICATE KEY UPDATE
-                    if (e.getErrorCode() == 1062) { // MySQL duplicate key error
-                        String updateSql = buildInsertOrUpdateSql(targetTableName, targetColumns);
-                        try (PreparedStatement updateStmt = targetConn.prepareStatement(updateSql)) {
-                            setInsertParameters(updateStmt, row, columnPropertyMappings, primaryKeyColumns, primaryKeyColumn, targetColumns);
-                            updateStmt.executeUpdate();
-                            rowsInserted++;
-                        }
-                    } else {
-                        logger.warn("Failed to insert row: {}", e.getMessage());
+        try {
+            targetConn.setAutoCommit(false);
+            try (PreparedStatement pstmt = targetConn.prepareStatement(upsertSql)) {
+                int batchCount = 0;
+                for (Map<String, Object> row : sourceRows) {
+                    setInsertParameters(pstmt, row, columnPropertyMappings, primaryKeyColumns, primaryKeyColumn, targetColumns);
+                    pstmt.addBatch();
+                    batchCount++;
+                    if (batchCount >= BATCH_SIZE) {
+                        int[] counts = pstmt.executeBatch();
+                        for (int c : counts) rowsInserted += (c > 0 ? 1 : 0);
+                        batchCount = 0;
                     }
                 }
+                if (batchCount > 0) {
+                    int[] counts = pstmt.executeBatch();
+                    for (int c : counts) rowsInserted += (c > 0 ? 1 : 0);
+                }
             }
+            targetConn.commit();
+        } catch (SQLException e) {
+            if (targetConn != null) targetConn.rollback();
+            throw e;
         } finally {
-            if (targetConn != null && !targetConn.isClosed()) {
-                targetConn.close();
+            if (targetConn != null) {
+                targetConn.setAutoCommit(true);
+                if (!targetConn.isClosed()) targetConn.close();
             }
         }
         
@@ -747,13 +773,13 @@ public class MappedDataService {
                                    List<String> primaryKeyColumns, String primaryKeyColumn) {
         StringBuilder sql = new StringBuilder("INSERT INTO `").append(targetTableName).append("` (");
         
-        // 添加目标列
+        // 添加目标列（去重：多个源列映射到同一目标属性时只保留一次）
         List<String> targetColumns = new ArrayList<>();
         targetColumns.add("id"); // id字段
-        
-        // 添加映射的属性列
+        java.util.Set<String> seen = new java.util.LinkedHashSet<>();
+        seen.add("id");
         for (String propertyName : columnPropertyMappings.values()) {
-            if (!"id".equals(propertyName)) {
+            if (!"id".equals(propertyName) && seen.add(propertyName)) {
                 targetColumns.add(propertyName);
             }
         }
@@ -823,11 +849,13 @@ public class MappedDataService {
             selectColumns.add("UUID() AS `id`");
         }
         
-        // 其他映射列
+        // 其他映射列（去重：多个源列映射到同一目标属性时只取第一个）
+        java.util.Set<String> selectedProperties = new java.util.HashSet<>();
+        selectedProperties.add("id");
         for (Map.Entry<String, String> entry : columnPropertyMappings.entrySet()) {
             String sourceColumn = entry.getKey();
             String propertyName = entry.getValue();
-            if (!"id".equals(propertyName)) {
+            if (!"id".equals(propertyName) && selectedProperties.add(propertyName)) {
                 selectColumns.add("`" + sourceColumn + "` AS `" + propertyName + "`");
             }
         }
@@ -865,17 +893,108 @@ public class MappedDataService {
     public static class SyncExtractResult {
         public boolean tableCreated = false;
         public int rowsExtracted = 0;
+        public int neo4jNodesSynced = 0;
         public String targetTableName;
         public String targetDatabaseId;
-        
+
         public Map<String, Object> toMap() {
             Map<String, Object> result = new HashMap<>();
             result.put("table_created", tableCreated);
             result.put("rows_extracted", rowsExtracted);
+            result.put("neo4j_nodes_synced", neo4jNodesSynced);
             result.put("target_table_name", targetTableName);
             result.put("target_database_id", targetDatabaseId);
             return result;
         }
+    }
+
+    private static final int NEO4J_BATCH_SIZE = 500;
+    private static final int NEO4J_PARALLEL_THREADS = 4;
+
+    /**
+     * 将同步表数据同步到 Neo4j（混合存储模式）
+     * 批量 MERGE + 多线程并行，按 storage.neo4j.fields 提取字段建立节点
+     */
+    private int syncSyncTableToNeo4j(String objectType, String targetTableName, String targetDatabaseId) throws IOException, SQLException {
+        String selectSql = "SELECT * FROM `" + targetTableName + "`";
+        List<Map<String, Object>> rows = databaseMetadataService.executeQuery(selectSql, targetDatabaseId);
+        if (rows.isEmpty()) return 0;
+        List<String> neo4jFields = getNeo4jFields(objectType);
+        List<Map<String, Object>> summaries = new ArrayList<>(rows.size());
+        for (Map<String, Object> row : rows) {
+            Map<String, Object> summary = extractSummaryFields(objectType, new HashMap<>(row), neo4jFields);
+            if (summary.get("id") != null) summaries.add(summary);
+        }
+        if (summaries.isEmpty()) return 0;
+
+        ExecutorService executor = Executors.newFixedThreadPool(NEO4J_PARALLEL_THREADS);
+        try {
+            List<List<Map<String, Object>>> batches = new ArrayList<>();
+            for (int i = 0; i < summaries.size(); i += NEO4J_BATCH_SIZE) {
+                batches.add(new ArrayList<>(summaries.subList(i, Math.min(i + NEO4J_BATCH_SIZE, summaries.size()))));
+            }
+            List<Future<Integer>> futures = new ArrayList<>();
+            for (List<Map<String, Object>> batch : batches) {
+                futures.add(executor.submit(() -> {
+                    try {
+                        return neo4jStorage.batchMergeInstances(objectType, batch);
+                    } catch (IOException e) {
+                        throw new CompletionException(e);
+                    }
+                }));
+            }
+            int synced = 0;
+            for (Future<Integer> f : futures) {
+                synced += f.get();
+            }
+            return synced;
+        } catch (ExecutionException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof IOException) throw (IOException) cause;
+            throw new IOException("Neo4j batch sync failed", cause);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IOException("Neo4j sync interrupted", e);
+        } finally {
+            executor.shutdown();
+        }
+    }
+
+    private List<String> getNeo4jFields(String objectType) {
+        if (environment == null) {
+            return Arrays.asList("id", "name", "display_name");
+        }
+        String configKey = "storage.neo4j.fields." + objectType.toLowerCase();
+        String fieldsConfig = environment.getProperty(configKey);
+        if (fieldsConfig != null && !fieldsConfig.trim().isEmpty()) {
+            List<String> fields = new ArrayList<>();
+            for (String f : fieldsConfig.split(",")) {
+                String trimmed = f.trim();
+                if (!trimmed.isEmpty()) fields.add(trimmed);
+            }
+            if (!fields.isEmpty()) return fields;
+        }
+        String defaultConfig = environment.getProperty("storage.neo4j.fields.default");
+        if (defaultConfig != null && !defaultConfig.trim().isEmpty()) {
+            List<String> fields = new ArrayList<>();
+            for (String f : defaultConfig.split(",")) {
+                String trimmed = f.trim();
+                if (!trimmed.isEmpty()) fields.add(trimmed);
+            }
+            if (!fields.isEmpty()) return fields;
+        }
+        return Arrays.asList("id", "name", "display_name");
+    }
+
+    private Map<String, Object> extractSummaryFields(String objectType, Map<String, Object> data, List<String> neo4jFields) {
+        Map<String, Object> summary = new HashMap<>();
+        if (data.containsKey("id")) summary.put("id", data.get("id"));
+        for (String field : neo4jFields) {
+            if (!"id".equals(field) && data.containsKey(field)) {
+                summary.put(field, data.get(field));
+            }
+        }
+        return summary;
     }
 
     public void syncMappedDataToInstances(String objectType, String mappingId) throws IOException, SQLException, Loader.NotFoundException {

@@ -220,6 +220,42 @@ public class Neo4jInstanceStorage implements IInstanceStorage {
         }
     }
 
+    /**
+     * 批量 MERGE 节点（用于同步抽取加速）
+     * 使用 UNWIND 一次写入多条，保证一致性
+     */
+    public int batchMergeInstances(String objectType, List<Map<String, Object>> rows) throws IOException {
+        if (neo4jDriver == null) throw new IOException("Neo4j driver is not initialized");
+        if (rows == null || rows.isEmpty()) return 0;
+        verifyAndRetryConnection();
+
+        List<Map<String, Object>> neo4jRows = new ArrayList<>();
+        for (Map<String, Object> row : rows) {
+            Map<String, Object> n = new HashMap<>();
+            for (Map.Entry<String, Object> e : row.entrySet()) {
+                if (e.getValue() != null) {
+                    n.put(e.getKey(), convertToNeo4jValue(e.getValue()));
+                }
+            }
+            if (n.containsKey("id")) neo4jRows.add(n);
+        }
+        if (neo4jRows.isEmpty()) return 0;
+
+        String label = normalizeLabel(objectType);
+        String cypher = "UNWIND $rows AS row MERGE (n:" + label + " {id: row.id}) " +
+                "ON CREATE SET n += row, n.created_at = toString(datetime()), n.updated_at = toString(datetime()) " +
+                "ON MATCH SET n += row, n.updated_at = toString(datetime())";
+
+        try (Session session = neo4jDriver.session()) {
+            session.run(cypher, Values.parameters("rows", neo4jRows));
+            logger.debug("Batch merged {} instances of type {} to Neo4j", neo4jRows.size(), objectType);
+            return neo4jRows.size();
+        } catch (Exception e) {
+            logger.error("Failed to batch merge instances in Neo4j: {}", e.getMessage(), e);
+            throw new IOException("Failed to batch merge: " + e.getMessage(), e);
+        }
+    }
+
     @Override
     public void deleteInstance(String objectType, String id) throws IOException {
         if (neo4jDriver == null) {

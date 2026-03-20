@@ -6,7 +6,7 @@ export default defineConfig({
   plugins: [react()],
   server: {
     host: '0.0.0.0', // 允许远程访问
-    port: 5173,
+    port: 5174,
     strictPort: false,
   },
   build: {
