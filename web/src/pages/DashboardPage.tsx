@@ -15,10 +15,10 @@ interface ChatMessage {
 }
 
 const EXAMPLE_QUESTIONS = [
-  '展示各收费站的通行数量柱状图',
-  '添加一个今日通行总量的指标卡',
-  '展示各入口站通行数量的饼图',
-  '用表格展示最近10条通行记录',
+  '按收费站统计入口交易数量，用柱状图展示',
+  '统计各收费站的车道数量，用饼图展示',
+  '添加一个入口交易总数的指标卡',
+  '用表格展示最近10条出口交易记录',
 ];
 
 const SIZE_CLASSES: Record<string, string> = {
@@ -74,13 +74,14 @@ export default function DashboardPage() {
           };
           updated.push(newWidget);
         } else if (op.action === 'update' && op.spec) {
+          const spec = op.spec;
           updated = updated.map(w => {
             if (w.id !== op.widgetId) return w;
-            const mergedSpec = { ...w.spec, ...op.spec } as WidgetSpec;
-            if (op.spec.options) {
-              mergedSpec.options = { ...w.spec.options, ...op.spec.options };
+            const mergedSpec = { ...w.spec, ...spec } as WidgetSpec;
+            if (spec.options) {
+              mergedSpec.options = { ...w.spec.options, ...spec.options };
             }
-            const queryChanged = op.spec.query && op.spec.query !== w.spec.query;
+            const queryChanged = spec.query && spec.query !== w.spec.query;
             return { ...w, spec: mergedSpec, loading: !!queryChanged };
           });
         } else if (op.action === 'remove') {

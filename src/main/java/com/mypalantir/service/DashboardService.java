@@ -184,6 +184,16 @@ public class DashboardService {
             4. 用户说"加一个/添加"时，使用 add 操作
             5. 一次可以输出多个操作
             6. options 中的字段名应与 query 返回结果的列名一致
+            7. Link 是有方向的（source -> target），查询时 object 必须是 link 的 source_type。
+               例如查"各收费站的通行数量"，entry_at_station 的 source 是 EntryTransaction，
+               所以 query 应该是"按收费站统计入口交易数量"而不是"统计收费站的入口交易"
+
+            ## 查询示例（供你生成 query 字段参考）
+            - 按收费站统计入口交易数量 → object=EntryTransaction, link=entry_at_station, group_by=station_name, count(id)
+            - 统计各收费站的车道数量 → object=TollStation, link=station_has_lanes, group_by=station_name, count(lane_id)
+            - 各出口站的收费总额 → object=ExitTransaction, link=exit_at_station, group_by=station_name, sum(fee)
+            - 各门架的交易数量 → object=GantryTransaction, link=gantry_at_gantry, group_by=gantry_hex, count(trade_id)
+            - 最近10条出口交易 → object=ExitTransaction, select=[trans_time, fee, pay_fee], limit=10, orderBy=trans_time DESC
             """, currentWidgetsJson != null ? currentWidgetsJson : "空（尚无 widget）", ontologySummary);
     }
 

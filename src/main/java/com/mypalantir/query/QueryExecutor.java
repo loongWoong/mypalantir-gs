@@ -2,30 +2,11 @@ package com.mypalantir.query;
 
 import com.mypalantir.meta.DataSourceMapping;
 import com.mypalantir.meta.Loader;
-import com.mypalantir.query.schema.OntologySchemaFactory;
-import org.apache.calcite.DataContext;
-import org.apache.calcite.adapter.java.JavaTypeFactory;
 import org.apache.calcite.jdbc.CalciteConnection;
-import org.apache.calcite.jdbc.CalciteSchema;
-import org.apache.calcite.plan.RelOptPlanner;
-import org.apache.calcite.plan.volcano.VolcanoPlanner;
-import org.apache.calcite.prepare.CalciteCatalogReader;
-import org.apache.calcite.prepare.Prepare;
-import org.apache.calcite.rel.RelNode;
-import org.apache.calcite.rel.RelRoot;
-import org.apache.calcite.rel.type.RelDataTypeFactory;
-import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.schema.SchemaPlus;
-import org.apache.calcite.sql.SqlNode;
-import org.apache.calcite.sql.SqlSelect;
-import org.apache.calcite.sql.parser.SqlParser;
-import org.apache.calcite.sql.type.SqlTypeFactoryImpl;
-import org.apache.calcite.sql.validate.SqlValidator;
-import org.apache.calcite.sql.validate.SqlValidatorImpl;
-import org.apache.calcite.sql2rel.SqlToRelConverter;
-import org.apache.calcite.tools.FrameworkConfig;
-import org.apache.calcite.tools.Frameworks;
-import org.apache.calcite.tools.RelBuilder;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -42,11 +23,11 @@ import java.util.Map;
  * 将 OntologyQuery 转换为 Calcite RelNode 并执行
  */
 public class QueryExecutor {
+    private static final Logger logger = LoggerFactory.getLogger(QueryExecutor.class);
     private final Loader loader;
     private final RelNodeBuilder relNodeBuilder;
     private SchemaPlus rootSchema;
     private Connection calciteConnection;
-    private org.apache.calcite.tools.FrameworkConfig frameworkConfig;
 
     public QueryExecutor(Loader loader) {
         this.loader = loader;
@@ -60,7 +41,6 @@ public class QueryExecutor {
         // 初始化 RelNodeBuilder（会创建 Schema 和 FrameworkConfig）
         relNodeBuilder.initialize();
         rootSchema = relNodeBuilder.rootSchema;
-        frameworkConfig = relNodeBuilder.frameworkConfig;
         
         // 创建 Calcite 连接用于执行
         Connection connection = DriverManager.getConnection("jdbc:calcite:");
@@ -86,53 +66,42 @@ public class QueryExecutor {
         }
 
         // 直接构建 RelNode
-        System.out.println("\n" + "=".repeat(80));
-        System.out.println("=== Building RelNode ===");
+        logger.debug("Building RelNode for query object: {}", query.getFrom());
         org.apache.calcite.rel.RelNode relNode = relNodeBuilder.buildRelNode(query);
-        
+
         // 打印 RelNode 信息（递归显示整个树）
-        System.out.println("RelNode Tree Structure:");
-        printRelNodeTree(relNode, 0);
-        System.out.println("=".repeat(80) + "\n");
-        
-        // 优化 RelNode
-        org.apache.calcite.rel.RelNode optimizedRelNode = optimizeRelNode(relNode);
+        if (logger.isDebugEnabled()) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("\n").append("=".repeat(80)).append("\n");
+            sb.append("=== RelNode Tree Structure ===\n");
+            printRelNodeTree(relNode, 0, sb);
+            sb.append("=".repeat(80));
+            logger.debug(sb.toString());
+        }
         
         // 执行 RelNode（传入原始查询以便回退）
-        return executeRelNode(optimizedRelNode, query);
+        return executeRelNode(relNode, query);
     }
     
     /**
      * 递归打印 RelNode 树结构
      */
-    private void printRelNodeTree(org.apache.calcite.rel.RelNode relNode, int indent) {
+    private void printRelNodeTree(org.apache.calcite.rel.RelNode relNode, int indent, StringBuilder sb) {
         String indentStr = "  ".repeat(indent);
-        System.out.println(indentStr + "└─ " + relNode.getClass().getSimpleName());
-        System.out.println(indentStr + "   RowType: " + relNode.getRowType());
-        System.out.println(indentStr + "   Fields:");
+        sb.append(indentStr).append("└─ ").append(relNode.getClass().getSimpleName()).append("\n");
+        sb.append(indentStr).append("   RowType: ").append(relNode.getRowType()).append("\n");
+        sb.append(indentStr).append("   Fields:\n");
         for (int i = 0; i < relNode.getRowType().getFieldCount(); i++) {
             org.apache.calcite.rel.type.RelDataTypeField field = relNode.getRowType().getFieldList().get(i);
-            System.out.println(indentStr + "     [" + i + "] " + field.getName() + " : " + field.getType());
+            sb.append(indentStr).append("     [").append(i).append("] ").append(field.getName())
+              .append(" : ").append(field.getType()).append("\n");
         }
-        System.out.println(indentStr + "   Description: " + relNode.toString());
-        
-        // 递归打印输入节点
         if (relNode.getInputs() != null && !relNode.getInputs().isEmpty()) {
-            System.out.println(indentStr + "   Inputs:");
+            sb.append(indentStr).append("   Inputs:\n");
             for (int i = 0; i < relNode.getInputs().size(); i++) {
-                printRelNodeTree(relNode.getInputs().get(i), indent + 1);
+                printRelNodeTree(relNode.getInputs().get(i), indent + 1, sb);
             }
         }
-    }
-    
-    /**
-     * 优化 RelNode（暂时简化，直接返回）
-     * TODO: 实现完整的优化器
-     */
-    private org.apache.calcite.rel.RelNode optimizeRelNode(org.apache.calcite.rel.RelNode relNode) {
-        // 暂时不优化，直接返回
-        // TODO: 实现完整的 VolcanoPlanner 优化
-        return relNode;
     }
     
     /**
@@ -169,26 +138,21 @@ public class QueryExecutor {
         
         // 使用自定义的 OntologyRelToSqlConverter 将 RelNode 转换为 SQL
         // 这个转换器会自动处理表名和列名的映射
-        OntologyRelToSqlConverter converter = 
-            new OntologyRelToSqlConverter(unicodeDialect, loader);
-        
-        // 调试：打印查询信息
-        System.out.println("\n" + "=".repeat(80));
-        System.out.println("=== Converting RelNode to SQL ===");
-        System.out.println("Query Object: " + originalQuery.getFrom());
-        System.out.println("Query has Links: " + (originalQuery.getLinks() != null && !originalQuery.getLinks().isEmpty()));
-        System.out.println("Query has GroupBy: " + (originalQuery.getGroupBy() != null && !originalQuery.getGroupBy().isEmpty()));
-        System.out.println("Query has Metrics: " + (originalQuery.getMetrics() != null && !originalQuery.getMetrics().isEmpty()));
-        
+        OntologyRelToSqlConverter converter =
+            new OntologyRelToSqlConverter(unicodeDialect);
+
+        logger.debug("Converting RelNode to SQL: object={}, hasLinks={}, hasGroupBy={}, hasMetrics={}",
+            originalQuery.getFrom(),
+            originalQuery.getLinks() != null && !originalQuery.getLinks().isEmpty(),
+            originalQuery.getGroupBy() != null && !originalQuery.getGroupBy().isEmpty(),
+            originalQuery.getMetrics() != null && !originalQuery.getMetrics().isEmpty());
+
         org.apache.calcite.rel.rel2sql.RelToSqlConverter.Result result = converter.visitRoot(relNode);
-        
+
         // 获取映射后的 SQL（传入原始查询以支持 JOIN）
         String sql = converter.getMappedSql(result, originalQuery);
-        
-        // 调试：打印生成的 SQL
-        System.out.println("=== Generated SQL ===");
-        System.out.println(sql);
-        System.out.println("=".repeat(80) + "\n");
+
+        logger.debug("Generated SQL: {}", sql);
         
         // 获取 ObjectType 和 DataSourceMapping（用于结果映射）
         com.mypalantir.meta.ObjectType objectType;
@@ -203,153 +167,6 @@ public class QueryExecutor {
         // 执行 SQL（这是 Calcite 的标准执行方式）
         // 注意：需要将结果中的数据库列名映射回属性名
         return executeSql(sql, originalQuery, objectType, dataSourceMapping);
-    }
-    
-    /**
-     * 替换 SQL 中的表名和列名
-     * 将 Ontology 属性名替换为数据库列名，将 ObjectType 名称替换为数据库表名
-     */
-    private String replaceTableAndColumnNames(String sql, OntologyQuery query, 
-                                               com.mypalantir.meta.ObjectType objectType,
-                                               com.mypalantir.meta.DataSourceMapping dataSourceMapping) {
-        // 替换表名：将 ObjectType 名称替换为数据库表名（大写）
-        String objectTypeName = query.getFrom();
-        String dbTableName = dataSourceMapping.getTable().toUpperCase();
-        // 使用正则表达式替换表名，确保只替换表名而不是列名
-        sql = sql.replaceAll("(?i)\"" + java.util.regex.Pattern.quote(objectTypeName) + "\"", 
-                            "\"" + dbTableName + "\"");
-        sql = sql.replaceAll("(?i)\\b" + java.util.regex.Pattern.quote(objectTypeName) + "\\b", 
-                            "\"" + dbTableName + "\"");
-        
-        // 替换列名：将属性名替换为数据库列名
-        if (objectType.getProperties() != null) {
-            for (com.mypalantir.meta.Property prop : objectType.getProperties()) {
-                String propertyName = prop.getName();
-                String columnName = dataSourceMapping.getColumnName(propertyName);
-                if (columnName != null) {
-                    String dbColumnName = columnName.toUpperCase();
-                    // 替换带引号的列名
-                    sql = sql.replaceAll("\"" + java.util.regex.Pattern.quote(propertyName) + "\"", 
-                                        "\"" + dbColumnName + "\"");
-                    // 替换不带引号的列名（在 SELECT、WHERE、ORDER BY 等子句中）
-                    // 使用单词边界确保只替换列名
-                    sql = sql.replaceAll("(?i)\\b" + java.util.regex.Pattern.quote(propertyName) + "\\b", 
-                                        "\"" + dbColumnName + "\"");
-                }
-            }
-        }
-        
-        // 替换 ID 列名
-        String idColumnName = dataSourceMapping.getIdColumn().toUpperCase();
-        sql = sql.replaceAll("(?i)\"id\"", "\"" + idColumnName + "\"");
-        sql = sql.replaceAll("(?i)\\bid\\b", "\"" + idColumnName + "\"");
-        
-        return sql;
-    }
-
-    /**
-     * 将 OntologyQuery 转换为 SQL
-     */
-    private String buildSql(OntologyQuery query) throws Exception {
-        // 获取 ObjectType 以进行属性名到列名的映射
-        com.mypalantir.meta.ObjectType objectType;
-        try {
-            objectType = loader.getObjectType(query.getFrom());
-        } catch (com.mypalantir.meta.Loader.NotFoundException e) {
-            throw new IllegalArgumentException("Object type '" + query.getFrom() + "' not found");
-        }
-        
-        com.mypalantir.meta.DataSourceMapping dataSourceMapping = objectType.getDataSource();
-        
-        StringBuilder sql = new StringBuilder("SELECT ");
-        
-        // SELECT 子句 - 需要映射属性名到列名
-        if (query.getSelect() != null && !query.getSelect().isEmpty()) {
-            List<String> selectColumns = new ArrayList<>();
-            for (String propertyName : query.getSelect()) {
-                String columnName = mapPropertyToColumn(propertyName, dataSourceMapping);
-                selectColumns.add(quoteIdentifier(columnName));
-            }
-            sql.append(String.join(", ", selectColumns));
-        } else {
-            sql.append("*");
-        }
-        
-        // FROM 子句 - 使用表名（从 dataSourceMapping 获取）
-        String tableName = dataSourceMapping != null && dataSourceMapping.isConfigured() 
-            ? dataSourceMapping.getTable().toUpperCase() 
-            : query.getFrom();
-        sql.append(" FROM ").append(quoteIdentifier(tableName));
-        
-        // WHERE 子句
-        if (query.getWhere() != null && !query.getWhere().isEmpty()) {
-            sql.append(" WHERE ");
-            List<String> conditions = new ArrayList<>();
-            for (Map.Entry<String, Object> entry : query.getWhere().entrySet()) {
-                String propertyName = entry.getKey();
-                String columnName = mapPropertyToColumn(propertyName, dataSourceMapping);
-                conditions.add(quoteIdentifier(columnName) + " = " + quoteValue(entry.getValue()));
-            }
-            sql.append(String.join(" AND ", conditions));
-        }
-        
-        // ORDER BY 子句
-        if (query.getOrderBy() != null && !query.getOrderBy().isEmpty()) {
-            sql.append(" ORDER BY ");
-            List<String> orderByClauses = new ArrayList<>();
-            for (OntologyQuery.OrderBy orderBy : query.getOrderBy()) {
-                String propertyName = orderBy.getField();
-                String columnName = mapPropertyToColumn(propertyName, dataSourceMapping);
-                orderByClauses.add(quoteIdentifier(columnName) + " " + 
-                    (orderBy.getDirection() != null ? orderBy.getDirection() : "ASC"));
-            }
-            sql.append(String.join(", ", orderByClauses));
-        }
-        
-        // LIMIT 子句
-        if (query.getLimit() != null && query.getLimit() > 0) {
-            sql.append(" LIMIT ").append(query.getLimit());
-        }
-        
-        // OFFSET 子句
-        if (query.getOffset() != null && query.getOffset() > 0) {
-            sql.append(" OFFSET ").append(query.getOffset());
-        }
-        
-        return sql.toString();
-    }
-    
-    /**
-     * 将属性名映射为数据库列名
-     * 如果对象类型有数据源映射，使用映射；否则直接使用属性名
-     */
-    private String mapPropertyToColumn(String propertyName, com.mypalantir.meta.DataSourceMapping dataSourceMapping) {
-        if (dataSourceMapping != null && dataSourceMapping.isConfigured()) {
-            String columnName = dataSourceMapping.getColumnName(propertyName);
-            if (columnName != null) {
-                // H2 默认创建大写列名，所以转换为大写
-                return columnName.toUpperCase();
-            }
-        }
-        // 如果没有映射，直接使用属性名（转换为大写以匹配 H2）
-        return propertyName.toUpperCase();
-    }
-
-    /**
-     * 执行 SQL 查询（保留作为备用方法）
-     * @deprecated 使用 executeRelNode 代替
-     */
-    @Deprecated
-    private QueryResult executeSql(String sql) throws SQLException {
-        return executeSql(sql, null, null);
-    }
-    
-    /**
-     * 执行 SQL 查询，并将数据库列名映射回属性名
-     */
-    private QueryResult executeSql(String sql, com.mypalantir.meta.ObjectType objectType, 
-                                    com.mypalantir.meta.DataSourceMapping dataSourceMapping) throws SQLException {
-        return executeSql(sql, null, objectType, dataSourceMapping);
     }
     
     /**
@@ -504,9 +321,11 @@ public class QueryExecutor {
                                     String columnName = targetMapping.getColumnName(targetProp.getName());
                                     if (columnName != null) {
                                         String upperColumnName = columnName.toUpperCase();
-                                        // 如果列名冲突，使用带前缀的名称
+                                        // 如果列名冲突，使用带表名前缀的名称
                                         if (columnToPropertyMap.containsKey(upperColumnName)) {
-                                            // 列名冲突，跳过或使用带前缀的名称
+                                            columnToPropertyMap.put(
+                                                linkType.getTargetType() + "." + upperColumnName,
+                                                targetProp.getName());
                                             continue;
                                         }
                                         columnToPropertyMap.put(upperColumnName, targetProp.getName());
@@ -523,26 +342,6 @@ public class QueryExecutor {
         }
         
         return columnToPropertyMap;
-    }
-
-    /**
-     * 引用标识符
-     */
-    private String quoteIdentifier(String identifier) {
-        return "\"" + identifier + "\"";
-    }
-
-    /**
-     * 引用值
-     */
-    private String quoteValue(Object value) {
-        if (value == null) {
-            return "NULL";
-        }
-        if (value instanceof String) {
-            return "'" + value.toString().replace("'", "''") + "'";
-        }
-        return value.toString();
     }
 
     /**

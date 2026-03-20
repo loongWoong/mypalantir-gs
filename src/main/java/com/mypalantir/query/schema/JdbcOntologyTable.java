@@ -35,6 +35,25 @@ public class JdbcOntologyTable extends OntologyTable implements ScannableTable {
         this.connection = connection;
     }
 
+    /**
+     * 获取有效属性列表（排除衍生属性和与 ID 列重复的 id 属性）
+     * buildRowType、buildSelectSql、buildRow 统一使用此方法
+     */
+    private List<Property> getEffectiveProperties() {
+        List<Property> result = new ArrayList<>();
+        if (objectType.getProperties() == null) return result;
+        String idCol = (mapping != null && mapping.getIdColumn() != null) ? mapping.getIdColumn().toUpperCase() : "";
+        for (Property prop : objectType.getProperties()) {
+            if (prop.isDerived()) continue;
+            if ("id".equals(prop.getName()) && mapping != null) {
+                String colName = mapping.getColumnName(prop.getName());
+                if (colName != null && colName.toUpperCase().equals(idCol)) continue;
+            }
+            result.add(prop);
+        }
+        return result;
+    }
+
     @Override
     protected RelDataType buildRowType(RelDataTypeFactory typeFactory) {
         List<RelDataTypeFactory.Builder> builder = new ArrayList<>();
@@ -57,39 +76,26 @@ public class JdbcOntologyTable extends OntologyTable implements ScannableTable {
         typeBuilder.add("id", idType);
 
         // 添加所有属性字段（排除衍生属性和已作为ID的属性）
-        String idCol = (mapping != null && mapping.getIdColumn() != null) ? mapping.getIdColumn().toUpperCase() : "";
-        if (objectType.getProperties() != null) {
-            for (Property prop : objectType.getProperties()) {
-                if (prop.isDerived()) {
-                    continue; // 衍生属性不在数据库中，跳过
-                }
-                // 跳过与ID列重复的id属性
-                if ("id".equals(prop.getName()) && mapping != null) {
-                    String colName = mapping.getColumnName(prop.getName());
-                    if (colName != null && colName.toUpperCase().equals(idCol)) {
-                        continue;
-                    }
-                }
-                SqlTypeName sqlType = mapPropertyTypeToSqlType(prop.getDataType());
-                RelDataType fieldType;
-                
-                // 对于字符串类型，指定 UTF-8 字符集和排序规则
-                if (sqlType == SqlTypeName.VARCHAR || sqlType == SqlTypeName.CHAR) {
-                    RelDataType baseType = typeFactory.createSqlType(
-                        sqlType,
-                        org.apache.calcite.rel.type.RelDataType.PRECISION_NOT_SPECIFIED
-                    );
-                    fieldType = typeFactory.createTypeWithCharsetAndCollation(
-                        baseType,
-                        java.nio.charset.StandardCharsets.UTF_8,
-                        collation
-                    );
-                } else {
-                    fieldType = typeFactory.createSqlType(sqlType);
-                }
-                
-                typeBuilder.add(prop.getName(), fieldType);
+        for (Property prop : getEffectiveProperties()) {
+            SqlTypeName sqlType = mapPropertyTypeToSqlType(prop.getDataType());
+            RelDataType fieldType;
+
+            // 对于字符串类型，指定 UTF-8 字符集和排序规则
+            if (sqlType == SqlTypeName.VARCHAR || sqlType == SqlTypeName.CHAR) {
+                RelDataType baseType = typeFactory.createSqlType(
+                    sqlType,
+                    org.apache.calcite.rel.type.RelDataType.PRECISION_NOT_SPECIFIED
+                );
+                fieldType = typeFactory.createTypeWithCharsetAndCollation(
+                    baseType,
+                    java.nio.charset.StandardCharsets.UTF_8,
+                    collation
+                );
+            } else {
+                fieldType = typeFactory.createSqlType(sqlType);
             }
+
+            typeBuilder.add(prop.getName(), fieldType);
         }
 
         return typeBuilder.build();
@@ -200,26 +206,14 @@ public class JdbcOntologyTable extends OntologyTable implements ScannableTable {
         sql.append(quoteIdentifier(idColumn)).append(" AS id");
         
         // 添加所有属性列（排除衍生属性和已作为ID的属性）
-        if (objectType.getProperties() != null) {
-            for (Property prop : objectType.getProperties()) {
-                if (prop.isDerived()) {
-                    continue; // 衍生属性不在数据库中，跳过
-                }
-                // 如果属性映射到的列就是ID列，且属性名也是id，跳过避免重复
-                String columnName = mapping.getColumnName(prop.getName());
-                if ("id".equals(prop.getName()) && columnName != null
-                    && columnName.toUpperCase().equals(idColumn)) {
-                    continue;
-                }
-                if (columnName != null) {
-                    // 使用映射中指定的列名（保持原始大小写，因为H2使用引号时大小写敏感）
-                    sql.append(", ").append(quoteIdentifier(columnName))
-                       .append(" AS ").append(quoteIdentifier(prop.getName()));
-                } else {
-                    // 如果没有映射，直接使用属性名作为列名（用于外键列，如 vehicle_id, media_id）
-                    sql.append(", ").append(quoteIdentifier(prop.getName().toUpperCase()))
-                       .append(" AS ").append(quoteIdentifier(prop.getName()));
-                }
+        for (Property prop : getEffectiveProperties()) {
+            String columnName = mapping.getColumnName(prop.getName());
+            if (columnName != null) {
+                sql.append(", ").append(quoteIdentifier(columnName))
+                   .append(" AS ").append(quoteIdentifier(prop.getName()));
+            } else {
+                sql.append(", ").append(quoteIdentifier(prop.getName().toUpperCase()))
+                   .append(" AS ").append(quoteIdentifier(prop.getName()));
             }
         }
         
@@ -252,86 +246,57 @@ public class JdbcOntologyTable extends OntologyTable implements ScannableTable {
         // 1. ID（索引 0）
         row.add(rs.getString("id"));
         
-        // 2. 属性（按 objectType.getProperties() 的顺序，排除衍生属性和已作为ID的属性）
-        String idColumnUpper = (mapping != null && mapping.getIdColumn() != null) ? mapping.getIdColumn().toUpperCase() : "";
-        if (objectType.getProperties() != null) {
-            for (Property prop : objectType.getProperties()) {
-                if (prop.isDerived()) {
-                    continue; // 衍生属性不在数据库中，跳过
-                }
-                // 跳过与ID列重复的id属性
-                if ("id".equals(prop.getName()) && mapping != null) {
-                    String colName = mapping.getColumnName(prop.getName());
-                    if (colName != null && colName.toUpperCase().equals(idColumnUpper)) {
-                        continue;
-                    }
-                }
-                String columnName = mapping.getColumnName(prop.getName());
-                Object value = null;
-                
-                if (columnName != null) {
-                    // 使用属性名作为别名从 ResultSet 中获取值
-                    value = rs.getObject(prop.getName());
-                } else {
-                    // 如果没有映射，可能是外键列（如 vehicle_id, media_id）
-                    // 尝试直接使用属性名作为列名
-                    try {
-                        value = rs.getObject(prop.getName());
-                    } catch (Exception e) {
-                        // 如果获取失败，返回 null
-                        value = null;
-                    }
-                }
-                
-                // 根据属性类型转换值
-                // 对于日期/时间类型，Calcite 期望特定的数值类型
-                if (value != null) {
-                    String dataType = prop.getDataType() != null ? prop.getDataType().toLowerCase() : "";
-                    if ("datetime".equals(dataType) || "timestamp".equals(dataType)) {
-                        if (value instanceof java.sql.Timestamp) {
-                            value = ((java.sql.Timestamp) value).getTime();
-                        } else if (value instanceof java.sql.Date) {
-                            value = ((java.sql.Date) value).getTime();
-                        }
-                    } else if ("date".equals(dataType)) {
-                        // Calcite DATE 类型期望 int（从 epoch 开始的天数）
-                        if (value instanceof java.sql.Timestamp) {
-                            value = (int)(((java.sql.Timestamp) value).getTime() / 86400000L);
-                        } else if (value instanceof java.sql.Date) {
-                            value = (int)(((java.sql.Date) value).getTime() / 86400000L);
-                        } else if (value instanceof String) {
-                            // 如果是字符串类型的日期，直接返回字符串（交给前端处理）
-                            // 不做转换
-                        }
-                    }
-                }
-                
-                // 对于数值类型，如果 schema 中定义为 float/double，但数据库返回的是 BigDecimal，
-                // 需要转换为 Double，避免 Calcite 聚合时类型转换错误
-                // 注意：Calcite 对于 DOUBLE/FLOAT 类型期望 Double，而不是 BigDecimal
-                if (value != null && (value instanceof java.math.BigDecimal)) {
-                    String dataType = prop.getDataType();
-                    // 如果属性类型是 float 或 double，转换为 Double
-                    // 这很重要，因为 Calcite 在执行聚合时，如果字段类型是 DOUBLE，期望的是 Double，而不是 BigDecimal
-                    if ("float".equalsIgnoreCase(dataType) || "double".equalsIgnoreCase(dataType)) {
-                        // 转换为 Double
-                        value = ((java.math.BigDecimal) value).doubleValue();
-                    }
-                }
+        // 2. 属性（按 getEffectiveProperties() 的顺序）
+        for (Property prop : getEffectiveProperties()) {
+            String columnName = mapping.getColumnName(prop.getName());
+            Object value = null;
 
-                // 对于 int/integer 类型，确保值为 Integer（数据库可能返回 Long/BigDecimal）
-                if (value != null && ("int".equalsIgnoreCase(prop.getDataType()) || "integer".equalsIgnoreCase(prop.getDataType()))) {
-                    if (value instanceof Long) {
-                        value = ((Long) value).intValue();
-                    } else if (value instanceof java.math.BigDecimal) {
-                        value = ((java.math.BigDecimal) value).intValue();
+            if (columnName != null) {
+                value = rs.getObject(prop.getName());
+            } else {
+                try {
+                    value = rs.getObject(prop.getName());
+                } catch (Exception e) {
+                    value = null;
+                }
+            }
+
+            // 根据属性类型转换值
+            if (value != null) {
+                String dataType = prop.getDataType() != null ? prop.getDataType().toLowerCase() : "";
+                if ("datetime".equals(dataType) || "timestamp".equals(dataType)) {
+                    if (value instanceof java.sql.Timestamp) {
+                        value = ((java.sql.Timestamp) value).getTime();
+                    } else if (value instanceof java.sql.Date) {
+                        value = ((java.sql.Date) value).getTime();
+                    }
+                } else if ("date".equals(dataType)) {
+                    if (value instanceof java.sql.Timestamp) {
+                        value = (int)(((java.sql.Timestamp) value).getTime() / 86400000L);
+                    } else if (value instanceof java.sql.Date) {
+                        value = (int)(((java.sql.Date) value).getTime() / 86400000L);
                     }
                 }
-                
-                row.add(value);
             }
+
+            if (value != null && (value instanceof java.math.BigDecimal)) {
+                String dataType = prop.getDataType();
+                if ("float".equalsIgnoreCase(dataType) || "double".equalsIgnoreCase(dataType)) {
+                    value = ((java.math.BigDecimal) value).doubleValue();
+                }
+            }
+
+            if (value != null && ("int".equalsIgnoreCase(prop.getDataType()) || "integer".equalsIgnoreCase(prop.getDataType()))) {
+                if (value instanceof Long) {
+                    value = ((Long) value).intValue();
+                } else if (value instanceof java.math.BigDecimal) {
+                    value = ((java.math.BigDecimal) value).intValue();
+                }
+            }
+
+            row.add(value);
         }
-        
+
         return row.toArray();
     }
 
