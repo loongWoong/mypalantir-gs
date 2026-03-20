@@ -24,10 +24,10 @@ export default function ReasoningView() {
   const [loading, setLoading] = useState(false);
   const [inferError, setInferError] = useState('');
 
-  // 批量推理状态
-  const [batchLoading, setBatchLoading] = useState(false);
-  const [batchResults, setBatchResults] = useState<BatchInstanceResult[] | null>(null);
-  const [batchError, setBatchError] = useState('');
+  // 批量推理状态（暂不使用，setter 仅在 handleBatchAll 中调用）
+  // const [batchLoading, setBatchLoading] = useState(false);
+  const [batchResults, _setBatchResults] = useState<BatchInstanceResult[] | null>(null);
+  const [batchError, _setBatchError] = useState('');
   // 展开/折叠的分组 key
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
@@ -60,26 +60,26 @@ export default function ReasoningView() {
       .catch(() => setInstances([]));
   }, [selectedObjectType]);
 
-  const handleBatchAll = async () => {
-    if (!selectedObjectType) return;
-    setBatchLoading(true);
-    setBatchResults(null);
-    setBatchError('');
-    setExpandedGroups(new Set());
-    try {
-      const results = await reasoningApi.batchAllSync(selectedObjectType);
-      setBatchResults(results);
-      // 默认展开第一个分组
-      if (results.length > 0) {
-        const firstSig = ruleSignature(results[0].firedRules);
-        setExpandedGroups(new Set([firstSig]));
-      }
-    } catch (err: any) {
-      setBatchError(err.response?.data?.message || err.message || 'Batch inference failed');
-    } finally {
-      setBatchLoading(false);
-    }
-  };
+  // 批量推理（暂不使用）
+  // const handleBatchAll = async () => {
+  //   if (!selectedObjectType) return;
+  //   setBatchLoading(true);
+  //   setBatchResults(null);
+  //   setBatchError('');
+  //   setExpandedGroups(new Set());
+  //   try {
+  //     const results = await reasoningApi.batchAllSync(selectedObjectType);
+  //     setBatchResults(results);
+  //     if (results.length > 0) {
+  //       const firstSig = ruleSignature(results[0].firedRules);
+  //       setExpandedGroups(new Set([firstSig]));
+  //     }
+  //   } catch (err: any) {
+  //     setBatchError(err.response?.data?.message || err.message || 'Batch inference failed');
+  //   } finally {
+  //     setBatchLoading(false);
+  //   }
+  // };
 
   const handleInfer = async () => {
     const objectType = selectedObjectType;
@@ -212,6 +212,7 @@ export default function ReasoningView() {
           >
             {loading ? '推理中...' : '执行推理'}
           </button>
+          {/* 批量推理（暂不使用）
           <button
             onClick={handleBatchAll}
             disabled={batchLoading || !selectedObjectType}
@@ -220,6 +221,7 @@ export default function ReasoningView() {
           >
             {batchLoading ? '批量推理中...' : '批量推理'}
           </button>
+          */}
         </div>
         {batchError && (
           <div className="mt-3 px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">

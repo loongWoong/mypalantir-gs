@@ -308,6 +308,14 @@ public class NaturalLanguageQueryService {
             - 这是一个按“通行标识ID”过滤“门架交易明细”的查询
             - 需要返回与该通行相关的所有门架交易记录
             
+            ## 通行ID 字段区分（重要）
+            
+            收费领域存在两种通行标识，**必须根据查询对象和 ID 格式选择正确字段**：
+            - **passage_id**：格式通常为 G + 出口站ID + 时间等（如 G181337002004020109102026030106071129），用于 **Passage 主键、拆分明细（SplitItem）**
+            - **pass_id**：格式为纯数字串（如 013701230423216825322920260301055404），用于 **门架交易（GantryTransaction）、部分本体的 SplitDetail**
+            
+            **规则**：当用户提供的 ID 为 G 开头格式时，查询拆分明细必须用 `passage_id` 过滤；查询门架交易明细用 `pass_id` 过滤。切勿混淆。
+            
             ## Ontology Schema
             
             %s
@@ -414,6 +422,26 @@ public class NaturalLanguageQueryService {
               "metrics": [
                 ["count", "passage_id", "通行数量"]
               ]
+            }
+            
+            ### 示例 7: 按通行ID查询拆分明细（ID 为 G 开头时用 passage_id）
+            用户查询："查询通行 G181337002004020109102026030106071129 的拆分明细"
+            说明：ID 格式为 G+出口站+时间（passage_id），拆分明细（SplitItem）通过 passage_id 关联，**必须用 passage_id 过滤**
+            转换结果：
+            {
+              "object": "SplitItem",
+              "select": ["passage_id", "position", "toll_interval_id", "fee"],
+              "filter": [["=", "passage_id", "G181337002004020109102026030106071129"]]
+            }
+            
+            ### 示例 8: 按通行ID查询门架交易明细（用 pass_id）
+            用户查询："查询通行 013701230423216825322920260301055404 的门架交易明细"
+            说明：ID 格式为纯数字（pass_id），门架交易（GantryTransaction）通过 pass_id 关联
+            转换结果：
+            {
+              "object": "GantryTransaction",
+              "select": ["transaction_id", "pass_id", "gantry_id", "trans_time"],
+              "filter": [["=", "pass_id", "013701230423216825322920260301055404"]]
             }
             
             ## 重要提示

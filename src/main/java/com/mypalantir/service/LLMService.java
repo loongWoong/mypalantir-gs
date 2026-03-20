@@ -41,7 +41,7 @@ public class LLMService {
     @Value("${llm.timeout:30000}")
     private int timeout;
 
-    @Value("${llm.max.tokens:1024}")
+    @Value("${llm.max.tokens:8192}")
     private int maxTokens;
 
     // LLM 返回内容的日志预览截断长度（从 .env 读取）
@@ -80,6 +80,7 @@ public class LLMService {
         logger.info("✓ Temperature: {}", temperature);
         logger.info("✓ Max Retries: {}", maxRetries);
         logger.info("✓ Timeout: {}ms", timeout);
+        logger.info("✓ Max Tokens: {}", maxTokens);
         logger.info("=== End of LLM Configuration ===");
     }
     

@@ -2,19 +2,27 @@ package com.mypalantir.service;
 
 import com.mypalantir.config.DatabaseConfig;
 import com.mypalantir.repository.IInstanceStorage;
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
+import jakarta.annotation.PreDestroy;
+import javax.sql.DataSource;
 import java.io.IOException;
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class DatabaseMetadataService {
+    private static final String DEFAULT_DB_KEY = "default";
+
     @Autowired
     private DatabaseConfig.DatabaseConnectionManager connectionManager;
 
@@ -25,6 +33,20 @@ public class DatabaseMetadataService {
     @Autowired
     @Lazy
     private com.mypalantir.repository.Neo4jInstanceStorage neo4jInstanceStorage;
+
+    @Value("${db.dynamic-pool.maximum-pool-size:10}")
+    private int poolMaxSize;
+    @Value("${db.dynamic-pool.minimum-idle:2}")
+    private int poolMinIdle;
+    @Value("${db.dynamic-pool.idle-timeout:600000}")
+    private long poolIdleTimeoutMs;
+    @Value("${db.dynamic-pool.max-lifetime:1800000}")
+    private long poolMaxLifetimeMs;
+    @Value("${db.dynamic-pool.connection-timeout:30000}")
+    private long poolConnectionTimeoutMs;
+
+    /** 按 databaseId 缓存的 HikariCP 数据源，避免重复创建连接池 */
+    private final Map<String, DataSource> dataSourceCache = new ConcurrentHashMap<>();
 
     // 线程本地变量，用于防止递归调用
     private static final ThreadLocal<Boolean> isGettingDatabaseInstance = ThreadLocal.withInitial(() -> false);
@@ -194,52 +216,83 @@ public class DatabaseMetadataService {
     }
 
     /**
-     * 获取数据源（DataSource）
+     * 获取数据源（DataSource），使用 HikariCP 连接池并缓存，避免长时间空闲未释放
      */
-    public javax.sql.DataSource getDataSourceForDatabase(String databaseId) throws IOException {
-        // 如果是默认数据库
-        if (databaseId == null || databaseId.isEmpty()) {
-            return new org.springframework.jdbc.datasource.DriverManagerDataSource(
-                connectionManager.getJdbcUrl(),
-                connectionManager.getConfig().getDbUser(),
-                connectionManager.getConfig().getDbPassword()
-            );
+    public DataSource getDataSourceForDatabase(String databaseId) throws IOException {
+        String cacheKey = (databaseId == null || databaseId.isEmpty()) ? DEFAULT_DB_KEY : databaseId;
+        DataSource ds = dataSourceCache.get(cacheKey);
+        if (ds == null) {
+            ds = createPooledDataSource(cacheKey);
+            DataSource existing = dataSourceCache.putIfAbsent(cacheKey, ds);
+            if (existing != null) {
+                if (ds instanceof HikariDataSource) {
+                    ((HikariDataSource) ds).close();
+                }
+                ds = existing;
+            }
+        }
+        return ds;
+    }
+
+    /**
+     * 创建 HikariCP 连接池数据源
+     */
+    private DataSource createPooledDataSource(String cacheKey) throws IOException {
+        String url;
+        String username;
+        String password;
+
+        if (DEFAULT_DB_KEY.equals(cacheKey)) {
+            url = connectionManager.getJdbcUrl();
+            username = connectionManager.getConfig().getDbUser();
+            password = connectionManager.getConfig().getDbPassword();
+        } else {
+            if (isGettingDatabaseInstance.get()) {
+                throw new IOException("Recursive call detected while getting database instance: " + cacheKey);
+            }
+            Map<String, Object> database;
+            try {
+                isGettingDatabaseInstance.set(true);
+                database = neo4jInstanceStorage.getInstance("database", cacheKey);
+            } finally {
+                isGettingDatabaseInstance.set(false);
+            }
+
+            String host = (String) database.get("host");
+            Integer port = database.get("port") instanceof Number
+                    ? ((Number) database.get("port")).intValue()
+                    : 3306;
+            String dbName = (String) database.get("database_name");
+            username = (String) database.get("username");
+            password = connectionManager.getConfig().getDbPassword();
+            if (database.containsKey("password") && database.get("password") != null) {
+                password = database.get("password").toString();
+            }
+            url = String.format("jdbc:mysql://%s:%d/%s?useSSL=false&serverTimezone=UTC&characterEncoding=utf8&allowPublicKeyRetrieval=true",
+                    host, port, dbName);
         }
 
-        // 获取数据库实例信息
-        // 注意：直接使用 Neo4jInstanceStorage 避免循环调用
-        // 因为 HybridInstanceStorage.hasRelationalMapping() 会调用 tableExists()，而 tableExists() 又会调用这里
-        // 使用线程本地变量防止递归调用
-        if (isGettingDatabaseInstance.get()) {
-            throw new IOException("Recursive call detected while getting database instance: " + databaseId);
-        }
-        Map<String, Object> database;
-        try {
-            isGettingDatabaseInstance.set(true);
-            database = neo4jInstanceStorage.getInstance("database", databaseId);
-        } finally {
-            isGettingDatabaseInstance.set(false);
-        }
-        
-        String host = (String) database.get("host");
-        Integer port = database.get("port") instanceof Number 
-            ? ((Number) database.get("port")).intValue() 
-            : 3306;
-        String dbName = (String) database.get("database_name");
-        String username = (String) database.get("username");
-        
-        // 从配置获取密码（因为密码不存储在实例中）
-        String password = connectionManager.getConfig().getDbPassword();
-        
-        // 如果数据库实例有密码字段，使用它
-        if (database.containsKey("password") && database.get("password") != null) {
-            password = database.get("password").toString();
-        }
+        HikariConfig config = new HikariConfig();
+        config.setJdbcUrl(url);
+        config.setUsername(username);
+        config.setPassword(password);
+        config.setMaximumPoolSize(poolMaxSize);
+        config.setMinimumIdle(poolMinIdle);
+        config.setIdleTimeout(poolIdleTimeoutMs);
+        config.setMaxLifetime(poolMaxLifetimeMs);
+        config.setConnectionTimeout(poolConnectionTimeoutMs);
+        config.setPoolName("mypalantir-ds-" + cacheKey);
+        return new HikariDataSource(config);
+    }
 
-        String url = String.format("jdbc:mysql://%s:%d/%s?useSSL=false&serverTimezone=UTC&characterEncoding=utf8&allowPublicKeyRetrieval=true",
-                host, port, dbName);
-        
-        return new org.springframework.jdbc.datasource.DriverManagerDataSource(url, username, password);
+    @PreDestroy
+    public void destroy() {
+        for (DataSource ds : dataSourceCache.values()) {
+            if (ds instanceof HikariDataSource) {
+                ((HikariDataSource) ds).close();
+            }
+        }
+        dataSourceCache.clear();
     }
 
     private String getDatabaseName(String databaseId) throws IOException {

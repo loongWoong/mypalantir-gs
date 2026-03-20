@@ -74,13 +74,14 @@ export default function DashboardPage() {
           };
           updated.push(newWidget);
         } else if (op.action === 'update' && op.spec) {
+          const spec = op.spec;
           updated = updated.map(w => {
             if (w.id !== op.widgetId) return w;
-            const mergedSpec = { ...w.spec, ...op.spec } as WidgetSpec;
-            if (op.spec.options) {
-              mergedSpec.options = { ...w.spec.options, ...op.spec.options };
+            const mergedSpec = { ...w.spec, ...spec } as WidgetSpec;
+            if (spec.options) {
+              mergedSpec.options = { ...w.spec.options, ...spec.options };
             }
-            const queryChanged = op.spec.query && op.spec.query !== w.spec.query;
+            const queryChanged = spec.query && spec.query !== w.spec.query;
             return { ...w, spec: mergedSpec, loading: !!queryChanged };
           });
         } else if (op.action === 'remove') {
