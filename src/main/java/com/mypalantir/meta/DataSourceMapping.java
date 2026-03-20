@@ -1,6 +1,7 @@
 package com.mypalantir.meta;
 
 import com.fasterxml.jackson.annotation.JsonGetter;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.Map;
 
@@ -186,5 +187,22 @@ public class DataSourceMapping {
 
         // 默认返回 false（关系表模式）
         return false;
+    }
+
+    /**
+     * 判断外键列是否在源表中（而非目标表中）
+     * Pattern A: FK 在源表（link table == source table），如 entry_at_station
+     * Pattern B: FK 在目标表（link table == target table），如 station_has_lanes
+     */
+    @JsonIgnore
+    public boolean isForeignKeyInSourceTable(ObjectType sourceObjectType, ObjectType targetObjectType) {
+        if (sourceObjectType == null || sourceObjectType.getDataSource() == null) {
+            return true;
+        }
+        String sourceTable = sourceObjectType.getDataSource().getTable();
+        if (table != null && sourceTable != null && table.equalsIgnoreCase(sourceTable)) {
+            return true;  // link table == source table → FK in source
+        }
+        return false; // link table == target table (or other) → FK in target
     }
 }

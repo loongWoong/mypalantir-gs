@@ -19,16 +19,16 @@ import java.util.Map;
 
 /**
  * 自定义的 RelToSqlConverter
- * 在将 RelNode 转换为 SQL 时，自动将 Ontology 表名和列名映射为数据库实际表名和列名
- * 
+ * 将 RelNode 转换为 SQL
+ *
  * 设计理念：
  * - RelNode 保持使用 Ontology 概念（逻辑层）
  * - SQL 生成时映射为数据库名称（物理层）
  * - 现在基于映射关系（mapping）进行转换
  */
 public class OntologyRelToSqlConverter extends RelToSqlConverter {
-    private final Loader loader;
     private final SqlDialect dialect;
+    private final Loader loader;
     private final IInstanceStorage instanceStorage;
     private final MappingService mappingService;
     // 缓存 ObjectType 名称到 DataSourceMapping 的映射
@@ -42,7 +42,7 @@ public class OntologyRelToSqlConverter extends RelToSqlConverter {
         this.instanceStorage = instanceStorage;
         this.mappingService = mappingService;
     }
-    
+
     /**
      * 重写 visit 方法，在访问 TableScan 时缓存映射信息
      * 优先从 JdbcOntologyTable 获取 mapping 信息（因为 JdbcOntologyTable 已经根据 mapping 创建）

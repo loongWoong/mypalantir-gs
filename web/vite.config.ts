@@ -6,7 +6,11 @@ export default defineConfig({
   plugins: [react()],
   server: {
     host: '0.0.0.0', // 允许远程访问
-    port: 5173, // 开发服务器端口
-    strictPort: false, // 如果端口被占用，尝试下一个可用端口
+    port: 5173,
+    strictPort: false,
+  },
+  build: {
+    outDir: '../src/main/resources/static',
+    emptyOutDir: true,
   },
 })

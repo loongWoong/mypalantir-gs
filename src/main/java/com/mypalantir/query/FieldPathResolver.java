@@ -37,8 +37,9 @@ public class FieldPathResolver {
             // 验证属性是否存在
             Property property = findProperty(rootObjectType, fieldPath);
             if (property == null) {
-                throw new IllegalArgumentException("Property '" + fieldPath + "' not found in object type '" + 
-                    rootObjectType.getName() + "'");
+                String available = availablePropertyNames(rootObjectType);
+                throw new IllegalArgumentException("Property '" + fieldPath + "' not found in object type '" +
+                    rootObjectType.getName() + "'. Available: " + available);
             }
             return new FieldPath(rootObjectType, fieldPath, null);
         }
@@ -96,8 +97,9 @@ public class FieldPathResolver {
         // 验证属性是否存在
         Property property = findProperty(targetObjectType, propertyName);
         if (property == null) {
-            throw new IllegalArgumentException("Property '" + propertyName + "' not found in object type '" + 
-                targetObjectType.getName() + "'");
+            String available = availablePropertyNames(targetObjectType);
+            throw new IllegalArgumentException("Property '" + propertyName + "' not found in object type '" +
+                targetObjectType.getName() + "'. Available: " + available);
         }
         
         return new FieldPath(targetObjectType, propertyName, linkType);
@@ -116,6 +118,20 @@ public class FieldPathResolver {
             }
         }
         return null;
+    }
+
+    /**
+     * 列出对象类型的所有属性名（用于错误信息）
+     */
+    private String availablePropertyNames(ObjectType objectType) {
+        if (objectType.getProperties() == null || objectType.getProperties().isEmpty()) {
+            return "(none)";
+        }
+        List<String> names = new ArrayList<>();
+        for (Property prop : objectType.getProperties()) {
+            names.add(prop.getName());
+        }
+        return String.join(", ", names);
     }
     
     /**

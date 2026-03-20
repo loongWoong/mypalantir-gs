@@ -23,6 +23,7 @@ export default function SchemaBrowser() {
   const [rules, setRules] = useState<Rule[]>([]);
   const [linkTypeActiveTab, setLinkTypeActiveTab] = useState<'properties' | 'datasource'>('properties');
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string; metadata?: Record<string, string> } | null>(null);
   const [mappingData, setMappingData] = useState<any[]>([]);
@@ -67,7 +68,8 @@ export default function SchemaBrowser() {
         if (objectTypesData.length > 0) {
           setSelectedObjectType(objectTypesData[0]);
         }
-      } catch (error) {
+      } catch (error: any) {
+        setError(error.response?.data?.message || error.message || '加载 Schema 失败');
         console.error('Failed to load schema:', error);
       } finally {
         setLoading(false);
@@ -182,6 +184,10 @@ export default function SchemaBrowser() {
 
   if (loading) {
     return <div className="text-center py-12">Loading...</div>;
+  }
+
+  if (error) {
+    return <div className="text-center py-12 text-red-600">{error}</div>;
   }
 
   return (

@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mypalantir.service.LLMService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -31,6 +32,7 @@ public class AgentService {
 
     private final LLMService llmService;
     private final AgentTools agentTools;
+    private final AgentMemoryService memoryService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     /**
@@ -40,9 +42,10 @@ public class AgentService {
      */
     private final Map<String, String> conversationStore = new ConcurrentHashMap<>();
 
-    public AgentService(LLMService llmService, AgentTools agentTools) {
+    public AgentService(LLMService llmService, AgentTools agentTools, @Autowired(required = false) AgentMemoryService memoryService) {
         this.llmService = llmService;
         this.agentTools = agentTools;
+        this.memoryService = memoryService;
     }
 
     /**
@@ -78,11 +81,27 @@ public class AgentService {
 
         boolean hasConversationId = conversationId != null && !conversationId.isBlank();
         if (hasConversationId) {
-            String history = conversationStore.get(conversationId);
-            if (history != null && !history.isBlank()) {
-                conversation.append(history);
-                if (!history.endsWith("\n\n")) {
-                    conversation.append("\n\n");
+            // 优先从 memoryService 加载（若存在），否则用 conversationStore
+            if (memoryService != null) {
+                var history = memoryService.getMessages(conversationId);
+                if (!history.isEmpty()) {
+                    conversation.append("对话历史:\n");
+                    for (var msg : history) {
+                        if (msg instanceof dev.langchain4j.data.message.UserMessage um) {
+                            conversation.append("用户: ").append(um.singleText()).append("\n");
+                        } else if (msg instanceof dev.langchain4j.data.message.AiMessage am) {
+                            conversation.append("助手: ").append(am.text()).append("\n");
+                        }
+                    }
+                    conversation.append("\n");
+                }
+            } else {
+                String history = conversationStore.get(conversationId);
+                if (history != null && !history.isBlank()) {
+                    conversation.append(history);
+                    if (!history.endsWith("\n\n")) {
+                        conversation.append("\n\n");
+                    }
                 }
             }
         }
@@ -189,14 +208,26 @@ public class AgentService {
                 String normalizedAnswer = normalizeDiagnosisAnswer(answer, looksLikeDiagnostic || usedNonQueryDataTool);
                 onEvent.accept(AgentEvent.answer(normalizedAnswer));
                 if (hasConversationId) {
-                    conversation.append(llmResponse).append("\n\n");
-                    conversationStore.put(conversationId, conversation.toString());
+                    if (memoryService != null) {
+                        memoryService.addUserMessage(conversationId, userMessage);
+                        memoryService.addAiMessage(conversationId, normalizedAnswer);
+                    } else {
+                        conversation.append(llmResponse).append("\n\n");
+                        conversationStore.put(conversationId, conversation.toString());
+                    }
                 }
                 return;
             }
 
             String actionJson = extractSection(llmResponse, "Action");
             if (actionJson == null) {
+                if (hasConversationId && memoryService != null) {
+                    memoryService.addUserMessage(conversationId, userMessage);
+                    memoryService.addAiMessage(conversationId, llmResponse);
+                } else if (hasConversationId) {
+                    conversation.append(llmResponse).append("\n\n");
+                    conversationStore.put(conversationId, conversation.toString());
+                }
                 onEvent.accept(AgentEvent.answer(llmResponse));
                 return;
             }
@@ -260,10 +291,14 @@ public class AgentService {
      * 同步版本（保留向后兼容）
      */
     public AgentResponse chat(String userMessage) {
+        return chat(userMessage, null);
+    }
+
+    public AgentResponse chat(String userMessage, String sessionId) {
         List<AgentResponse.AgentStep> steps = new ArrayList<>();
         final String[] finalAnswer = {null};
 
-        chatStream(null, userMessage, event -> {
+        chatStream(sessionId, userMessage, event -> {
             switch (event.type()) {
                 case "step" -> {
                     String thought = (String) event.data().get("thought");

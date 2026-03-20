@@ -29,6 +29,7 @@ export default function LinkList() {
   const [targetObjectType, setTargetObjectType] = useState<ObjectType | null>(null);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [error, setError] = useState('');
   const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);
   const limit = 20;
@@ -97,7 +98,8 @@ export default function LinkList() {
       setLinkTypeDef(linkTypeData);
       setLinks(linksData.items);
       setTotal(linksData.total);
-    } catch (error) {
+    } catch (error: any) {
+      setError(error.response?.data?.message || error.message || '加载数据失败');
       console.error('Failed to load data:', error);
     } finally {
       setLoading(false);
@@ -211,7 +213,7 @@ export default function LinkList() {
       <div className="flex items-center justify-center h-screen bg-slate-50">
         <div className="text-center">
           <h2 className="text-xl font-bold text-slate-900">Link type not found</h2>
-          <p className="text-slate-500 mt-2">The requested link type does not exist.</p>
+          <p className="text-slate-500 mt-2">{error || 'The requested link type does not exist.'}</p>
         </div>
       </div>
     );

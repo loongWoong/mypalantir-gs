@@ -30,6 +30,7 @@ public class OntologySchemaFactory {
     private final DatabaseMetadataService databaseMetadataService;
     private final Map<String, Connection> dataSourceConnections = new HashMap<>();
     private final Map<String, Connection> databaseConnections = new HashMap<>(); // 基于 databaseId 的连接
+    private Connection calciteConnection; // 保持引用以便关闭
 
     public OntologySchemaFactory(Loader loader, IInstanceStorage instanceStorage, 
                                  MappingService mappingService, DatabaseMetadataService databaseMetadataService) {
@@ -45,12 +46,11 @@ public class OntologySchemaFactory {
      */
     public SchemaPlus createCalciteSchema() throws SQLException {
         // 创建 Calcite 连接
-        Connection connection = DriverManager.getConnection("jdbc:calcite:");
-        CalciteConnection calciteConnection = connection.unwrap(CalciteConnection.class);
-        SchemaPlus rootSchema = calciteConnection.getRootSchema();
-        
-        // 注意：这个连接会被关闭，所以我们需要返回一个独立的 Schema
-        // 实际上，我们应该返回 rootSchema，但表已经添加进去了
+        calciteConnection = DriverManager.getConnection("jdbc:calcite:");
+        CalciteConnection calciteConn = calciteConnection.unwrap(CalciteConnection.class);
+        SchemaPlus rootSchema = calciteConn.getRootSchema();
+
+        // 注意：calciteConnection 保持引用，在 closeConnections() 中关闭
 
         // 为每个数据源创建连接（但不创建子 Schema，直接在 rootSchema 中添加表）
         Map<String, Connection> dataSourceConnections = new HashMap<>();
@@ -413,7 +413,7 @@ public class OntologySchemaFactory {
             }
         }
         dataSourceConnections.clear();
-        
+
         for (Connection conn : databaseConnections.values()) {
             try {
                 conn.close();
@@ -422,6 +422,15 @@ public class OntologySchemaFactory {
             }
         }
         databaseConnections.clear();
+
+        if (calciteConnection != null) {
+            try {
+                calciteConnection.close();
+            } catch (SQLException e) {
+                // 忽略关闭错误
+            }
+            calciteConnection = null;
+        }
     }
 }
 

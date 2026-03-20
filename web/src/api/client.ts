@@ -1010,27 +1010,16 @@ export const agentApi = {
     return response.data.data;
   },
 
-  /** CEL 表达式按实例求值：使用当前本体模型下指定根对象类型与实例 ID 构建上下文并求值 */
-  evaluateCelWithInstance: async (
-    expr: string,
-    objectType: string,
-    instanceId: string
-  ): Promise<unknown> => {
-    const response = await apiClient.post<ApiResponse<unknown>>('/reasoning/cel/evaluate-with-instance', {
-      expr: expr ?? '',
-      object_type: objectType,
-      instance_id: instanceId,
-    });
-    return response.data.data;
-  },
-
   chatStream: (
     message: string,
     onEvent: (event: AgentSSEEvent) => void,
     onDone: () => void,
-    conversationId: string
+    conversationId: string | null
   ) => {
-    const params = new URLSearchParams({ message, conversationId });
+    const params = new URLSearchParams({ message });
+    if (conversationId) {
+      params.append('conversationId', conversationId);
+    }
     const url = `${API_BASE_URL}/agent/chat/stream?${params.toString()}`;
     const eventSource = new EventSource(url);
 

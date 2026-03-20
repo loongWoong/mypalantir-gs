@@ -360,6 +360,10 @@ export default function AgentChat({ conversationId }: AgentChatProps) {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  useEffect(() => {
+    return () => { cancelRef.current?.(); };
+  }, []);
+
   const sendMessage = (text?: string) => {
     const message = text || input.trim();
     if (!message || loading) return;
@@ -412,7 +416,7 @@ export default function AgentChat({ conversationId }: AgentChatProps) {
           return updated;
         });
       },
-      conversationId
+      conversationId,
     );
 
     cancelRef.current = cancel;

@@ -104,17 +104,21 @@ public class InstanceStorage implements IInstanceStorage {
     public void updateInstance(String objectType, String id, Map<String, Object> data) throws IOException {
         lock.writeLock().lock();
         try {
-            Map<String, Object> existing = getInstance(objectType, id);
+            // 直接读文件，不调用 getInstance() 避免嵌套锁
+            String filePath = pathManager.getInstancePath(objectType, id);
+            File file = new File(filePath);
+            if (!file.exists()) {
+                throw new IOException("instance not found");
+            }
+            @SuppressWarnings("unchecked")
+            Map<String, Object> existing = objectMapper.readValue(file, Map.class);
 
-            // 更新数据
             for (Map.Entry<String, Object> entry : data.entrySet()) {
                 existing.put(entry.getKey(), entry.getValue());
             }
             existing.put("updated_at", Instant.now().toString());
 
-            // 写入文件
-            String filePath = pathManager.getInstancePath(objectType, id);
-            objectMapper.writerWithDefaultPrettyPrinter().writeValue(new File(filePath), existing);
+            objectMapper.writerWithDefaultPrettyPrinter().writeValue(file, existing);
         } finally {
             lock.writeLock().unlock();
         }

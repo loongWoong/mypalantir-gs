@@ -15,10 +15,10 @@ interface ChatMessage {
 }
 
 const EXAMPLE_QUESTIONS = [
-  '展示各收费站的通行数量柱状图',
-  '添加一个今日通行总量的指标卡',
-  '展示各入口站通行数量的饼图',
-  '用表格展示最近10条通行记录',
+  '按收费站统计入口交易数量，用柱状图展示',
+  '统计各收费站的车道数量，用饼图展示',
+  '添加一个入口交易总数的指标卡',
+  '用表格展示最近10条出口交易记录',
 ];
 
 const SIZE_CLASSES: Record<string, string> = {
@@ -42,6 +42,10 @@ export default function DashboardPage() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  useEffect(() => {
+    return () => { cancelRef.current?.(); };
+  }, []);
 
   const fetchWidgetData = useCallback(async (widgetId: string, query: string) => {
     setWidgets(prev => prev.map(w =>

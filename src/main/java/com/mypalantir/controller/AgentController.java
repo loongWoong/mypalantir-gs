@@ -43,7 +43,7 @@ public class AgentController {
             return ApiResponse.error(400, "message is required");
         }
         try {
-            AgentResponse response = agentService.chat(message);
+            AgentResponse response = agentService.chat(message, request.get("sessionId"));
             return ApiResponse.success(response.toMap());
         } catch (Exception e) {
             return ApiResponse.error(500, "Agent error: " + e.getMessage());
@@ -56,7 +56,7 @@ public class AgentController {
      */
     @GetMapping(value = "/chat/stream", produces = "text/event-stream")
     public SseEmitter chatStream(@RequestParam String message,
-                                 @RequestParam String conversationId) {
+                                 @RequestParam(required = false) String conversationId) {
         SseEmitter emitter = new SseEmitter(300_000L); // 5 min timeout
 
         if (conversationId != null && !conversationId.isBlank()) {

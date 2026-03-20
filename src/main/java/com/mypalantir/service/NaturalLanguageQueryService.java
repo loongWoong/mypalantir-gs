@@ -347,84 +347,62 @@ public class NaturalLanguageQueryService {
             - 多层关联：使用 "LinkType1.LinkType2.属性名"
             
             ## 转换规则
-            
-            1. 识别查询的主对象类型（object）
-            2. 识别需要关联的 LinkType（links）
+
+            1. 识别查询的主对象类型（object）——必须使用 Schema 中的英文名称
+            2. 识别需要关联的 LinkType（links）——object 必须是该 link 的 source_type
             3. 识别聚合需求（group_by, metrics）
             4. 识别过滤条件（filter）
             5. 识别排序需求（orderBy）
-            
+
+            ## Link 方向规则（极其重要）
+
+            Link 是有方向的：source_type -> target_type。
+            查询的 object 必须是 link 的 source_type。如果你想查"每个收费站有多少入口交易"，
+            不能用 object=TollStation + link=entry_at_station（因为 entry_at_station 的 source 是 EntryTransaction，不是 TollStation）。
+            正确做法是 object=EntryTransaction + link=entry_at_station，然后 group_by 收费站属性。
+
             ## 示例
-            
+
             ### 示例 1: 简单查询
             用户查询："显示所有收费站"
-            用户查询："显示所有车辆通行路径"
             转换结果：
             {
-              "object": "收费站",
-              "select": ["名称", "省份"]
-              "object": "车辆通行路径",
-              "select": ["车牌号码", "通行标识ID"]
+              "object": "TollStation",
+              "select": ["station_name", "station_id"]
             }
-            
-            ### 示例 2: 聚合查询
-            用户查询："显示每个收费站的总收费金额，按金额降序排列"
-            用户查询："显示每个车的总收费金额，按金额降序排列"
+
+            ### 示例 2: 统计各收费站的通行数量
+            用户查询："展示各收费站的通行数量"
+            分析：entry_at_station 的 source 是 EntryTransaction，target 是 TollStation，所以 object 必须是 EntryTransaction
             转换结果：
             {
-              "object": "收费站",
-              "object": "出口车道流水",
-              "links": [{"name": "拥有收费记录"}],
-              "group_by": ["名称"],
-              "metrics": [["sum", "拥有收费记录.金额", "总金额"]],
-              "orderBy": [{"field": "总金额", "direction": "DESC"}]
+              "object": "EntryTransaction",
+              "links": [{"name": "entry_at_station", "select": ["station_name"]}],
+              "group_by": ["entry_at_station.station_name"],
+              "metrics": [["count", "id", "通行数量"]]
             }
-            
-            ### 示例 3: 带过滤条件的查询
-            用户查询："显示江苏省的收费站"
+
+            ### 示例 3: 统计各收费站的车道数量
+            用户查询："统计各收费站的车道数量"
+            分析：station_has_lanes 的 source 是 TollStation，target 是 TollLane，所以 object 是 TollStation
             转换结果：
             {
-              "object": "收费站",
-              "select": ["名称", "省份"],
-              "filter": [["=", "省份", "江苏"]]
+              "object": "TollStation",
+              "links": [{"name": "station_has_lanes"}],
+              "group_by": ["station_name"],
+              "metrics": [["count", "station_has_lanes.lane_id", "车道数量"]]
             }
-            
-            ### 示例 4: 时间范围查询
-            用户查询："显示2024年1月的收费记录"
+
+            ### 示例 4: 带过滤条件的查询
+            用户查询："显示2024年1月的入口交易"
             转换结果：
             {
-              "object": "收费记录",
-              "select": ["金额", "收费时间"],
-              "filter": [["between", "收费时间", "2024-01-01", "2024-01-31"]]
+              "object": "EntryTransaction",
+              "select": ["trans_fee", "trans_time"],
+              "filter": [["between", "trans_time", "2024-01-01", "2024-01-31"]]
             }
-            
-            ### 示例 5: 多关联查询
-            用户查询："显示每个车辆的总收费金额"
-            转换结果：
-            {
-              "object": "车辆",
-              "links": [{"name": "拥有车辆记录"}],
-              "group_by": ["车牌号"],
-              "metrics": [["sum", "拥有车辆记录.金额", "总金额"]]
-            }
-            
-            ### 示例 6: 入口站分组统计通行数量
-            用户查询："统计每个入口站的通行数量"
-            转换结果（示例，请根据实际 Ontology 中入口站的对象 / 关联 / 字段名进行调整，例如 `entry_at` 关联、`station_name` 或 `en_toll_station_id` 字段）：
-            {
-              "object": "Passage",
-              "links": [
-                {
-                  "name": "entry_at"
-                }
-              ],
-              "group_by": ["entry_at.station_name"],
-              "metrics": [
-                ["count", "passage_id", "通行数量"]
-              ]
-            }
-            
-            ### 示例 7: 按通行ID查询拆分明细（ID 为 G 开头时用 passage_id）
+
+            ### 示例 5: 按通行ID查询拆分明细（ID 为 G 开头时用 passage_id）
             用户查询："查询通行 G181337002004020109102026030106071129 的拆分明细"
             说明：ID 格式为 G+出口站+时间（passage_id），拆分明细（SplitItem）通过 passage_id 关联，**必须用 passage_id 过滤**
             转换结果：
@@ -433,8 +411,8 @@ public class NaturalLanguageQueryService {
               "select": ["passage_id", "position", "toll_interval_id", "fee"],
               "filter": [["=", "passage_id", "G181337002004020109102026030106071129"]]
             }
-            
-            ### 示例 8: 按通行ID查询门架交易明细（用 pass_id）
+
+            ### 示例 6: 按通行ID查询门架交易明细（用 pass_id）
             用户查询："查询通行 013701230423216825322920260301055404 的门架交易明细"
             说明：ID 格式为纯数字（pass_id），门架交易（GantryTransaction）通过 pass_id 关联
             转换结果：
@@ -443,13 +421,13 @@ public class NaturalLanguageQueryService {
               "select": ["transaction_id", "pass_id", "gantry_id", "trans_time"],
               "filter": [["=", "pass_id", "013701230423216825322920260301055404"]]
             }
-            
+
             ## 重要提示
-            
+
             1. 只返回 JSON 对象，不要包含任何解释文字或 markdown 代码块标记
-            2. 确保所有字段名和值都来自 Ontology Schema
-            3. 如果不确定如何转换，返回一个包含 "error" 字段的 JSON 对象，说明原因
-            4. 字段路径必须准确匹配 Ontology Schema 中的定义
+            2. object、link name、属性名必须使用 Schema 中的英文名称，严格匹配
+            3. object 必须是所用 link 的 source_type，绝不能是 target_type
+            4. 如果不确定如何转换，返回一个包含 "error" 字段的 JSON 对象，说明原因
             """, ontologyJson);
     }
 

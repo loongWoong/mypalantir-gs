@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, Link as RouterLink, useNavigate } from 'react-router-dom';
 import type { Instance, ObjectType, QueryRequest, Rule } from '../api/client';
 import { instanceApi, schemaApi, queryApi, rulesApi } from '../api/client';
-import { ArrowLeftIcon, PencilIcon, TrashIcon, CircleStackIcon, ShieldCheckIcon } from '@heroicons/react/24/outline';
+import { ArrowLeftIcon, PencilIcon, TrashIcon, ShieldCheckIcon } from '@heroicons/react/24/outline';
 import InstanceForm from '../components/InstanceForm';
 import { ToastContainer, useToast } from '../components/Toast';
 
