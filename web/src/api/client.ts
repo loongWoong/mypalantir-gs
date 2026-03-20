@@ -442,8 +442,11 @@ export const agentApi = {
     return response.data.data;
   },
 
-  chatStream: (message: string, onEvent: (event: AgentSSEEvent) => void, onDone: () => void) => {
-    const url = `${API_BASE_URL}/agent/chat/stream?message=${encodeURIComponent(message)}`;
+  chatStream: (message: string, sessionId: string | null, onEvent: (event: AgentSSEEvent) => void, onDone: () => void) => {
+    let url = `${API_BASE_URL}/agent/chat/stream?message=${encodeURIComponent(message)}`;
+    if (sessionId) {
+      url += `&sessionId=${encodeURIComponent(sessionId)}`;
+    }
     const eventSource = new EventSource(url);
 
     eventSource.addEventListener('step', (e) => {

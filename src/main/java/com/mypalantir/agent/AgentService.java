@@ -25,11 +25,13 @@ public class AgentService {
 
     private final LLMService llmService;
     private final AgentTools agentTools;
+    private final AgentMemoryService memoryService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public AgentService(LLMService llmService, AgentTools agentTools) {
+    public AgentService(LLMService llmService, AgentTools agentTools, AgentMemoryService memoryService) {
         this.llmService = llmService;
         this.agentTools = agentTools;
+        this.memoryService = memoryService;
     }
 
     /**
@@ -54,9 +56,26 @@ public class AgentService {
     /**
      * 流式执行 ReAct 循环，每步通过回调通知
      */
-    public void chatStream(String userMessage, Consumer<AgentEvent> onEvent) {
+    public void chatStream(String userMessage, String sessionId, Consumer<AgentEvent> onEvent) {
         String systemPrompt = buildSystemPrompt();
         StringBuilder conversation = new StringBuilder();
+
+        // 从记忆中加载对话历史
+        if (sessionId != null) {
+            var history = memoryService.getMessages(sessionId);
+            if (!history.isEmpty()) {
+                conversation.append("对话历史:\n");
+                for (var msg : history) {
+                    if (msg instanceof dev.langchain4j.data.message.UserMessage um) {
+                        conversation.append("用户: ").append(um.singleText()).append("\n");
+                    } else if (msg instanceof dev.langchain4j.data.message.AiMessage am) {
+                        conversation.append("助手: ").append(am.text()).append("\n");
+                    }
+                }
+                conversation.append("\n");
+            }
+        }
+
         conversation.append("用户问题: ").append(userMessage).append("\n\n");
         conversation.append("请开始你的推理。\n");
 
@@ -94,12 +113,14 @@ public class AgentService {
                 }
                 long totalElapsed = System.currentTimeMillis() - totalStart;
                 logger.info("=== Agent finished === 总耗时={}ms, 步数={}, 工具调用={}次", totalElapsed, i + 1, toolCallCount);
+                saveToMemory(sessionId, userMessage, answer);
                 onEvent.accept(AgentEvent.answer(answer));
                 return;
             }
 
             String actionJson = extractSection(llmResponse, "Action");
             if (actionJson == null) {
+                saveToMemory(sessionId, userMessage, llmResponse);
                 onEvent.accept(AgentEvent.answer(llmResponse));
                 return;
             }
@@ -157,10 +178,14 @@ public class AgentService {
      * 同步版本（保留向后兼容）
      */
     public AgentResponse chat(String userMessage) {
+        return chat(userMessage, null);
+    }
+
+    public AgentResponse chat(String userMessage, String sessionId) {
         List<AgentResponse.AgentStep> steps = new ArrayList<>();
         final String[] finalAnswer = {null};
 
-        chatStream(userMessage, event -> {
+        chatStream(userMessage, sessionId, event -> {
             switch (event.type()) {
                 case "step" -> {
                     String thought = (String) event.data().get("thought");
@@ -185,6 +210,13 @@ public class AgentService {
 
         steps.removeIf(Objects::isNull);
         return new AgentResponse(finalAnswer[0] != null ? finalAnswer[0] : "未能得出结论", steps);
+    }
+
+    private void saveToMemory(String sessionId, String userMessage, String answer) {
+        if (sessionId != null && answer != null) {
+            memoryService.addUserMessage(sessionId, userMessage);
+            memoryService.addAiMessage(sessionId, answer);
+        }
     }
 
     private String extractSection(String text, String sectionName) {

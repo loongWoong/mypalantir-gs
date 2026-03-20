@@ -18,6 +18,7 @@ const EXAMPLE_QUESTIONS = [
 ];
 
 export default function AgentChat() {
+  const [sessionId, setSessionId] = useState(() => crypto.randomUUID());
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -27,6 +28,13 @@ export default function AgentChat() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  const startNewChat = () => {
+    if (cancelRef.current) cancelRef.current();
+    setSessionId(crypto.randomUUID());
+    setMessages([]);
+    setLoading(false);
+  };
 
   const sendMessage = (text?: string) => {
     const message = text || input.trim();
@@ -40,6 +48,7 @@ export default function AgentChat() {
 
     const cancel = agentApi.chatStream(
       message,
+      sessionId,
       (event) => {
         setMessages(prev => {
           const updated = [...prev];
@@ -88,6 +97,17 @@ export default function AgentChat() {
 
   return (
     <div className="h-full flex flex-col max-w-4xl mx-auto">
+      {/* Header with New Chat button */}
+      {messages.length > 0 && (
+        <div className="flex justify-end p-2 border-b border-gray-100">
+          <button
+            onClick={startNewChat}
+            className="px-3 py-1.5 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md flex items-center gap-1"
+          >
+            <span>+</span> 新对话
+          </button>
+        </div>
+      )}
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {messages.length === 0 && (
