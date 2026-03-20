@@ -8,6 +8,7 @@ export default function LinkList() {
   const [links, setLinks] = useState<Link[]>([]);
   const [linkTypeDef, setLinkTypeDef] = useState<LinkType | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);
   const limit = 20;
@@ -29,7 +30,8 @@ export default function LinkList() {
       setLinkTypeDef(linkTypeData);
       setLinks(linksData.items);
       setTotal(linksData.total);
-    } catch (error) {
+    } catch (error: any) {
+      setError(error.response?.data?.message || error.message || '加载数据失败');
       console.error('Failed to load data:', error);
     } finally {
       setLoading(false);
@@ -41,7 +43,7 @@ export default function LinkList() {
   }
 
   if (!linkTypeDef) {
-    return <div className="text-center py-12">Link type not found</div>;
+    return <div className="text-center py-12">{error || 'Link type not found'}</div>;
   }
 
   return (

@@ -22,6 +22,7 @@ export default function ReasoningView() {
         setStatus(statusData);
         setPassages(passageData.items);
       } catch (err: any) {
+        setError(err.response?.data?.message || err.message || '加载数据失败');
         console.error('Failed to load data:', err);
       }
     };

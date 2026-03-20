@@ -74,9 +74,15 @@ public class LinkStorage {
     public void updateLink(String linkType, String id, Map<String, Object> properties) throws IOException {
         lock.writeLock().lock();
         try {
-            Map<String, Object> existing = getLink(linkType, id);
+            // 直接读文件，不调用 getLink() 避免嵌套锁
+            String filePath = pathManager.getLinkPath(linkType, id);
+            File file = new File(filePath);
+            if (!file.exists()) {
+                throw new IOException("link not found");
+            }
+            @SuppressWarnings("unchecked")
+            Map<String, Object> existing = objectMapper.readValue(file, Map.class);
 
-            // 更新属性（不更新 source_id 和 target_id）
             for (Map.Entry<String, Object> entry : properties.entrySet()) {
                 String key = entry.getKey();
                 if (!"source_id".equals(key) && !"target_id".equals(key) && !"id".equals(key)) {
@@ -85,9 +91,7 @@ public class LinkStorage {
             }
             existing.put("updated_at", Instant.now().toString());
 
-            // 写入文件
-            String filePath = pathManager.getLinkPath(linkType, id);
-            objectMapper.writerWithDefaultPrettyPrinter().writeValue(new File(filePath), existing);
+            objectMapper.writerWithDefaultPrettyPrinter().writeValue(file, existing);
         } finally {
             lock.writeLock().unlock();
         }

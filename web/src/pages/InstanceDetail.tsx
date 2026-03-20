@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link as RouterLink, useNavigate } from 'react-router-dom';
 import type { Instance, ObjectType, QueryRequest, Rule } from '../api/client';
-import { schemaApi, queryApi, rulesApi } from '../api/client';
+import { schemaApi, queryApi, rulesApi, instanceApi } from '../api/client';
 import { ArrowLeftIcon, PencilIcon, TrashIcon, ShieldCheckIcon } from '@heroicons/react/24/outline';
 import InstanceForm from '../components/InstanceForm';
 
@@ -76,13 +76,13 @@ export default function InstanceDetail() {
 
   const handleDelete = async () => {
     if (!objectType || !id) return;
-    if (!confirm('Are you sure you want to delete this instance?')) return;
+    if (!confirm('确定要删除此实例吗？')) return;
     try {
-      // TODO: 实现删除逻辑
+      await instanceApi.delete(objectType, id);
       navigate(`/instances/${objectType}`);
     } catch (error) {
       console.error('Failed to delete instance:', error);
-      alert('Failed to delete instance');
+      alert('删除失败');
     }
   };
 

@@ -38,23 +38,25 @@ public class QueryExecutor {
      * 初始化 Calcite Schema
      */
     public void initialize() throws SQLException {
-        // 初始化 RelNodeBuilder（会创建 Schema 和 FrameworkConfig）
         relNodeBuilder.initialize();
         rootSchema = relNodeBuilder.rootSchema;
-        
-        // 创建 Calcite 连接用于执行
+
         Connection connection = DriverManager.getConnection("jdbc:calcite:");
-        CalciteConnection calciteConn = connection.unwrap(CalciteConnection.class);
-        SchemaPlus calciteRootSchema = calciteConn.getRootSchema();
-        
-        // 将 rootSchema 中的表复制到 calciteRootSchema
-        if (rootSchema != null) {
-            for (String tableName : rootSchema.getTableNames()) {
-                calciteRootSchema.add(tableName, rootSchema.getTable(tableName));
+        try {
+            CalciteConnection calciteConn = connection.unwrap(CalciteConnection.class);
+            SchemaPlus calciteRootSchema = calciteConn.getRootSchema();
+
+            if (rootSchema != null) {
+                for (String tableName : rootSchema.getTableNames()) {
+                    calciteRootSchema.add(tableName, rootSchema.getTable(tableName));
+                }
             }
+
+            this.calciteConnection = calciteConn;
+        } catch (SQLException e) {
+            connection.close();
+            throw e;
         }
-        
-        this.calciteConnection = calciteConn;
     }
 
     /**

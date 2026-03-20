@@ -43,6 +43,10 @@ export default function DashboardPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  useEffect(() => {
+    return () => { cancelRef.current?.(); };
+  }, []);
+
   const fetchWidgetData = useCallback(async (widgetId: string, query: string) => {
     setWidgets(prev => prev.map(w =>
       w.id === widgetId ? { ...w, loading: true, error: null } : w

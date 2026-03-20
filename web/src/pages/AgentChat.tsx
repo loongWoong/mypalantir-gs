@@ -29,6 +29,10 @@ export default function AgentChat() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  useEffect(() => {
+    return () => { cancelRef.current?.(); };
+  }, []);
+
   const startNewChat = () => {
     if (cancelRef.current) cancelRef.current();
     setSessionId(crypto.randomUUID());

@@ -2,6 +2,8 @@ package com.mypalantir.controller;
 
 import com.mypalantir.query.QueryExecutor;
 import com.mypalantir.service.QueryService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -13,6 +15,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/v1/query")
 public class QueryController {
+    private static final Logger logger = LoggerFactory.getLogger(QueryController.class);
     private final QueryService queryService;
 
     public QueryController(QueryService queryService) {
@@ -38,8 +41,7 @@ public class QueryController {
             return ResponseEntity.badRequest()
                 .body(ApiResponse.error(400, e.getMessage()));
         } catch (Exception e) {
-            // 打印异常堆栈以便调试
-            e.printStackTrace();
+            logger.error("Query execution failed", e);
             String errorMessage = e.getMessage();
             if (errorMessage == null || errorMessage.isEmpty()) {
                 errorMessage = e.getClass().getSimpleName();
