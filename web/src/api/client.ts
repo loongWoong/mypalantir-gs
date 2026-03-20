@@ -474,6 +474,24 @@ export const instanceApi = {
     await apiClient.post(`/instances/${objectType}/sync-from-mapping/${mappingId}`);
   },
 
+  /** 图数据库 → 本体：导出到 ontology 本地文件 */
+  exportToOntology: async (objectType: string, filename?: string): Promise<{ filePath: string; count: number; message: string }> => {
+    const params = filename ? `?filename=${encodeURIComponent(filename)}` : '';
+    const response = await apiClient.post<ApiResponse<{ filePath: string; count: number; message: string }>>(
+      `/instances/${objectType}/export-to-ontology${params}`
+    );
+    return response.data.data;
+  },
+
+  /** 本体 → 图数据库：从 ontology 本地文件导入 */
+  importFromOntology: async (objectType: string, filename?: string): Promise<{ created: number; updated: number; message: string }> => {
+    const params = filename ? `?filename=${encodeURIComponent(filename)}` : '';
+    const response = await apiClient.post<ApiResponse<{ created: number; updated: number; message: string }>>(
+      `/instances/${objectType}/import-from-ontology${params}`
+    );
+    return response.data.data;
+  },
+
   buildEtlModel: async (
     objectType: string,
     mappingId?: string,

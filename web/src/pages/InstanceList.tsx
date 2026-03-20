@@ -3,9 +3,9 @@ import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom'
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import type { Instance, ObjectType, FilterExpression, OrderBy } from '../api/client';
-import { instanceApi, schemaApi, databaseApi, mappingApi } from '../api/client';
+import { instanceApi, schemaApi, databaseApi, mappingApi, modelApi } from '../api/client';
 import { useWorkspace } from '../WorkspaceContext';
-import { PlusIcon, PencilIcon, TrashIcon, CloudArrowDownIcon, XMarkIcon, LinkIcon, ArrowDownTrayIcon, FunnelIcon, MagnifyingGlassIcon, CircleStackIcon, ServerIcon, ChartBarIcon, TableCellsIcon, Cog6ToothIcon, ArrowTopRightOnSquareIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, PencilIcon, TrashIcon, CloudArrowDownIcon, XMarkIcon, LinkIcon, ArrowDownTrayIcon, ArrowUpTrayIcon, FunnelIcon, MagnifyingGlassIcon, CircleStackIcon, ServerIcon, ChartBarIcon, TableCellsIcon, Cog6ToothIcon, ArrowTopRightOnSquareIcon, DocumentArrowDownIcon } from '@heroicons/react/24/outline';
 import InstanceForm from '../components/InstanceForm';
 import ButtonGroup from '../components/ButtonGroup';
 import DataMappingDialog from '../components/DataMappingDialog';
@@ -35,6 +35,8 @@ export default function InstanceList() {
   const [mappings, setMappings] = useState<any[]>([]);
   const [selectedMappingId, setSelectedMappingId] = useState<string>('');
   const [extracting, setExtracting] = useState(false);
+  const [ontologySyncLoading, setOntologySyncLoading] = useState<'export' | 'import' | null>(null);
+  const [currentModelId, setCurrentModelId] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState<Array<{ property: string; value: string }>>([]);
   const [availableMappings, setAvailableMappings] = useState<any[]>([]);
@@ -111,6 +113,27 @@ export default function InstanceList() {
     const wsName = selectedWorkspace.name?.toLowerCase();
     const wsDisplayName = selectedWorkspace.display_name?.toLowerCase();
     return wsName === 'system' || wsDisplayName === 'system' || selectedWorkspace.id === 'system';
+  };
+
+  // 判断是否为支持本体同步的模型（数据源、工作空间、映射管理）
+  const isOntologySyncModel = () => {
+    return objectType === 'database' || objectType === 'workspace' || objectType === 'mapping';
+  };
+
+  // 加载当前 ontology model，用于隔离不同模型的导出文件
+  useEffect(() => {
+    modelApi.getCurrentModel()
+      .then((m) => setCurrentModelId(m.modelId ?? null))
+      .catch((e) => {
+        console.error('Failed to load current model:', e);
+        setCurrentModelId(null);
+      });
+  }, []);
+
+  const getOntologySyncFilename = (type: string) => {
+    if (!currentModelId) return undefined;
+    // 例如：car-1.0.0-mapping.yaml（前缀=当前 modelId）
+    return `${currentModelId}-${type}.yaml`;
   };
 
   // 查询条件管理函数
@@ -583,6 +606,41 @@ export default function InstanceList() {
     }
   };
 
+  // 同步到本体：图数据库数据 → ontology 本地文件
+  const handleExportToOntology = async () => {
+    if (!objectType || !isOntologySyncModel()) return;
+    try {
+      setOntologySyncLoading('export');
+      const filename = getOntologySyncFilename(objectType);
+      const result = await instanceApi.exportToOntology(objectType, filename);
+      showToast(result.message || `已导出 ${result.count} 条到 ${result.filePath}`, 'success');
+      loadData();
+    } catch (error: any) {
+      const msg = error.response?.data?.message || error.message || '导出到本体失败';
+      showToast(msg, 'error');
+    } finally {
+      setOntologySyncLoading(null);
+    }
+  };
+
+  // 同步到图数据库：ontology 本地文件 → 图数据库
+  const handleImportFromOntology = async () => {
+    if (!objectType || !isOntologySyncModel()) return;
+    if (!confirm('将从 ontology 本地文件导入数据到图数据库，已存在的实例将被更新。是否继续？')) return;
+    try {
+      setOntologySyncLoading('import');
+      const filename = getOntologySyncFilename(objectType);
+      const result = await instanceApi.importFromOntology(objectType, filename);
+      showToast(result.message || `导入完成：新增 ${result.created} 条，更新 ${result.updated} 条`, 'success');
+      loadData();
+    } catch (error: any) {
+      const msg = error.response?.data?.message || error.message || '从本体导入失败';
+      showToast(msg, 'error');
+    } finally {
+      setOntologySyncLoading(null);
+    }
+  };
+
   const handleEtlSyncClick = async () => {
     if (!objectType || isSystemObjectType(objectType)) return;
 
@@ -768,6 +826,32 @@ export default function InstanceList() {
               <CloudArrowDownIcon className="w-5 h-5 mr-2" />
               同步表信息
             </button>
+          )}
+          {isOntologySyncModel() && (
+            <>
+              <button
+                onClick={handleExportToOntology}
+                disabled={ontologySyncLoading !== null || !currentModelId}
+                className="flex items-center px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title={
+                  objectType && currentModelId
+                    ? `将图数据库数据导出到 ontology 本地文件 (${currentModelId}-${objectType}.yaml)`
+                    : '加载当前模型后可用'
+                }
+              >
+                <DocumentArrowDownIcon className="w-5 h-5 mr-2" />
+                {ontologySyncLoading === 'export' ? '导出中...' : '同步到本体'}
+              </button>
+              <button
+                onClick={handleImportFromOntology}
+                disabled={ontologySyncLoading !== null || !currentModelId}
+                className="flex items-center px-4 py-2 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title="将 ontology 本地文件数据导入到图数据库"
+              >
+                <ArrowUpTrayIcon className="w-5 h-5 mr-2" />
+                {ontologySyncLoading === 'import' ? '导入中...' : '同步到图数据库'}
+              </button>
+            </>
           )}
           {!isSystemObjectType(objectType) && !isSystemWorkspace() && (
             <>

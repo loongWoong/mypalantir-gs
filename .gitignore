@@ -125,3 +125,7 @@ data/**/*.lock.db
 test-reports/
 .env*
 .claude*
+
+*-database.yaml
+*-mapping.yaml
+*-workspace.yaml

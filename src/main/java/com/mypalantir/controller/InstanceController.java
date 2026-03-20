@@ -3,6 +3,7 @@ package com.mypalantir.controller;
 import com.mypalantir.meta.Loader;
 import com.mypalantir.service.DataValidator;
 import com.mypalantir.service.InstanceService;
+import com.mypalantir.service.InstanceOntologySyncService;
 import com.mypalantir.service.MappedDataService;
 import com.mypalantir.repository.InstanceStorage;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,6 +26,9 @@ public class InstanceController {
 
     @Autowired
     private MappedDataService mappedDataService;
+
+    @Autowired
+    private InstanceOntologySyncService instanceOntologySyncService;
 
     public InstanceController(InstanceService instanceService) {
         this.instanceService = instanceService;
@@ -294,6 +298,59 @@ public class InstanceController {
         } catch (IOException e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(ApiResponse.error(500, "Failed to get instances: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * 图数据库 → 本体：将指定对象类型的所有实例导出到 ontology 本地文件
+     * 用于 database、workspace、mapping 等系统模型的双向同步
+     */
+    @PostMapping("/{objectType}/export-to-ontology")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> exportToOntology(
+            @PathVariable String objectType,
+            @RequestParam(required = false) String filename) {
+        try {
+            String targetFilename = (filename != null && !filename.isBlank())
+                    ? filename.trim()
+                    : instanceOntologySyncService.getDefaultFilename(objectType);
+            InstanceOntologySyncService.ExportResult result = instanceOntologySyncService.exportToOntology(objectType, targetFilename);
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("filePath", result.filePath);
+            payload.put("count", result.count);
+            payload.put("message", "已成功导出 " + result.count + " 条数据到 " + result.filePath);
+            return ResponseEntity.ok(ApiResponse.success(payload));
+        } catch (Loader.NotFoundException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(ApiResponse.error(400, e.getMessage()));
+        } catch (IOException e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.error(500, "导出失败: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * 本体 → 图数据库：将 ontology 本地文件中的实例导入到图数据库
+     */
+    @PostMapping("/{objectType}/import-from-ontology")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> importFromOntology(
+            @PathVariable String objectType,
+            @RequestParam(required = false) String filename) {
+        try {
+            String targetFilename = (filename != null && !filename.isBlank())
+                    ? filename.trim()
+                    : instanceOntologySyncService.getDefaultFilename(objectType);
+            InstanceOntologySyncService.ImportResult result = instanceOntologySyncService.importFromOntology(objectType, targetFilename);
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("created", result.created);
+            payload.put("updated", result.updated);
+            payload.put("message", "导入完成：新增 " + result.created + " 条，更新 " + result.updated + " 条");
+            return ResponseEntity.ok(ApiResponse.success(payload));
+        } catch (Loader.NotFoundException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(ApiResponse.error(400, e.getMessage()));
+        } catch (IOException e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.error(500, "导入失败: " + e.getMessage()));
         }
     }
 }

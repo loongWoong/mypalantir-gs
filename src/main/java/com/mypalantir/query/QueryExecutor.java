@@ -318,24 +318,25 @@ public class QueryExecutor {
     private QueryResult executeSql(String sql, OntologyQuery query, 
                                     com.mypalantir.meta.ObjectType objectType, 
                                     com.mypalantir.meta.DataSourceMapping dataSourceMapping) throws SQLException {
-        // 根据 mapping 获取实际的数据库连接
-        Connection dbConnection = null;
+        // 根据 mapping 获取实际的数据库连接（从 HikariCP 连接池获取，必须 close 归还池）
+        String databaseId = dataSourceMapping != null ? dataSourceMapping.getConnectionId() : null;
+        if (databaseId == null || databaseId.isEmpty() || databaseId.equals("default")) {
+            databaseId = null;
+        }
+        
+        Connection dbConnection;
         try {
-            String databaseId = dataSourceMapping != null ? dataSourceMapping.getConnectionId() : null;
-            if (databaseId == null || databaseId.isEmpty() || databaseId.equals("default")) {
-                // 使用默认连接
-                dbConnection = databaseMetadataService.getConnectionForDatabase(null);
-            } else {
-                // 使用指定数据库的连接
-                dbConnection = databaseMetadataService.getConnectionForDatabase(databaseId);
-            }
-            
-            System.out.println("[executeSql] Using database connection for databaseId: " + databaseId);
-            System.out.println("[executeSql] Executing SQL: " + sql);
-            
-            // 使用实际的数据库连接执行 SQL
-            try (Statement stmt = dbConnection.createStatement();
-                 ResultSet rs = stmt.executeQuery(sql)) {
+            dbConnection = databaseMetadataService.getConnectionForDatabase(databaseId);
+        } catch (IOException e) {
+            throw new SQLException("Failed to get database connection: " + e.getMessage(), e);
+        }
+        
+        System.out.println("[executeSql] Using database connection for databaseId: " + databaseId);
+        System.out.println("[executeSql] Executing SQL: " + sql);
+        
+        try (Connection conn = dbConnection;
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
                 
                 List<Map<String, Object>> rows = new ArrayList<>();
                 
@@ -412,10 +413,7 @@ public class QueryExecutor {
                     rows.add(row);
                 }
                 
-                return new QueryResult(rows, propertyNames);
-            }
-        } catch (IOException e) {
-            throw new SQLException("Failed to get database connection: " + e.getMessage(), e);
+            return new QueryResult(rows, propertyNames);
         }
     }
 

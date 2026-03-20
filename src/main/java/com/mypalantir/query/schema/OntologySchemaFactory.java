@@ -68,8 +68,12 @@ public class OntologySchemaFactory {
         }
 
         // 为每个 ObjectType 创建 Table（基于映射关系）
+        // 跳过系统元数据类型（workspace、database、table、column、mapping）：它们存于 Neo4j，无数据库表映射
         if (loader.getSchema() != null && loader.getSchema().getObjectTypes() != null) {
             for (ObjectType objectType : loader.getSchema().getObjectTypes()) {
+                if (isSystemObjectType(objectType.getName())) {
+                    continue;
+                }
                 OntologyTable table = createTableFromMapping(objectType);
                 if (table != null) {
                     // 直接将表添加到 rootSchema
@@ -180,6 +184,16 @@ public class OntologySchemaFactory {
             return envValue != null ? envValue : value;
         }
         return value;
+    }
+
+    /**
+     * 判断是否为系统元数据类型（存于 Neo4j，无数据库表映射）
+     */
+    private boolean isSystemObjectType(String objectTypeName) {
+        if (objectTypeName == null) return false;
+        String lower = objectTypeName.toLowerCase();
+        return "workspace".equals(lower) || "database".equals(lower) || "table".equals(lower)
+                || "column".equals(lower) || "mapping".equals(lower);
     }
 
     /**

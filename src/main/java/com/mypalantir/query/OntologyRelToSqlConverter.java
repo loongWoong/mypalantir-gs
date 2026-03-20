@@ -294,6 +294,9 @@ public class OntologyRelToSqlConverter extends RelToSqlConverter {
             sql = sql.replaceAll("`([A-Za-z_][A-Za-z0-9_]*)`", "$1");
         }
         
+        // 移除 Calcite/H2 方言生成的字符集引入符（如 _UTF-8'xxx'），MySQL 等不支持此语法
+        sql = sql.replace("_UTF-8'", "'").replace("_UTF8'", "'");
+        
         System.out.println("[OntologyRelToSqlConverter] Final SQL (after dialect adaptation): " + sql);
         
         return sql;
