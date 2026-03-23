@@ -102,8 +102,10 @@ public class RelNodeBuilder {
 
     /**
      * 将 OntologyQuery 构建为 RelNode
+     * 注意：RelBuilder 非线程安全，多请求并发时会破坏内部栈导致 NoSuchElementException，
+     * 因此对整个方法加锁，保证串行执行。
      */
-    public RelNode buildRelNode(OntologyQuery query) throws Exception {
+    public synchronized RelNode buildRelNode(OntologyQuery query) throws Exception {
         if (rootSchema == null) {
             initialize();
         }

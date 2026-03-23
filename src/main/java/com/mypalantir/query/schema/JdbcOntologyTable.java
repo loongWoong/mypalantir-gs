@@ -12,8 +12,10 @@ import org.apache.calcite.schema.ScannableTable;
 import org.apache.calcite.schema.impl.AbstractTable;
 import org.apache.calcite.sql.type.SqlTypeName;
 
+import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -27,12 +29,29 @@ import java.util.Map;
  */
 public class JdbcOntologyTable extends OntologyTable implements ScannableTable {
     private final DataSourceMapping mapping;
+    /** 长期持有的连接（会泄漏，仅用于 createTableFromMapping 等场景） */
     private final Connection connection;
+    /** 数据源：使用时按需取连接并归还池，推荐用于同步表等高频场景 */
+    private final DataSource dataSource;
 
+    /**
+     * 使用 Connection 构造（连接会被长期持有，存在泄漏风险）
+     */
     public JdbcOntologyTable(ObjectType objectType, DataSourceMapping mapping, Connection connection) {
         super(objectType);
         this.mapping = mapping;
         this.connection = connection;
+        this.dataSource = null;
+    }
+
+    /**
+     * 使用 DataSource 构造（推荐）：scan 时按需取连接并归还，避免连接池耗尽
+     */
+    public JdbcOntologyTable(ObjectType objectType, DataSourceMapping mapping, DataSource dataSource) {
+        super(objectType);
+        this.mapping = mapping;
+        this.connection = null;
+        this.dataSource = dataSource;
     }
 
     /**
@@ -153,9 +172,14 @@ public class JdbcOntologyTable extends OntologyTable implements ScannableTable {
     }
 
     /**
-     * 获取 JDBC 连接
+     * 获取 JDBC 连接。
+     * 若使用 DataSource 构造，每次调用会新建连接，调用方须负责关闭。
+     * 若使用 Connection 构造，返回持有的连接。
      */
-    public Connection getConnection() {
+    public Connection getConnection() throws SQLException {
+        if (dataSource != null) {
+            return dataSource.getConnection();
+        }
         return connection;
     }
 
@@ -169,46 +193,48 @@ public class JdbcOntologyTable extends OntologyTable implements ScannableTable {
     /**
      * 实现 ScannableTable 接口，扫描表数据
      * 
-     * 注意：如果 connection 为 null（延迟连接），会在执行查询时失败
-     * 这通常发生在数据库连接失败时，但表对象仍然被创建以支持 RelNode 构建
+     * 使用 DataSource 时：每次 scan 按需取连接并归还池，避免连接泄漏。
+     * 使用 Connection 时：复用持有的连接（存在泄漏风险）。
+     * connection 和 dataSource 均为 null 时（延迟连接）会失败。
      */
     @Override
     public Enumerable<Object[]> scan(DataContext root) {
-        // 检查连接是否可用
-        if (connection == null) {
+        if (connection == null && dataSource == null) {
             String databaseId = mapping != null ? mapping.getConnectionId() : "unknown";
             String tableName = mapping != null ? mapping.getTable() : "unknown";
             String objectTypeName = objectType != null ? objectType.getName() : "unknown";
             throw new RuntimeException(
                 "Database connection is not available for object type '" + objectTypeName + 
-                "'. " +
-                "Table mapping: " + objectTypeName + " -> " + tableName + 
+                "'. Table mapping: " + objectTypeName + " -> " + tableName + 
                 ", databaseId: " + databaseId + 
                 ". Please check the database connection configuration."
             );
         }
         
         try {
-            // 构建 SQL 查询
-            // 注意：这里使用数据库表名和列名，然后通过 AS 别名映射回 Ontology 属性名
-            // 表名和列名都来自 mapping，确保使用映射后的真实数据库表名和列名
             String sql = buildSelectSql();
-            
             System.out.println("[JdbcOntologyTable] Scanning table: " + objectType.getName() + 
                              " -> " + mapping.getTable() + 
                              ", SQL: " + sql);
             
-            // 执行查询
             List<Object[]> rows = new ArrayList<>();
-            try (Statement stmt = connection.createStatement();
-                 ResultSet rs = stmt.executeQuery(sql)) {
-                
-                while (rs.next()) {
-                    Object[] row = buildRow(rs);
-                    rows.add(row);
+            if (dataSource != null) {
+                // 按需取连接，用毕归还池，避免同步表初始化时耗尽连接池
+                try (Connection conn = dataSource.getConnection();
+                     Statement stmt = conn.createStatement();
+                     ResultSet rs = stmt.executeQuery(sql)) {
+                    while (rs.next()) {
+                        rows.add(buildRow(rs));
+                    }
+                }
+            } else {
+                try (Statement stmt = connection.createStatement();
+                     ResultSet rs = stmt.executeQuery(sql)) {
+                    while (rs.next()) {
+                        rows.add(buildRow(rs));
+                    }
                 }
             }
-            
             return Linq4j.asEnumerable(rows);
         } catch (Exception e) {
             String objectTypeName = objectType != null ? objectType.getName() : "unknown";

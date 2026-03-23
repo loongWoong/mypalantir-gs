@@ -581,9 +581,9 @@ public class RelationalInstanceStorage implements IInstanceStorage {
                 }
             }
             
-            // 获取总数（严格查询界限：只查询同步表）
+            // 获取总数（严格查询界限：只查询同步表，复用当前连接避免同时占用两个连接）
             logger.info("[RelationalInstanceStorage] Getting total count from SYNC TABLE {}", tableName);
-            long total = getTotalCountFromSyncTable(tableName);
+            long total = getTotalCountFromSyncTable(conn, tableName);
             logger.info("[RelationalInstanceStorage] Total count from SYNC TABLE {}: {} (retrieved instances: {})", 
                 tableName, total, instances.size());
             
@@ -697,29 +697,23 @@ public class RelationalInstanceStorage implements IInstanceStorage {
     }
 
     /**
-     * 获取同步表的总记录数
+     * 获取同步表的总记录数（复用已有连接，避免同时占用多个连接导致池耗尽）
+     * @param conn 已有的数据库连接，调用方负责关闭
      */
-    private long getTotalCountFromSyncTable(String tableName) throws SQLException, IOException {
+    private long getTotalCountFromSyncTable(Connection conn, String tableName) throws SQLException {
         String sql = "SELECT COUNT(*) FROM `" + tableName + "`";
         logger.info("[RelationalInstanceStorage] getTotalCountFromSyncTable: executing SQL: {}", sql);
         
-        Connection conn = databaseMetadataService.getConnectionForDatabase(null); // 默认数据库
-        try {
-            try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
-                pstmt.setQueryTimeout(databaseMetadataService.getQueryTimeoutSeconds());
-                try (ResultSet rs = pstmt.executeQuery()) {
-                    if (rs.next()) {
-                        long count = rs.getLong(1);
-                        logger.info("[RelationalInstanceStorage] getTotalCountFromSyncTable: count = {}", count);
-                        return count;
-                    }
-                    logger.warn("[RelationalInstanceStorage] getTotalCountFromSyncTable: no result returned");
-                    return 0;
+        try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setQueryTimeout(databaseMetadataService.getQueryTimeoutSeconds());
+            try (ResultSet rs = pstmt.executeQuery()) {
+                if (rs.next()) {
+                    long count = rs.getLong(1);
+                    logger.info("[RelationalInstanceStorage] getTotalCountFromSyncTable: count = {}", count);
+                    return count;
                 }
-            }
-        } finally {
-            if (conn != null && !conn.isClosed()) {
-                conn.close();
+                logger.warn("[RelationalInstanceStorage] getTotalCountFromSyncTable: no result returned");
+                return 0;
             }
         }
     }

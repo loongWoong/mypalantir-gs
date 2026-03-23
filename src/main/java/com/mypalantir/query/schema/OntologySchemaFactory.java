@@ -220,7 +220,7 @@ public class OntologySchemaFactory {
                         logger.debug("No connection found for data source {} for object type {}, table will be created but queries may fail",
                                 mapping.getConnectionId(), objectType.getName());
                         // 即使没有连接，也创建表（使用延迟连接）
-                        return new JdbcOntologyTable(objectType, mapping, null);
+                        return new JdbcOntologyTable(objectType, mapping, (Connection) null);
                     }
                 }
                 logger.debug("No mapping for object type {} (skipped, does not affect other types)", objectType.getName());
@@ -295,11 +295,13 @@ public class OntologySchemaFactory {
     /**
      * 为 ObjectType 创建同步表（默认库，表名 = 对象类型名小写，列名与属性名一致）
      * 用于自然语言查询等场景下 dataSourceType=sync 时查询同步数据。
+     * 使用 DataSource 而非 Connection，避免 Calcite 初始化时从池中取出大量连接并永久占用，
+     * 导致后续 RelationalInstanceStorage 的同步表查询无法获取连接。
      */
     private OntologyTable createSyncTable(ObjectType objectType) {
         try {
-            Connection defaultConn = databaseMetadataService.getConnectionForDatabase(null);
-            if (defaultConn == null) {
+            javax.sql.DataSource defaultDs = databaseMetadataService.getDataSourceForDatabase(null);
+            if (defaultDs == null) {
                 return null;
             }
             DataSourceMapping dataSourceMapping = new DataSourceMapping();
@@ -314,7 +316,7 @@ public class OntologySchemaFactory {
             }
             fieldMapping.put("id", "id");
             dataSourceMapping.setFieldMapping(fieldMapping);
-            return new JdbcOntologyTable(objectType, dataSourceMapping, defaultConn);
+            return new JdbcOntologyTable(objectType, dataSourceMapping, defaultDs);
         } catch (Exception e) {
             logger.debug("Failed to create sync table for {}: {}", objectType.getName(), e.getMessage());
             return null;
