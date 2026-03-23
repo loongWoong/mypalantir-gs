@@ -577,8 +577,8 @@ export const linkApi = {
     return response.data.data;
   },
 
-  sync: async (linkType: string): Promise<{ links_created: number }> => {
-    const response = await apiClient.post<ApiResponse<{ links_created: number }>>(`/links/${linkType}/sync`);
+  sync: async (linkType: string): Promise<{ links_created: number; links_skipped: number; errors: number; source_count: number; target_count: number }> => {
+    const response = await apiClient.post<ApiResponse<{ links_created: number; links_skipped: number; errors: number; source_count: number; target_count: number }>>(`/links/${linkType}/sync`);
     return response.data.data;
   },
 

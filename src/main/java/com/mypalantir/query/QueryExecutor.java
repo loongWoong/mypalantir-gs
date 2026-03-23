@@ -269,6 +269,7 @@ public class QueryExecutor {
             dataSourceMapping.setConnectionId(databaseId);  // 设置数据源连接ID
             dataSourceMapping.setTable(tableName);
             dataSourceMapping.setIdColumn(primaryKeyColumn != null ? primaryKeyColumn : "id");
+            dataSourceMapping.setPrimaryKeyColumns(primaryKeyColumns);
             dataSourceMapping.setFieldMapping(fieldMapping);
             
             System.out.println("[QueryExecutor.getDataSourceMappingFromMapping] Successfully loaded mapping for '" + 
@@ -335,8 +336,9 @@ public class QueryExecutor {
         System.out.println("[executeSql] Executing SQL: " + sql);
         
         try (Connection conn = dbConnection;
-             Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery(sql)) {
+             Statement stmt = conn.createStatement()) {
+            stmt.setQueryTimeout(databaseMetadataService.getQueryTimeoutSeconds());
+            try (ResultSet rs = stmt.executeQuery(sql)) {
                 
                 List<Map<String, Object>> rows = new ArrayList<>();
                 
@@ -412,8 +414,8 @@ public class QueryExecutor {
                     }
                     rows.add(row);
                 }
-                
-            return new QueryResult(rows, propertyNames);
+                return new QueryResult(rows, propertyNames);
+            }
         }
     }
 

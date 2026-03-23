@@ -126,6 +126,6 @@ test-reports/
 .env*
 .claude*
 
-*-database.yaml
-*-mapping.yaml
-*-workspace.yaml
+*database.yaml
+*mapping.yaml
+*workspace.yaml

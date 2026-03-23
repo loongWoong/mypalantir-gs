@@ -132,22 +132,38 @@ export default function LinkList() {
     }
   };
 
+  const [syncProgress, setSyncProgress] = useState<{ elapsed: number } | null>(null);
+
   const handleSync = async () => {
     if (!linkType) return;
     try {
       setSyncing(true);
+      setSyncProgress({ elapsed: 0 });
+
+      // 计时器，每秒更新已用时间
+      const startTime = Date.now();
+      const timer = setInterval(() => {
+        setSyncProgress({ elapsed: Math.floor((Date.now() - startTime) / 1000) });
+      }, 1000);
+
       const result = await linkApi.sync(linkType);
-      const message = `同步完成！\n创建关系: ${result.links_created}`;
-      showToast(message, 'success');
+      clearInterval(timer);
+      setSyncProgress(null);
+
+      const parts = [`新建: ${result.links_created}`];
+      if (result.links_skipped > 0) parts.push(`已存在跳过: ${result.links_skipped}`);
+      if (result.errors > 0) parts.push(`失败: ${result.errors}`);
+      showToast(`同步完成！${parts.join('，')}`, result.errors > 0 ? 'warning' : 'success');
+
       if (viewMode === 'list') {
         loadData();
       } else {
         loadStats();
       }
     } catch (error: any) {
+      setSyncProgress(null);
       console.error('Failed to sync links:', error);
-      const errorMessage = '同步失败: ' + (error.response?.data?.message || error.message);
-      showToast(errorMessage, 'error');
+      showToast('同步失败: ' + (error.response?.data?.message || error.message), 'error');
     } finally {
       setSyncing(false);
     }
@@ -258,10 +274,14 @@ export default function LinkList() {
                         <button
                             onClick={handleSync}
                             disabled={syncing}
-                            className="flex items-center px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow active:scale-95"
+                            className="flex items-center px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow active:scale-95 min-w-[120px]"
                         >
-                            <ArrowPathIcon className={`w-4 h-4 mr-2 ${syncing ? 'animate-spin' : ''}`} />
-                            {syncing ? '同步中...' : '同步关系'}
+                            <ArrowPathIcon className={`w-4 h-4 mr-2 flex-shrink-0 ${syncing ? 'animate-spin' : ''}`} />
+                            {syncing
+                                ? syncProgress
+                                    ? `同步中 ${syncProgress.elapsed}s...`
+                                    : '同步中...'
+                                : '同步关系'}
                         </button>
                     )}
                 </div>

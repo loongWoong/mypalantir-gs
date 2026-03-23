@@ -257,7 +257,12 @@ public class OntologySchemaFactory {
             // 构建 DataSourceMapping 对象
             @SuppressWarnings("unchecked")
             Map<String, String> columnPropertyMappings = (Map<String, String>) mappingData.get("column_property_mappings");
+            @SuppressWarnings("unchecked")
+            List<String> primaryKeyColumns = (List<String>) mappingData.get("primary_key_columns");
             String primaryKeyColumn = (String) mappingData.get("primary_key_column");
+            if (primaryKeyColumns != null && !primaryKeyColumns.isEmpty()) {
+                primaryKeyColumn = primaryKeyColumns.get(0);
+            }
             
             // column_property_mappings 的结构是 {列名: 属性名}，需要反转为 {属性名: 列名}
             Map<String, String> fieldMapping = new HashMap<>();
@@ -272,6 +277,7 @@ public class OntologySchemaFactory {
             DataSourceMapping dataSourceMapping = new DataSourceMapping();
             dataSourceMapping.setTable(tableName);
             dataSourceMapping.setIdColumn(primaryKeyColumn != null ? primaryKeyColumn : "id");
+            dataSourceMapping.setPrimaryKeyColumns(primaryKeyColumns);
             dataSourceMapping.setFieldMapping(fieldMapping);
             // connection_id 可以设置为 databaseId，用于标识连接
             dataSourceMapping.setConnectionId(databaseId);

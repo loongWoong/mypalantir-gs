@@ -34,7 +34,7 @@ public class DatabaseMetadataService {
     @Lazy
     private com.mypalantir.repository.Neo4jInstanceStorage neo4jInstanceStorage;
 
-    @Value("${db.dynamic-pool.maximum-pool-size:10}")
+    @Value("${db.dynamic-pool.maximum-pool-size:20}")
     private int poolMaxSize;
     @Value("${db.dynamic-pool.minimum-idle:2}")
     private int poolMinIdle;
@@ -42,8 +42,16 @@ public class DatabaseMetadataService {
     private long poolIdleTimeoutMs;
     @Value("${db.dynamic-pool.max-lifetime:1800000}")
     private long poolMaxLifetimeMs;
-    @Value("${db.dynamic-pool.connection-timeout:30000}")
+    @Value("${db.dynamic-pool.connection-timeout:5000}")
     private long poolConnectionTimeoutMs;
+    @Value("${db.dynamic-pool.query-timeout:30}")
+    private int queryTimeoutSeconds;
+    @Value("${db.dynamic-pool.socket-timeout:30000}")
+    private int socketTimeoutMs;
+    @Value("${db.dynamic-pool.connect-timeout:5000}")
+    private int connectTimeoutMs;
+    @Value("${db.dynamic-pool.leak-detection-threshold:0}")
+    private long leakDetectionThresholdMs;
 
     /** 按 databaseId 缓存的 HikariCP 数据源，避免重复创建连接池 */
     private final Map<String, DataSource> dataSourceCache = new ConcurrentHashMap<>();
@@ -182,22 +190,21 @@ public class DatabaseMetadataService {
         List<Map<String, Object>> results = new ArrayList<>();
         
         Connection conn = getConnectionForDatabase(databaseId);
-        try (Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery(sql)) {
-            
-            ResultSetMetaData metaData = rs.getMetaData();
-            int columnCount = metaData.getColumnCount();
-            
-            while (rs.next()) {
-                Map<String, Object> row = new HashMap<>();
-                for (int i = 1; i <= columnCount; i++) {
-                    String columnName = metaData.getColumnName(i);
-                    Object value = rs.getObject(i);
-                    // 转换 SQL 类型为基本类型，以便保存到 Neo4j
-                    value = convertSqlValue(value);
-                    row.put(columnName, value);
+        try (Statement stmt = conn.createStatement()) {
+            stmt.setQueryTimeout(getQueryTimeoutSeconds());
+            try (ResultSet rs = stmt.executeQuery(sql)) {
+                ResultSetMetaData metaData = rs.getMetaData();
+                int columnCount = metaData.getColumnCount();
+                while (rs.next()) {
+                    Map<String, Object> row = new HashMap<>();
+                    for (int i = 1; i <= columnCount; i++) {
+                        String columnName = metaData.getColumnName(i);
+                        Object value = rs.getObject(i);
+                        value = convertSqlValue(value);
+                        row.put(columnName, value);
+                    }
+                    results.add(row);
                 }
-                results.add(row);
             }
         } finally {
             if (conn != null && !conn.isClosed()) {
@@ -272,6 +279,8 @@ public class DatabaseMetadataService {
                     host, port, dbName);
         }
 
+        url = appendJdbcTimeoutParams(url);
+
         HikariConfig config = new HikariConfig();
         config.setJdbcUrl(url);
         config.setUsername(username);
@@ -281,6 +290,9 @@ public class DatabaseMetadataService {
         config.setIdleTimeout(poolIdleTimeoutMs);
         config.setMaxLifetime(poolMaxLifetimeMs);
         config.setConnectionTimeout(poolConnectionTimeoutMs);
+        if (leakDetectionThresholdMs > 0) {
+            config.setLeakDetectionThreshold(leakDetectionThresholdMs);
+        }
         config.setPoolName("mypalantir-ds-" + cacheKey);
         return new HikariDataSource(config);
     }
@@ -293,6 +305,22 @@ public class DatabaseMetadataService {
             }
         }
         dataSourceCache.clear();
+    }
+
+    /**
+     * 在 JDBC URL 后追加 socket/connect 超时参数，防止 MySQL 无响应时无限阻塞占用连接
+     */
+    private String appendJdbcTimeoutParams(String url) {
+        if (url == null) return url;
+        String sep = url.contains("?") ? "&" : "?";
+        return url + sep + "socketTimeout=" + socketTimeoutMs + "&connectTimeout=" + connectTimeoutMs;
+    }
+
+    /**
+     * 获取配置的查询超时秒数（用于 Statement.setQueryTimeout）
+     */
+    public int getQueryTimeoutSeconds() {
+        return queryTimeoutSeconds > 0 ? queryTimeoutSeconds : 30;
     }
 
     private String getDatabaseName(String databaseId) throws IOException {
@@ -321,6 +349,7 @@ public class DatabaseMetadataService {
     public int executeUpdate(String sql, String databaseId) throws SQLException, IOException {
         Connection conn = getConnectionForDatabase(databaseId);
         try (Statement stmt = conn.createStatement()) {
+            stmt.setQueryTimeout(getQueryTimeoutSeconds());
             return stmt.executeUpdate(sql);
         } finally {
             if (conn != null && !conn.isClosed()) {
@@ -342,15 +371,15 @@ public class DatabaseMetadataService {
             PreparedStatement stmt;
             
             if (dbName != null && !dbName.isEmpty()) {
-                // 如果指定了数据库名，查询指定数据库
                 sql = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND TABLE_TYPE = 'BASE TABLE'";
                 stmt = conn.prepareStatement(sql);
+                stmt.setQueryTimeout(getQueryTimeoutSeconds());
                 stmt.setString(1, dbName);
                 stmt.setString(2, tableName);
             } else {
-                // 如果没有指定数据库名，查询当前连接的数据库
                 sql = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND TABLE_TYPE = 'BASE TABLE'";
                 stmt = conn.prepareStatement(sql);
+                stmt.setQueryTimeout(getQueryTimeoutSeconds());
                 stmt.setString(1, tableName);
             }
             

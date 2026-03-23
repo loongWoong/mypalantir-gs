@@ -3,6 +3,7 @@ package com.mypalantir.meta;
 import com.fasterxml.jackson.annotation.JsonGetter;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -27,6 +28,12 @@ public class DataSourceMapping {
      */
     @JsonProperty("id_column")
     private String idColumn;
+
+    /**
+     * 联合主键列名列表（多列时使用，如 [vlp, vlpc]）
+     */
+    @JsonProperty("primary_key_columns")
+    private List<String> primaryKeyColumns;
 
     /**
      * 源对象ID列名（用于 LinkType，表示 source_type 的 ID）
@@ -85,6 +92,15 @@ public class DataSourceMapping {
 
     public void setIdColumn(String idColumn) {
         this.idColumn = idColumn;
+    }
+
+    @JsonGetter("primary_key_columns")
+    public List<String> getPrimaryKeyColumns() {
+        return primaryKeyColumns;
+    }
+
+    public void setPrimaryKeyColumns(List<String> primaryKeyColumns) {
+        this.primaryKeyColumns = primaryKeyColumns;
     }
 
     @JsonGetter("source_id_column")

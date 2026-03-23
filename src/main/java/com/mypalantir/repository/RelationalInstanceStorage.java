@@ -7,6 +7,7 @@ import com.mypalantir.service.MappingService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
@@ -40,6 +41,9 @@ public class RelationalInstanceStorage implements IInstanceStorage {
     @Lazy
     private MappingService mappingService;
 
+    /** 联合主键 ID 分隔符，如 id="val1_val2" 时按此拆解。默认 "_" */
+    @Value("${storage.composite-key.separator:_}")
+    private String compositeKeySeparator;
 
     @Override
     public String createInstance(String objectType, Map<String, Object> data) throws IOException {
@@ -114,6 +118,9 @@ public class RelationalInstanceStorage implements IInstanceStorage {
         } catch (Loader.NotFoundException e) {
             logger.error("[RelationalInstanceStorage] Object type not found: {}", objectType);
             throw new IOException("Object type not found: " + objectType, e);
+        } catch (IOException e) {
+            // 同步表查询失败（instance not found 等），直接向上抛，不打 ERROR
+            throw e;
         } catch (Exception e) {
             logger.error("[RelationalInstanceStorage] Failed to get instance from relational database: {}", e.getMessage(), e);
             throw new IOException("Failed to get instance: " + e.getMessage(), e);
@@ -327,14 +334,15 @@ public class RelationalInstanceStorage implements IInstanceStorage {
             List<String> syncTablePkColumns = resolveSyncTablePrimaryKeyColumns(primaryKeyColumns, columnToPropertyMap);
             String syncTablePkColumnSingle = syncTablePkColumns.isEmpty() ? primaryKeyColumn : syncTablePkColumns.get(0);
             
-            // 构建 WHERE 子句：支持单主键与联合主键（联合主键时 id 格式为 "val1_val2"，与 getIdFromPrimaryKey 一致）
+            // 构建 WHERE 子句：支持单主键与联合主键（联合主键时 id 格式为 "val1_sep_val2"，按 mapping.primary_key_columns 拆解成多参数）
             String sql;
             List<String> idPartsForWhere = null;
             if (syncTablePkColumns != null && syncTablePkColumns.size() > 1) {
-                idPartsForWhere = new ArrayList<>(java.util.Arrays.asList(id.split("_", -1)));
+                String sep = (compositeKeySeparator != null && !compositeKeySeparator.isEmpty()) ? compositeKeySeparator : "_";
+                idPartsForWhere = new ArrayList<>(java.util.Arrays.asList(id.split(java.util.regex.Pattern.quote(sep), -1)));
                 if (idPartsForWhere.size() != syncTablePkColumns.size()) {
-                    logger.warn("[RelationalInstanceStorage] Composite key mismatch: id has {} parts (split by '_'), but primary key has {} columns for table {}", 
-                        idPartsForWhere.size(), syncTablePkColumns.size(), tableName);
+                    logger.warn("[RelationalInstanceStorage] Composite key mismatch: id has {} parts (split by '{}'), but primary key has {} columns for table {}",
+                        idPartsForWhere.size(), sep, syncTablePkColumns.size(), tableName);
                     throw new IOException("instance not found");
                 }
                 List<String> whereClauses = new ArrayList<>();
@@ -349,6 +357,7 @@ public class RelationalInstanceStorage implements IInstanceStorage {
             }
             
             try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
+                pstmt.setQueryTimeout(databaseMetadataService.getQueryTimeoutSeconds());
                 if (idPartsForWhere != null) {
                     for (int i = 0; i < idPartsForWhere.size(); i++) {
                         pstmt.setString(i + 1, idPartsForWhere.get(i));
@@ -514,6 +523,7 @@ public class RelationalInstanceStorage implements IInstanceStorage {
             
             List<Map<String, Object>> instances = new ArrayList<>();
             try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
+                pstmt.setQueryTimeout(databaseMetadataService.getQueryTimeoutSeconds());
                 pstmt.setInt(1, limit);
                 pstmt.setInt(2, offset);
                 logger.info("[RelationalInstanceStorage] PreparedStatement parameters: limit = {}, offset = {}", limit, offset);
@@ -624,6 +634,7 @@ public class RelationalInstanceStorage implements IInstanceStorage {
             
             List<Map<String, Object>> instances = new ArrayList<>();
             try (PreparedStatement pstmt = conn.prepareStatement(sql.toString())) {
+                pstmt.setQueryTimeout(databaseMetadataService.getQueryTimeoutSeconds());
                 // 设置参数
                 if (filters != null && !filters.isEmpty()) {
                     int paramIndex = 1;
@@ -694,15 +705,17 @@ public class RelationalInstanceStorage implements IInstanceStorage {
         
         Connection conn = databaseMetadataService.getConnectionForDatabase(null); // 默认数据库
         try {
-            try (PreparedStatement pstmt = conn.prepareStatement(sql);
-                 ResultSet rs = pstmt.executeQuery()) {
-                if (rs.next()) {
-                    long count = rs.getLong(1);
-                    logger.info("[RelationalInstanceStorage] getTotalCountFromSyncTable: count = {}", count);
-                    return count;
+            try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
+                pstmt.setQueryTimeout(databaseMetadataService.getQueryTimeoutSeconds());
+                try (ResultSet rs = pstmt.executeQuery()) {
+                    if (rs.next()) {
+                        long count = rs.getLong(1);
+                        logger.info("[RelationalInstanceStorage] getTotalCountFromSyncTable: count = {}", count);
+                        return count;
+                    }
+                    logger.warn("[RelationalInstanceStorage] getTotalCountFromSyncTable: no result returned");
+                    return 0;
                 }
-                logger.warn("[RelationalInstanceStorage] getTotalCountFromSyncTable: no result returned");
-                return 0;
             }
         } finally {
             if (conn != null && !conn.isClosed()) {
@@ -812,6 +825,16 @@ public class RelationalInstanceStorage implements IInstanceStorage {
             }
         } catch (Exception e) {
             logger.warn("[RelationalInstanceStorage] Failed to get primary key columns: {}", e.getMessage());
+        }
+        
+        // 回退：从 ontology 的 data_source.id_column 获取单主键
+        if (objectTypeDef.getDataSource() != null) {
+            String idColumn = objectTypeDef.getDataSource().getIdColumn();
+            if (idColumn != null && !idColumn.isEmpty()) {
+                logger.debug("[RelationalInstanceStorage] Using id_column from data_source: {} for objectType {}",
+                    idColumn, objectTypeDef.getName());
+                return java.util.Collections.singletonList(idColumn);
+            }
         }
         
         return null;

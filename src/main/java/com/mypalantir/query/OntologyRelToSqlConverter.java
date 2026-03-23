@@ -579,6 +579,7 @@ public class OntologyRelToSqlConverter extends RelToSqlConverter {
             DataSourceMapping dataSourceMapping = new DataSourceMapping();
             dataSourceMapping.setTable(tableName);
             dataSourceMapping.setIdColumn(primaryKeyColumn != null ? primaryKeyColumn : "id");
+            dataSourceMapping.setPrimaryKeyColumns(primaryKeyColumns);
             dataSourceMapping.setFieldMapping(fieldMapping);
             // 设置 connectionId（使用 databaseId，如果为 null 则使用 "default"）
             dataSourceMapping.setConnectionId(databaseId != null ? databaseId : "default");

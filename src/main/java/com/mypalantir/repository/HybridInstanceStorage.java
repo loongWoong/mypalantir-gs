@@ -209,15 +209,12 @@ public class HybridInstanceStorage implements IInstanceStorage {
             return result;
         }
         
-        // 1. 优先从关系型数据库查询详细数据（包括同步表）
-        // 即使没有配置数据源映射，也尝试查询默认数据库中的同步表
-        // 严格查询界限：只从关系型数据库和Neo4j读取，不从文件读取
+        // 优先同步表获取完整字段（vlp/vlpc/vehicle_type 等），失败时回退 Neo4j
+        // 注：RelationalInstanceStorage 根据 mapping.primary_key_columns 解析 ID，联合主键时拆解成多参数查库
         boolean hasMapping = hasRelationalMapping(objectType);
         logger.info("[HybridInstanceStorage] hasRelationalMapping({}) = {}", objectType, hasMapping);
         
-        // 尝试从关系型数据库查询（包括同步表）
-        // 实例存储查询只查询同步表，如果同步表不存在或查询失败，抛出异常，不回退到 Neo4j
-        // 严格查询界限：只从关系型数据库和Neo4j读取，不从文件读取
+        // 尝试从关系型数据库查询同步表（完整字段）
         try {
             logger.info("[HybridInstanceStorage] Attempting to query from RelationalInstanceStorage (sync table only, NOT file storage)");
             Map<String, Object> instance = relationalStorage.getInstance(objectType, id);
@@ -317,15 +314,13 @@ public class HybridInstanceStorage implements IInstanceStorage {
             return result;
         }
         
-        // 严格查询界限：
-        // 1. 优先查询同步表（表名 = 模型名，在默认数据库中）
-        // 2. 不查询原始表（原始表查询应该通过 MappedDataService.queryMappedInstances() 进行）
-        // 3. 如果同步表查询失败，可以查询Neo4j（但需要明确界限）
+        // 严格查询界限：优先同步表（完整字段），失败时回退 Neo4j（仅有关键字段）
+        // 同步表有 vlp/vlpc/vehicle_type 等完整数据，Neo4j 仅存 id/name/display_name 等
+        // 注：RelationalInstanceStorage 会根据 mapping.primary_key_columns 解析 ID（联合主键时按分隔符拆成多参数查询）
         boolean hasMapping = hasRelationalMapping(objectType);
         logger.info("[HybridInstanceStorage] hasRelationalMapping({}) = {}", objectType, hasMapping);
         
-        // 尝试从关系型数据库查询同步表
-        // 严格查询界限：只查询同步表，不查询原始表
+        // 尝试从关系型数据库查询同步表（获取完整字段）
         InstanceStorage.ListResult syncTableResult = null;
         boolean syncTableQuerySucceeded = false;
         

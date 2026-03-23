@@ -71,14 +71,13 @@ public class Neo4jLinkStorage implements ILinkStorage {
     @Override
     public String createLink(String linkType, String sourceID, String targetID, Map<String, Object> properties) throws IOException {
         logger.debug("[Neo4jLinkStorage] Creating link: linkType={}, sourceID={}, targetID={}", linkType, sourceID, targetID);
-        logger.debug("[Neo4jLinkStorage] Storage mode: NEO4J (links stored in Neo4j, NOT in file storage)");
         
         if (neo4jDriver == null) {
             throw new IOException("Neo4j driver is not initialized");
         }
 
-        // 验证连接（带重试机制）
-        verifyAndRetryConnection();
+        // 注意：此处不调用 verifyAndRetryConnection()，避免批量同步时每条都发起连接探测
+        // 连接健康由连接池自动维护，单次失败由上层 catch 处理
 
         String id = UUID.randomUUID().toString();
         String now = Instant.now().toString();
@@ -406,8 +405,8 @@ public class Neo4jLinkStorage implements ILinkStorage {
         try (Session session = neo4jDriver.session()) {
             String relType = normalizeRelType(linkType);
             
-            // 先获取总数
-            String countCypher = "MATCH ()-[r:" + relType + "]-() RETURN count(r) AS total";
+            // 先获取总数（使用有向 -> 避免无向 - 导致每条关系被计数两遍）
+            String countCypher = "MATCH ()-[r:" + relType + "]->() RETURN count(r) AS total";
             long total = session.run(countCypher).single().get("total").asLong();
             
             // 获取分页数据
@@ -483,8 +482,11 @@ public class Neo4jLinkStorage implements ILinkStorage {
      * @param label 节点标签（如果已知）
      */
     private void ensureNodeExists(Session session, String nodeId, String objectType, String label) throws IOException {
-        // 检查节点是否已存在
-        String checkCypher = "MATCH (n {id: $id}) RETURN n.id AS id";
+        // 检查节点是否已存在：使用标签约束查询，避免全图扫描
+        // 如果 label 已知则带标签查询（利用索引），否则退化为全图（不推荐，应保证 label 始终传入）
+        String checkCypher = (label != null && !label.isEmpty())
+                ? "MATCH (n:" + label + " {id: $id}) RETURN n.id AS id"
+                : "MATCH (n {id: $id}) RETURN n.id AS id";
         var checkResult = session.run(checkCypher, Values.parameters("id", nodeId));
         var checkRecords = checkResult.list();
         

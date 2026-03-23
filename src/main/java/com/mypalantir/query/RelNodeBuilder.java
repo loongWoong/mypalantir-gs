@@ -58,12 +58,16 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
  * 将 OntologyQuery 直接构建为 RelNode
  */
 public class RelNodeBuilder {
+    /** 联合主键 ID 分隔符，用于将 id="val1_val2" 拆分为多列条件 */
+    private static final String COMPOSITE_KEY_SEPARATOR = "_";
+
     private final Loader loader;
     private final IInstanceStorage instanceStorage;
     private final MappingService mappingService;
@@ -214,6 +218,33 @@ public class RelNodeBuilder {
             // 跳过空值或空字符串的条件
             if (value == null || (value instanceof String && ((String) value).trim().isEmpty())) {
                 continue;
+            }
+            
+            // 联合主键展开：where.id = "val1_val2" 且 primary_key_columns=[col1,col2] 时，展开为 col1=val1, col2=val2
+            if ("id".equals(propertyName) && dataSourceMapping != null) {
+                List<String> pkCols = dataSourceMapping.getPrimaryKeyColumns();
+                if (pkCols != null && pkCols.size() > 1 && value instanceof String) {
+                    String valStr = (String) value;
+                    if (valStr.contains(COMPOSITE_KEY_SEPARATOR)) {
+                        String[] parts = valStr.split(Pattern.quote(COMPOSITE_KEY_SEPARATOR), pkCols.size());
+                        if (parts.length == pkCols.size()) {
+                            for (int i = 0; i < pkCols.size(); i++) {
+                                int fi = findFieldIndexInRowType(pkCols.get(i), rowType);
+                                if (fi < 0 && dataSourceMapping.getFieldMapping() != null) {
+                                    String col = dataSourceMapping.getFieldMapping().get(pkCols.get(i));
+                                    if (col != null) fi = findFieldIndexInRowType(col, rowType);
+                                }
+                                if (fi < 0) fi = findFieldIndex(pkCols.get(i), objectType, rowType);
+                                if (fi >= 0) {
+                                    RexInputRef ref = rexBuilder.makeInputRef(rowType.getFieldList().get(fi).getType(), fi);
+                                    RexNode lit = buildLiteral(rexBuilder, parts[i], rowType.getFieldList().get(fi).getType());
+                                    conditions.add(rexBuilder.makeCall(org.apache.calcite.sql.fun.SqlStdOperatorTable.EQUALS, ref, lit));
+                                }
+                            }
+                            continue; // 已处理，跳过后续单列 id 逻辑
+                        }
+                    }
+                }
             }
             
             // 优先按字段名在 rowType 中查找，避免与 objectType 属性顺序不一致时取错类型（如 pass_id 被当成 DATE）
@@ -1697,6 +1728,13 @@ public class RelNodeBuilder {
         switch (operator.toLowerCase()) {
             case "=":
             case "eq":
+                // 联合主键展开：当 filter 为 [=, firstPKCol, compositeId] 且 compositeId 含分隔符时，
+                // 拆分为 AND([=, col1, part1], [=, col2, part2], ...)
+                RexNode compositeExpanded = tryExpandCompositeKeyFilter(
+                    fieldPath, value, rootObjectType, rowType, pathResolver, rexBuilder);
+                if (compositeExpanded != null) {
+                    return compositeExpanded;
+                }
                 RexNode literal = buildLiteral(rexBuilder, value, fieldType);
                 return rexBuilder.makeCall(org.apache.calcite.sql.fun.SqlStdOperatorTable.EQUALS, inputRef, literal);
             
@@ -1741,6 +1779,65 @@ public class RelNodeBuilder {
             default:
                 throw new IllegalArgumentException("Unsupported filter operator: " + operator);
         }
+    }
+
+    /**
+     * 尝试将单列等值条件展开为联合主键的多列 AND 条件。
+     * 当 filter 为 [=, firstPKCol, "val1_val2"] 且 mapping 定义 primary_key_columns=[col1,col2] 时，
+     * 展开为 AND(col1='val1', col2='val2')。
+     * @return 展开后的 RexNode，若无法展开则返回 null
+     */
+    @SuppressWarnings("unchecked")
+    private RexNode tryExpandCompositeKeyFilter(String fieldPath, Object value, ObjectType rootObjectType,
+            RelDataType rowType, FieldPathResolver pathResolver, RexBuilder rexBuilder) throws Exception {
+        if (value == null || !(value instanceof String)) {
+            return null;
+        }
+        String valueStr = (String) value;
+        if (valueStr.isEmpty()) {
+            return null;
+        }
+        String sep = COMPOSITE_KEY_SEPARATOR;
+        if (!valueStr.contains(sep)) {
+            return null;
+        }
+        List<Map<String, Object>> mappings;
+        try {
+            mappings = mappingService.getMappingsByObjectType(rootObjectType.getName());
+        } catch (Exception e) {
+            return null;
+        }
+        if (mappings == null || mappings.isEmpty()) {
+            return null;
+        }
+        List<String> primaryKeyColumns = (List<String>) mappings.get(0).get("primary_key_columns");
+        if (primaryKeyColumns == null || primaryKeyColumns.size() <= 1) {
+            return null;
+        }
+        String firstPK = primaryKeyColumns.get(0);
+        if (!firstPK.equals(fieldPath)) {
+            return null;
+        }
+        String[] parts = valueStr.split(Pattern.quote(sep), primaryKeyColumns.size());
+        if (parts.length != primaryKeyColumns.size()) {
+            return null;
+        }
+        List<RexNode> conditions = new ArrayList<>();
+        for (int i = 0; i < primaryKeyColumns.size(); i++) {
+            String colName = primaryKeyColumns.get(i);
+            Object partVal = parts[i];
+            FieldPathResolver.FieldPath colPath = pathResolver.resolve(colName, rootObjectType, null);
+            int idx = findFieldIndexByPath(colPath, rowType);
+            if (idx < 0) {
+                return null;
+            }
+            RelDataType colType = rowType.getFieldList().get(idx).getType();
+            RexInputRef colRef = rexBuilder.makeInputRef(colType, idx);
+            RexNode lit = buildLiteral(rexBuilder, partVal, colType);
+            conditions.add(rexBuilder.makeCall(org.apache.calcite.sql.fun.SqlStdOperatorTable.EQUALS, colRef, lit));
+        }
+        return conditions.size() == 1 ? conditions.get(0)
+                : rexBuilder.makeCall(org.apache.calcite.sql.fun.SqlStdOperatorTable.AND, conditions);
     }
     
     /**
@@ -2098,6 +2195,7 @@ public class RelNodeBuilder {
             dataSourceMapping.setConnectionId(databaseId);  // 设置数据源连接ID
             dataSourceMapping.setTable(tableName);
             dataSourceMapping.setIdColumn(primaryKeyColumn != null ? primaryKeyColumn : "id");
+            dataSourceMapping.setPrimaryKeyColumns(primaryKeyColumns);
             dataSourceMapping.setFieldMapping(fieldMapping);
             
             System.out.println("[getDataSourceMappingFromMapping] Successfully loaded mapping for '" + 
