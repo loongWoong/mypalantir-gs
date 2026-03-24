@@ -103,6 +103,13 @@
             <version>8.0.33</version>
         </dependency>
 
+        <!-- Oracle JDBC Driver（数据源类型为 oracle 时使用） -->
+        <dependency>
+            <groupId>com.oracle.database.jdbc</groupId>
+            <artifactId>ojdbc11</artifactId>
+            <version>23.6.0.24.10</version>
+        </dependency>
+
         <!-- Dotenv for .env file support -->
         <dependency>
             <groupId>io.github.cdimascio</groupId>
@@ -115,6 +122,13 @@
             <groupId>org.neo4j.driver</groupId>
             <artifactId>neo4j-java-driver</artifactId>
             <version>5.15.0</version>
+        </dependency>
+
+        <!-- FalkorDB Java Client（storage.graph.type=falkordb 时使用） -->
+        <dependency>
+            <groupId>com.falkordb</groupId>
+            <artifactId>jfalkordb</artifactId>
+            <version>0.7.0</version>
         </dependency>
 
         <!-- Google CEL (Common Expression Language) for expression evaluation -->

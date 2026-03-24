@@ -30,6 +30,18 @@ class DataSourceConfigTest {
     }
 
     @Test
+    void buildJdbcUrl_doris_buildsCorrectUrl() {
+        DataSourceConfig config = new DataSourceConfig();
+        config.setType("doris");
+        config.setHost("doris-host");
+        config.setPort(9030);
+        config.setDatabase("mydb");
+        String url = config.buildJdbcUrl();
+        assertTrue(url.startsWith("jdbc:mysql://"));
+        assertTrue(url.contains("doris-host:9030/mydb"));
+    }
+
+    @Test
     void buildJdbcUrl_postgresql_buildsCorrectUrl() {
         DataSourceConfig config = new DataSourceConfig();
         config.setType("postgresql");

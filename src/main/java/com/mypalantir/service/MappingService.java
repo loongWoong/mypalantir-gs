@@ -3,6 +3,7 @@ package com.mypalantir.service;
 import com.mypalantir.meta.Loader;
 import com.mypalantir.repository.IInstanceStorage;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -11,6 +12,7 @@ import java.util.*;
 @Service
 public class MappingService {
     @Autowired
+    @Qualifier("instanceStorage")
     private IInstanceStorage instanceStorage;
 
     @Autowired

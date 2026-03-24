@@ -30,9 +30,10 @@ public class DatabaseMetadataService {
     @Lazy
     private IInstanceStorage instanceStorage;
 
-    @Autowired
+    @Autowired(required = false)
     @Lazy
-    private com.mypalantir.repository.Neo4jInstanceStorage neo4jInstanceStorage;
+    @org.springframework.beans.factory.annotation.Qualifier("graphInstanceStorage")
+    private IInstanceStorage graphInstanceStorage;
 
     @Value("${db.dynamic-pool.maximum-pool-size:20}")
     private int poolMaxSize;
@@ -260,7 +261,7 @@ public class DatabaseMetadataService {
             Map<String, Object> database;
             try {
                 isGettingDatabaseInstance.set(true);
-                database = neo4jInstanceStorage.getInstance("database", cacheKey);
+                database = (graphInstanceStorage != null ? graphInstanceStorage : instanceStorage).getInstance("database", cacheKey);
             } finally {
                 isGettingDatabaseInstance.set(false);
             }
@@ -270,13 +271,13 @@ public class DatabaseMetadataService {
                     ? ((Number) database.get("port")).intValue()
                     : 3306;
             String dbName = (String) database.get("database_name");
+            String dbType = database.get("type") != null ? database.get("type").toString().toLowerCase() : "mysql";
             username = (String) database.get("username");
             password = connectionManager.getConfig().getDbPassword();
             if (database.containsKey("password") && database.get("password") != null) {
                 password = database.get("password").toString();
             }
-            url = String.format("jdbc:mysql://%s:%d/%s?useSSL=false&serverTimezone=UTC&characterEncoding=utf8&allowPublicKeyRetrieval=true",
-                    host, port, dbName);
+            url = buildJdbcUrlForType(host, port, dbName, dbType);
         }
 
         url = appendJdbcTimeoutParams(url);
@@ -308,10 +309,40 @@ public class DatabaseMetadataService {
     }
 
     /**
-     * 在 JDBC URL 后追加 socket/connect 超时参数，防止 MySQL 无响应时无限阻塞占用连接
+     * 根据数据库类型构建 JDBC URL
+     * 支持 mysql、doris（MySQL 协议）、postgresql、oracle 等
+     */
+    private String buildJdbcUrlForType(String host, int port, String dbName, String dbType) {
+        String baseParams = "useSSL=false&serverTimezone=UTC&characterEncoding=utf8&allowPublicKeyRetrieval=true";
+        if ("postgresql".equals(dbType) || "postgres".equals(dbType)) {
+            return String.format("jdbc:postgresql://%s:%d/%s", host, port, dbName);
+        }
+        if ("oracle".equals(dbType)) {
+            // SID 格式: jdbc:oracle:thin:@host:port:SID（仅限字母数字下划线）
+            // Service Name 格式: jdbc:oracle:thin:@//host:port/service_name（含 #、.、/ 如 C##clear 等必须用此格式）
+            if (dbName != null && needsOracleServiceNameFormat(dbName)) {
+                return String.format("jdbc:oracle:thin:@//%s:%d/%s", host, port, dbName);
+            }
+            return String.format("jdbc:oracle:thin:@%s:%d:%s", host, port, dbName);
+        }
+        // mysql、doris 均使用 MySQL 协议（Doris 默认端口 9030）
+        return String.format("jdbc:mysql://%s:%d/%s?%s", host, port, dbName, baseParams);
+    }
+
+    /** Oracle SID 不允许 #、.、/，含这些字符时使用 Service Name 格式 */
+    private static boolean needsOracleServiceNameFormat(String dbName) {
+        return dbName != null && (dbName.contains("#") || dbName.contains(".") || dbName.contains("/"));
+    }
+
+    /**
+     * 在 JDBC URL 后追加 socket/connect 超时参数，防止 MySQL 无响应时无限阻塞占用连接。
+     * Oracle 使用不同机制，不追加此类参数。
      */
     private String appendJdbcTimeoutParams(String url) {
         if (url == null) return url;
+        if (url.startsWith("jdbc:oracle:")) {
+            return url;
+        }
         String sep = url.contains("?") ? "&" : "?";
         return url + sep + "socketTimeout=" + socketTimeoutMs + "&connectTimeout=" + connectTimeoutMs;
     }
@@ -336,7 +367,7 @@ public class DatabaseMetadataService {
         }
         try {
             isGettingDatabaseInstance.set(true);
-            Map<String, Object> database = neo4jInstanceStorage.getInstance("database", databaseId);
+            Map<String, Object> database = (graphInstanceStorage != null ? graphInstanceStorage : instanceStorage).getInstance("database", databaseId);
             return (String) database.get("database_name");
         } finally {
             isGettingDatabaseInstance.set(false);
@@ -360,16 +391,29 @@ public class DatabaseMetadataService {
 
     /**
      * 检查表是否存在
-     * 使用 SQL 查询 INFORMATION_SCHEMA 来检查表是否存在，这比 DatabaseMetaData.getTables 更可靠
+     * MySQL/PostgreSQL: 使用 INFORMATION_SCHEMA
+     * Oracle: 使用 ALL_TABLES（根据连接用户可见的表）
      */
     public boolean tableExists(String databaseId, String tableName) throws SQLException, IOException {
         Connection conn = getConnectionForDatabase(databaseId);
         try {
-            // 方法1：使用 SQL 查询 INFORMATION_SCHEMA（更可靠）
+            DatabaseMetaData metaData = conn.getMetaData();
+            String product = metaData.getDatabaseProductName();
+            if (product != null && product.toUpperCase().contains("ORACLE")) {
+                // Oracle: 使用 ALL_TABLES，表名转为大写（Oracle 默认大写）
+                String sql = "SELECT COUNT(*) FROM ALL_TABLES WHERE TABLE_NAME = UPPER(?)";
+                try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+                    stmt.setQueryTimeout(getQueryTimeoutSeconds());
+                    stmt.setString(1, tableName);
+                    try (ResultSet rs = stmt.executeQuery()) {
+                        return rs.next() && rs.getInt(1) > 0;
+                    }
+                }
+            }
+            // MySQL/PostgreSQL/Doris: 使用 INFORMATION_SCHEMA
             String dbName = getDatabaseName(databaseId);
             String sql;
             PreparedStatement stmt;
-            
             if (dbName != null && !dbName.isEmpty()) {
                 sql = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND TABLE_TYPE = 'BASE TABLE'";
                 stmt = conn.prepareStatement(sql);
@@ -382,30 +426,21 @@ public class DatabaseMetadataService {
                 stmt.setQueryTimeout(getQueryTimeoutSeconds());
                 stmt.setString(1, tableName);
             }
-            
             try (stmt) {
                 try (ResultSet rs = stmt.executeQuery()) {
                     if (rs.next()) {
-                        int count = rs.getInt(1);
-                        return count > 0;
+                        return rs.getInt(1) > 0;
                     }
                 }
             }
-            
             return false;
         } catch (SQLException e) {
-            // 如果 SQL 查询失败，回退到 DatabaseMetaData 方法
+            // 回退到 DatabaseMetaData 方法
             try {
                 DatabaseMetaData metaData = conn.getMetaData();
-                // 当连接已经指定了数据库时，catalog 应该使用 null 或连接的实际数据库
-                // 尝试使用 null（查询当前连接的数据库）
                 try (ResultSet rs = metaData.getTables(null, null, tableName, new String[]{"TABLE"})) {
-                    if (rs.next()) {
-                        return true;
-                    }
+                    if (rs.next()) return true;
                 }
-                
-                // 如果使用 null 没找到，尝试使用数据库名（不区分大小写）
                 String catalog = getDatabaseName(databaseId);
                 if (catalog != null && !catalog.isEmpty()) {
                     try (ResultSet rs = metaData.getTables(catalog, null, tableName, new String[]{"TABLE"})) {
@@ -413,10 +448,8 @@ public class DatabaseMetadataService {
                     }
                 }
             } catch (SQLException e2) {
-                // 如果两种方法都失败，抛出原始异常
                 throw new SQLException("Failed to check table existence: " + e.getMessage(), e);
             }
-            
             return false;
         } finally {
             if (conn != null && !conn.isClosed()) {

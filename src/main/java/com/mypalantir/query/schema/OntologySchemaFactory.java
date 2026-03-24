@@ -157,13 +157,15 @@ public class OntologySchemaFactory {
                 Class.forName("org.postgresql.Driver");
                 break;
             case "mysql":
+            case "doris":
+                // Doris 使用 MySQL 协议，使用相同驱动
                 Class.forName("com.mysql.cj.jdbc.Driver");
                 break;
             case "h2":
                 Class.forName("org.h2.Driver");
                 break;
             case "oracle":
-                Class.forName("oracle.jdbc.driver.OracleDriver");
+                Class.forName("oracle.jdbc.OracleDriver");
                 break;
             case "sqlserver":
             case "mssql":
@@ -172,6 +174,20 @@ public class OntologySchemaFactory {
             default:
                 throw new ClassNotFoundException("Unsupported database type: " + dbType);
         }
+    }
+
+    private String buildJdbcUrlForDbType(String host, int port, String dbName, String dbType) {
+        String baseParams = "useSSL=false&serverTimezone=UTC&characterEncoding=utf8&allowPublicKeyRetrieval=true";
+        if ("postgresql".equals(dbType) || "postgres".equals(dbType)) {
+            return String.format("jdbc:postgresql://%s:%d/%s", host, port, dbName);
+        }
+        if ("oracle".equals(dbType)) {
+            if (dbName != null && (dbName.contains("#") || dbName.contains(".") || dbName.contains("/"))) {
+                return String.format("jdbc:oracle:thin:@//%s:%d/%s", host, port, dbName);
+            }
+            return String.format("jdbc:oracle:thin:@%s:%d:%s", host, port, dbName);
+        }
+        return String.format("jdbc:mysql://%s:%d/%s?%s", host, port, dbName, baseParams);
     }
 
     /**
@@ -348,6 +364,7 @@ public class OntologySchemaFactory {
                 ? ((Number) database.get("port")).intValue() 
                 : 3306;
             String dbName = (String) database.get("database_name");
+            String dbType = database.get("type") != null ? database.get("type").toString().toLowerCase() : "mysql";
             String username = (String) database.get("username");
             String password = (String) database.get("password");
             
@@ -356,11 +373,8 @@ public class OntologySchemaFactory {
                 return null;
             }
             
-            // 加载 MySQL 驱动
-            Class.forName("com.mysql.cj.jdbc.Driver");
-            
-            String url = String.format("jdbc:mysql://%s:%d/%s?useSSL=false&serverTimezone=UTC&characterEncoding=utf8&allowPublicKeyRetrieval=true",
-                    host, port, dbName);
+            loadDriver(dbType);
+            String url = buildJdbcUrlForDbType(host, port, dbName, dbType);
             Connection conn = DriverManager.getConnection(url, username, password != null ? password : "");
             databaseConnections.put(databaseId, conn);
             return conn;

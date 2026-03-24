@@ -53,4 +53,12 @@ public interface IInstanceStorage {
      * 批量获取多个对象类型的实例
      */
     Map<String, Map<String, Object>> getInstancesBatchMultiType(Map<String, List<String>> typeIdMap) throws IOException;
+
+    /**
+     * 批量 MERGE 节点到图存储（Neo4j/FalkorDB）
+     * 非图存储实现返回 0
+     */
+    default int batchMergeInstances(String objectType, List<Map<String, Object>> rows) throws IOException {
+        return 0;
+    }
 }

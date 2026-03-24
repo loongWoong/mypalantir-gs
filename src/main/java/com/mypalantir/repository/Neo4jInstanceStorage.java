@@ -224,6 +224,7 @@ public class Neo4jInstanceStorage implements IInstanceStorage {
      * 批量 MERGE 节点（用于同步抽取加速）
      * 使用 UNWIND 一次写入多条，保证一致性
      */
+    @Override
     public int batchMergeInstances(String objectType, List<Map<String, Object>> rows) throws IOException {
         if (neo4jDriver == null) throw new IOException("Neo4j driver is not initialized");
         if (rows == null || rows.isEmpty()) return 0;

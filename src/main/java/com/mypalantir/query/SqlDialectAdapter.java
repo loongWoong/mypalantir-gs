@@ -10,6 +10,7 @@ public class SqlDialectAdapter {
     
     public enum DatabaseType {
         MYSQL,
+        DORIS,
         POSTGRESQL,
         ORACLE,
         SQLSERVER,
@@ -29,6 +30,8 @@ public class SqlDialectAdapter {
         switch (lowerType) {
             case "mysql":
                 return DatabaseType.MYSQL;
+            case "doris":
+                return DatabaseType.DORIS;
             case "postgresql":
             case "postgres":
                 return DatabaseType.POSTGRESQL;
@@ -41,7 +44,9 @@ public class SqlDialectAdapter {
                 return DatabaseType.H2;
             default:
                 // 根据 JDBC URL 判断
-                if (lowerType.contains("mysql")) {
+                if (lowerType.contains("doris")) {
+                    return DatabaseType.DORIS;
+                } else if (lowerType.contains("mysql")) {
                     return DatabaseType.MYSQL;
                 } else if (lowerType.contains("postgres")) {
                     return DatabaseType.POSTGRESQL;
@@ -66,6 +71,7 @@ public class SqlDialectAdapter {
         
         String lowerUrl = jdbcUrl.toLowerCase();
         if (lowerUrl.contains("mysql")) {
+            // Doris 使用 MySQL 协议，URL 中也是 jdbc:mysql，无法区分，按 MYSQL 处理（方言兼容）
             return DatabaseType.MYSQL;
         } else if (lowerUrl.contains("postgresql") || lowerUrl.contains("postgres")) {
             return DatabaseType.POSTGRESQL;
@@ -91,7 +97,8 @@ public class SqlDialectAdapter {
             return sql;
         }
         // 使用 if-else 避免 switch-on-enum 生成合成内部类 ($1)，防止 NoClassDefFoundError
-        if (targetType == DatabaseType.MYSQL) {
+        if (targetType == DatabaseType.MYSQL || targetType == DatabaseType.DORIS) {
+            // Doris 与 MySQL 方言高度兼容，复用 MySQL 适配逻辑
             return adaptToMySQL(sql);
         }
         if (targetType == DatabaseType.POSTGRESQL) {

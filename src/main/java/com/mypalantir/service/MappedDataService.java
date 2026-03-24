@@ -3,7 +3,6 @@ package com.mypalantir.service;
 import com.mypalantir.meta.Loader;
 import com.mypalantir.meta.ObjectType;
 import com.mypalantir.repository.IInstanceStorage;
-import com.mypalantir.repository.Neo4jInstanceStorage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -33,9 +32,10 @@ public class MappedDataService {
     @Autowired
     private Loader loader;
 
-    /** 混合存储模式下用于同步抽取后写入 Neo4j 节点 */
+    /** 混合存储模式下用于同步抽取后写入图数据库（Neo4j/FalkorDB）节点 */
     @Autowired(required = false)
-    private Neo4jInstanceStorage neo4jStorage;
+    @org.springframework.beans.factory.annotation.Qualifier("graphInstanceStorage")
+    private IInstanceStorage graphInstanceStorage;
 
     @Autowired(required = false)
     private Environment environment;
@@ -366,14 +366,14 @@ public class MappedDataService {
         result.targetDatabaseId = (targetDatabaseId == null || targetDatabaseId.isEmpty()) 
             ? "default" : targetDatabaseId;
         
-        // 12. 混合存储模式：同步到 Neo4j（按 storage.neo4j.fields.default 等配置建立节点）
-        if (neo4jStorage != null && rowsInserted > 0) {
+        // 12. 混合存储模式：同步到图数据库（Neo4j/FalkorDB，按 storage.neo4j.fields 配置建立节点）
+        if (graphInstanceStorage != null && rowsInserted > 0) {
             try {
-                int neo4jSynced = syncSyncTableToNeo4j(objectType, targetTableName, targetDatabaseId);
-                result.neo4jNodesSynced = neo4jSynced;
-                logger.info("Synced {} rows to Neo4j for object type {}", neo4jSynced, objectType);
+                int graphSynced = syncSyncTableToGraph(objectType, targetTableName, targetDatabaseId);
+                result.neo4jNodesSynced = graphSynced;
+                logger.info("Synced {} rows to graph DB for object type {}", graphSynced, objectType);
             } catch (Exception e) {
-                logger.warn("Failed to sync to Neo4j (sync table data is OK): {}", e.getMessage());
+                logger.warn("Failed to sync to graph DB (sync table data is OK): {}", e.getMessage());
             }
         }
         
@@ -912,10 +912,10 @@ public class MappedDataService {
     private static final int NEO4J_PARALLEL_THREADS = 4;
 
     /**
-     * 将同步表数据同步到 Neo4j（混合存储模式）
+     * 将同步表数据同步到图数据库（混合存储模式，Neo4j/FalkorDB）
      * 批量 MERGE + 多线程并行，按 storage.neo4j.fields 提取字段建立节点
      */
-    private int syncSyncTableToNeo4j(String objectType, String targetTableName, String targetDatabaseId) throws IOException, SQLException {
+    private int syncSyncTableToGraph(String objectType, String targetTableName, String targetDatabaseId) throws IOException, SQLException {
         String selectSql = "SELECT * FROM `" + targetTableName + "`";
         List<Map<String, Object>> rows = databaseMetadataService.executeQuery(selectSql, targetDatabaseId);
         if (rows.isEmpty()) return 0;
@@ -937,7 +937,7 @@ public class MappedDataService {
             for (List<Map<String, Object>> batch : batches) {
                 futures.add(executor.submit(() -> {
                     try {
-                        return neo4jStorage.batchMergeInstances(objectType, batch);
+                        return graphInstanceStorage.batchMergeInstances(objectType, batch);
                     } catch (IOException e) {
                         throw new CompletionException(e);
                     }
@@ -951,10 +951,10 @@ public class MappedDataService {
         } catch (ExecutionException e) {
             Throwable cause = e.getCause();
             if (cause instanceof IOException) throw (IOException) cause;
-            throw new IOException("Neo4j batch sync failed", cause);
+            throw new IOException("Graph DB batch sync failed", cause);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new IOException("Neo4j sync interrupted", e);
+            throw new IOException("Graph DB sync interrupted", e);
         } finally {
             executor.shutdown();
         }

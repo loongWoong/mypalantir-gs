@@ -6,6 +6,7 @@ import com.mypalantir.meta.ObjectType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
 
@@ -14,7 +15,7 @@ import java.util.*;
 
 /**
  * 混合存储实现
- * 组合关系型数据库存储（详细数据）和Neo4j存储（关键字段和关系）
+ * 组合关系型数据库存储（详细数据）和图存储（Neo4j/FalkorDB，关键字段和关系）
  */
 @Component
 public class HybridInstanceStorage implements IInstanceStorage {
@@ -23,8 +24,9 @@ public class HybridInstanceStorage implements IInstanceStorage {
     @Autowired
     private RelationalInstanceStorage relationalStorage;
 
-    @Autowired
-    private Neo4jInstanceStorage neo4jStorage;
+    @Autowired(required = false)
+    @Qualifier("graphInstanceStorage")
+    private IInstanceStorage graphStorage;
 
     @Autowired
     private Loader loader;
@@ -167,7 +169,7 @@ public class HybridInstanceStorage implements IInstanceStorage {
         Map<String, Object> summaryFields = extractSummaryFields(objectType, data);
         
         // 2. 关键字段存储到Neo4j
-        String id = neo4jStorage.createInstance(objectType, summaryFields);
+        String id = graphStorage.createInstance(objectType, summaryFields);
         
         // 3. 详细数据应该通过ETL或直接SQL插入到关系型数据库
         // 这里不直接插入，由ETL系统处理
@@ -185,7 +187,7 @@ public class HybridInstanceStorage implements IInstanceStorage {
         summaryFields.put("id", id);
         
         // 3. 关键字段存储到Neo4j
-        String createdId = neo4jStorage.createInstanceWithId(objectType, id, summaryFields);
+        String createdId = graphStorage.createInstanceWithId(objectType, id, summaryFields);
         
         // 4. 详细数据应该通过ETL或直接SQL插入到关系型数据库
         // 这里不直接插入，由ETL系统处理
@@ -204,7 +206,7 @@ public class HybridInstanceStorage implements IInstanceStorage {
         if (isSystemObjectType(objectType)) {
             logger.info("[HybridInstanceStorage] System object type {} detected, using Neo4j directly to avoid recursion", objectType);
             logger.info("[HybridInstanceStorage] Data source: NEO4J only (NOT file storage)");
-            Map<String, Object> result = neo4jStorage.getInstance(objectType, id);
+            Map<String, Object> result = graphStorage.getInstance(objectType, id);
             logger.info("[HybridInstanceStorage] ========== getInstance END ==========");
             return result;
         }
@@ -221,7 +223,7 @@ public class HybridInstanceStorage implements IInstanceStorage {
             
             // 合并Neo4j中的关键字段（用于图展示）
             try {
-                Map<String, Object> neo4jInstance = neo4jStorage.getInstance(objectType, id);
+                Map<String, Object> neo4jInstance = graphStorage.getInstance(objectType, id);
                 // 如果关系型数据库中没有某些字段，从Neo4j补充
                 for (Map.Entry<String, Object> entry : neo4jInstance.entrySet()) {
                     if (!instance.containsKey(entry.getKey())) {
@@ -244,7 +246,7 @@ public class HybridInstanceStorage implements IInstanceStorage {
             boolean isNotFound = e.getMessage() != null && (e.getMessage().contains("instance not found") || e.getMessage().contains("not found"));
             if (isNotFound) {
                 try {
-                    Map<String, Object> neo4jInstance = neo4jStorage.getInstance(objectType, id);
+                    Map<String, Object> neo4jInstance = graphStorage.getInstance(objectType, id);
                     logger.info("[HybridInstanceStorage] Instance {} of type {} not in sync table, returned from Neo4j", id, objectType);
                     logger.info("[HybridInstanceStorage] ========== getInstance END ==========");
                     return neo4jInstance;
@@ -264,7 +266,7 @@ public class HybridInstanceStorage implements IInstanceStorage {
         Map<String, Object> summaryFields = extractSummaryFields(objectType, data);
         
         // 2. 更新Neo4j中的关键字段
-        neo4jStorage.updateInstance(objectType, id, summaryFields);
+        graphStorage.updateInstance(objectType, id, summaryFields);
         
         // 3. 详细数据的更新应该通过ETL或直接SQL更新
         // 这里不直接更新，由ETL系统处理
@@ -277,7 +279,7 @@ public class HybridInstanceStorage implements IInstanceStorage {
         // 系统对象类型（table, database, mapping等）只存储在 Neo4j 中，直接删除
         if (isSystemObjectType(objectType)) {
             logger.info("[HybridInstanceStorage] System object type {} detected, deleting from Neo4j only", objectType);
-            neo4jStorage.deleteInstance(objectType, id);
+            graphStorage.deleteInstance(objectType, id);
             logger.debug("Deleted instance {} of type {} from hybrid storage (Neo4j only)", id, objectType);
             return;
         }
@@ -285,7 +287,7 @@ public class HybridInstanceStorage implements IInstanceStorage {
         // 对于有关系型数据库映射的对象类型，只从 Neo4j 删除（关系型数据库的删除应该通过ETL或直接SQL删除）
         // 这里不直接删除关系型数据库中的数据，由ETL系统处理
         try {
-            neo4jStorage.deleteInstance(objectType, id);
+            graphStorage.deleteInstance(objectType, id);
             logger.debug("Deleted instance {} of type {} from hybrid storage (Neo4j only, relational DB should be handled by ETL)", id, objectType);
         } catch (IOException e) {
             logger.error("[HybridInstanceStorage] Failed to delete instance {} of type {} from Neo4j: {}", id, objectType, e.getMessage());
@@ -309,7 +311,7 @@ public class HybridInstanceStorage implements IInstanceStorage {
         // 系统对象类型（table, database, mapping等）直接使用 Neo4j，避免递归调用
         if (isSystemObjectType(objectType)) {
             logger.info("[HybridInstanceStorage] System object type {} detected, using Neo4j directly to avoid recursion", objectType);
-            InstanceStorage.ListResult result = neo4jStorage.listInstances(objectType, offset, limit);
+            InstanceStorage.ListResult result = graphStorage.listInstances(objectType, offset, limit);
             logger.info("[HybridInstanceStorage] ========== INSTANCE STORAGE QUERY END ==========");
             return result;
         }
@@ -355,7 +357,7 @@ public class HybridInstanceStorage implements IInstanceStorage {
         if (!syncTableQuerySucceeded || (syncTableResult != null && syncTableResult.getItems().isEmpty())) {
             try {
                 logger.info("[HybridInstanceStorage] Attempting to query from Neo4j (SYNC TABLE query failed or returned empty)");
-                InstanceStorage.ListResult neo4jResult = neo4jStorage.listInstances(objectType, offset, limit);
+                InstanceStorage.ListResult neo4jResult = graphStorage.listInstances(objectType, offset, limit);
                 logger.info("[HybridInstanceStorage] Successfully queried from Neo4j, returned {} instances (total: {})", 
                     neo4jResult.getItems().size(), neo4jResult.getTotal());
                 
@@ -386,7 +388,7 @@ public class HybridInstanceStorage implements IInstanceStorage {
         // 系统对象类型（table, database, mapping等）直接使用 Neo4j，避免递归调用
         if (isSystemObjectType(objectType)) {
             logger.info("[HybridInstanceStorage] System object type {} detected, using Neo4j directly to avoid recursion", objectType);
-            return neo4jStorage.searchInstances(objectType, filters);
+            return graphStorage.searchInstances(objectType, filters);
         }
         
         // 优先从关系型数据库查询（包括同步表）
@@ -417,7 +419,7 @@ public class HybridInstanceStorage implements IInstanceStorage {
         // 系统对象类型（table, database, mapping等）直接使用 Neo4j，避免递归调用
         if (isSystemObjectType(objectType)) {
             logger.info("[HybridInstanceStorage] System object type {} detected, using Neo4j directly to avoid recursion", objectType);
-            return neo4jStorage.getInstancesBatch(objectType, ids);
+            return graphStorage.getInstancesBatch(objectType, ids);
         }
         
         // 优先从关系型数据库查询（包括同步表）
@@ -454,7 +456,7 @@ public class HybridInstanceStorage implements IInstanceStorage {
             // 系统对象类型（table, database, mapping等）直接使用 Neo4j，避免递归调用
             if (isSystemObjectType(objectType)) {
                 logger.info("[HybridInstanceStorage] System object type {} detected, using Neo4j directly to avoid recursion", objectType);
-                Map<String, Map<String, Object>> instances = neo4jStorage.getInstancesBatch(objectType, ids);
+                Map<String, Map<String, Object>> instances = graphStorage.getInstancesBatch(objectType, ids);
                 for (Map.Entry<String, Map<String, Object>> instanceEntry : instances.entrySet()) {
                     String key = objectType + ":" + instanceEntry.getKey();
                     result.put(key, instanceEntry.getValue());
@@ -477,7 +479,7 @@ public class HybridInstanceStorage implements IInstanceStorage {
             }
             
             // 回退到Neo4j
-            Map<String, Map<String, Object>> instances = neo4jStorage.getInstancesBatch(objectType, ids);
+            Map<String, Map<String, Object>> instances = graphStorage.getInstancesBatch(objectType, ids);
             for (Map.Entry<String, Map<String, Object>> instanceEntry : instances.entrySet()) {
                 String key = objectType + ":" + instanceEntry.getKey();
                 result.put(key, instanceEntry.getValue());
@@ -491,7 +493,7 @@ public class HybridInstanceStorage implements IInstanceStorage {
      * 获取实例摘要（只包含关键字段，用于图展示）
      */
     public Map<String, Object> getInstanceSummary(String objectType, String id) throws IOException {
-        return neo4jStorage.getInstance(objectType, id);
+        return graphStorage.getInstance(objectType, id);
     }
 }
 

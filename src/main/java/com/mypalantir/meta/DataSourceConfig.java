@@ -131,8 +131,14 @@ public class DataSourceConfig {
             case "postgres":
                 return String.format("jdbc:postgresql://%s:%d/%s", host, port, database);
             case "mysql":
+            case "doris":
+                // Doris 使用 MySQL 协议，JDBC URL 格式与 MySQL 相同
                 return String.format("jdbc:mysql://%s:%d/%s?useSSL=false&serverTimezone=UTC&characterEncoding=utf8&allowPublicKeyRetrieval=true", host, port, database);
             case "oracle":
+                // SID 不允许 #、.、/；如 C##clear 等需用 Service Name 格式
+                if (database != null && (database.contains("#") || database.contains(".") || database.contains("/"))) {
+                    return String.format("jdbc:oracle:thin:@//%s:%d/%s", host, port, database);
+                }
                 return String.format("jdbc:oracle:thin:@%s:%d:%s", host, port, database);
             case "sqlserver":
             case "mssql":

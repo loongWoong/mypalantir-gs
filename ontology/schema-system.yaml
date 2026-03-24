@@ -50,7 +50,7 @@ object_types:
         display_name: 数据库类型
         data_type: string
         required: true
-        description: "数据库类型（mysql、postgresql等）"
+        description: "数据库类型（mysql、postgresql、oracle、doris 等）"
       
       - name: host
         display_name: 主机地址

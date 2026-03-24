@@ -103,13 +103,14 @@ public class DataSourceTestService {
                 Class.forName("org.postgresql.Driver");
                 break;
             case "mysql":
+            case "doris":
                 Class.forName("com.mysql.cj.jdbc.Driver");
                 break;
             case "h2":
                 Class.forName("org.h2.Driver");
                 break;
             case "oracle":
-                Class.forName("oracle.jdbc.driver.OracleDriver");
+                Class.forName("oracle.jdbc.OracleDriver");
                 break;
             case "sqlserver":
             case "mssql":

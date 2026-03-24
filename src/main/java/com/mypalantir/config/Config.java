@@ -56,6 +56,10 @@ public class Config {
     @Value("${storage.type:file}")
     private String storageType;
 
+    /** 图数据库类型：neo4j | falkordb，仅 hybrid/neo4j 模式有效 */
+    @Value("${storage.graph.type:neo4j}")
+    private String storageGraphType;
+
     @Value("${neo4j.uri:bolt://localhost:7687}")
     private String neo4jUri;
 
@@ -64,6 +68,18 @@ public class Config {
 
     @Value("${neo4j.password:}")
     private String neo4jPassword;
+
+    @Value("${falkordb.host:localhost}")
+    private String falkordbHost;
+
+    @Value("${falkordb.port:6379}")
+    private int falkordbPort;
+
+    @Value("${falkordb.password:}")
+    private String falkordbPassword;
+
+    @Value("${falkordb.graph:mypalantir}")
+    private String falkordbGraphName;
 
     @Value("${dome.default.target.datasource.id:}")
     private String defaultTargetDatasourceId;
@@ -92,6 +108,21 @@ public class Config {
         String envPassword = EnvConfig.get("NEO4J_PASSWORD");
         if (envPassword != null && !envPassword.isEmpty()) {
             this.neo4jPassword = envPassword;
+        }
+
+        String envFalkordbHost = EnvConfig.get("FALKORDB_HOST");
+        if (envFalkordbHost != null && !envFalkordbHost.isEmpty()) {
+            this.falkordbHost = envFalkordbHost;
+        }
+        String envFalkordbPort = EnvConfig.get("FALKORDB_PORT");
+        if (envFalkordbPort != null && !envFalkordbPort.isEmpty()) {
+            try {
+                this.falkordbPort = Integer.parseInt(envFalkordbPort);
+            } catch (NumberFormatException ignored) {}
+        }
+        String envFalkordbPassword = EnvConfig.get("FALKORDB_PASSWORD");
+        if (envFalkordbPassword != null && !envFalkordbPassword.isEmpty()) {
+            this.falkordbPassword = envFalkordbPassword;
         }
     }
 
@@ -169,6 +200,26 @@ public class Config {
 
     public String getNeo4jPassword() {
         return neo4jPassword;
+    }
+
+    public String getStorageGraphType() {
+        return storageGraphType;
+    }
+
+    public String getFalkordbHost() {
+        return falkordbHost;
+    }
+
+    public int getFalkordbPort() {
+        return falkordbPort;
+    }
+
+    public String getFalkordbPassword() {
+        return falkordbPassword;
+    }
+
+    public String getFalkordbGraphName() {
+        return falkordbGraphName;
     }
 
     public boolean isDomeEnabled() {

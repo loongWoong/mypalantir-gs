@@ -6,7 +6,8 @@ import com.fasterxml.jackson.dataformat.yaml.YAMLGenerator;
 import com.mypalantir.meta.Loader;
 import com.mypalantir.repository.IInstanceStorage;
 import com.mypalantir.repository.InstanceStorage;
-import com.mypalantir.repository.Neo4jInstanceStorage;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -29,15 +30,17 @@ public class InstanceOntologySyncService {
     private static final String SYSTEM_PREFIX = "system-";
 
     private final IInstanceStorage storage;
-    private final Neo4jInstanceStorage neo4jStorage;
+    private final IInstanceStorage graphStorage;
     private final Loader loader;
     private final ObjectMapper yamlMapper;
 
     private static final Set<String> SYSTEM_SYNC_TYPES = Set.of("database", "workspace", "mapping");
 
-    public InstanceOntologySyncService(IInstanceStorage storage, Neo4jInstanceStorage neo4jStorage, Loader loader) {
+    public InstanceOntologySyncService(IInstanceStorage storage,
+                                      @Autowired(required = false) @Qualifier("graphInstanceStorage") IInstanceStorage graphStorage,
+                                      Loader loader) {
         this.storage = storage;
-        this.neo4jStorage = neo4jStorage;
+        this.graphStorage = graphStorage != null ? graphStorage : storage;
         this.loader = loader;
         YAMLFactory yamlFactory = new YAMLFactory();
         yamlFactory.configure(YAMLGenerator.Feature.WRITE_DOC_START_MARKER, false);
@@ -70,7 +73,7 @@ public class InstanceOntologySyncService {
         int offset = 0;
         int limit = 500;
         InstanceStorage.ListResult result;
-        IInstanceStorage sourceStorage = SYSTEM_SYNC_TYPES.contains(objectType.toLowerCase()) ? neo4jStorage : storage;
+        IInstanceStorage sourceStorage = SYSTEM_SYNC_TYPES.contains(objectType.toLowerCase()) ? graphStorage : storage;
         do {
             result = sourceStorage.listInstances(objectType, offset, limit);
             allInstances.addAll(result.getItems());
@@ -152,7 +155,7 @@ public class InstanceOntologySyncService {
             updateData.remove("id");
 
             // 系统类型使用 Neo4j 直接读写，保留完整字段
-            IInstanceStorage targetStorage = SYSTEM_SYNC_TYPES.contains(objectType.toLowerCase()) ? neo4jStorage : storage;
+            IInstanceStorage targetStorage = SYSTEM_SYNC_TYPES.contains(objectType.toLowerCase()) ? graphStorage : storage;
             try {
                 targetStorage.getInstance(objectType, id);
                 // 存在则更新

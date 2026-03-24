@@ -196,7 +196,13 @@ export default function InstanceForm({ objectType, instance, onClose }: Instance
       default:
         return (
           <input
-            type={prop.data_type === 'int' || prop.data_type === 'float' ? 'number' : 'text'}
+            type={
+              prop.data_type === 'int' || prop.data_type === 'float'
+                ? 'number'
+                : prop.name === 'password'
+                  ? 'password'
+                  : 'text'
+            }
             value={value}
             onChange={(e) => handleChange(prop, e.target.value)}
             className={`mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 ${

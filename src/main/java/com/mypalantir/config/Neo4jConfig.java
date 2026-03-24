@@ -6,10 +6,12 @@ import org.neo4j.driver.GraphDatabase;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
+@ConditionalOnProperty(name = "storage.graph.type", havingValue = "neo4j", matchIfMissing = true)
 public class Neo4jConfig {
     private static final Logger logger = LoggerFactory.getLogger(Neo4jConfig.class);
 

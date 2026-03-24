@@ -1,18 +1,20 @@
 package com.mypalantir.repository;
 
 import com.mypalantir.config.Config;
+import com.falkordb.Graph;
 import org.neo4j.driver.Driver;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.DependsOn;
 import org.springframework.context.annotation.Primary;
 
 /**
  * 存储工厂
- * 根据配置选择文件存储或 Neo4j 存储
+ * 根据配置选择文件存储、Neo4j 存储或 FalkorDB 存储
  */
 @Configuration
 public class StorageFactory {
@@ -24,12 +26,17 @@ public class StorageFactory {
     @Autowired(required = false)
     private Driver neo4jDriver;
 
+    @Autowired(required = false)
+    private Graph falkordbGraph;
+
     @Bean
+    @ConditionalOnProperty(name = "storage.graph.type", havingValue = "neo4j", matchIfMissing = true)
     public Neo4jInstanceStorage neo4jInstanceStorage() {
         return new Neo4jInstanceStorage();
     }
 
     @Bean
+    @ConditionalOnProperty(name = "storage.graph.type", havingValue = "neo4j", matchIfMissing = true)
     public Neo4jLinkStorage neo4jLinkStorage() {
         return new Neo4jLinkStorage();
     }
@@ -44,77 +51,61 @@ public class StorageFactory {
         return new HybridInstanceStorage();
     }
 
+    /** 图实例存储：Neo4j 或 FalkorDB，供 HybridInstanceStorage 和 DatabaseMetadataService 使用 */
+    @Bean("graphInstanceStorage")
+    @ConditionalOnBean(Neo4jInstanceStorage.class)
+    public IInstanceStorage graphInstanceStorageNeo4j(Neo4jInstanceStorage neo4j) {
+        return neo4j;
+    }
+
+    @Bean("graphInstanceStorage")
+    @ConditionalOnBean(FalkorDBInstanceStorage.class)
+    public IInstanceStorage graphInstanceStorageFalkorDB(FalkorDBInstanceStorage falkordb) {
+        return falkordb;
+    }
+
+    /** 图关系存储：Neo4j 或 FalkorDB */
+    @Bean("graphLinkStorage")
+    @ConditionalOnBean(Neo4jLinkStorage.class)
+    public ILinkStorage graphLinkStorageNeo4j(Neo4jLinkStorage neo4j) {
+        return neo4j;
+    }
+
+    @Bean("graphLinkStorage")
+    @ConditionalOnBean(FalkorDBLinkStorage.class)
+    public ILinkStorage graphLinkStorageFalkorDB(FalkorDBLinkStorage falkordb) {
+        return falkordb;
+    }
+
     @Bean
     @Primary
-    @DependsOn("neo4jDriver")
-    public IInstanceStorage instanceStorage(PathManager pathManager, InstanceStorage fileStorage, 
-                                           Neo4jInstanceStorage neo4jStorage, 
+    public IInstanceStorage instanceStorage(PathManager pathManager, InstanceStorage fileStorage,
                                            RelationalInstanceStorage relationalStorage,
-                                           HybridInstanceStorage hybridStorage) {
+                                           HybridInstanceStorage hybridStorage,
+                                           @org.springframework.beans.factory.annotation.Autowired(required = false)
+                                           @org.springframework.beans.factory.annotation.Qualifier("graphInstanceStorage")
+                                           IInstanceStorage graphStorage) {
         String storageType = config.getStorageType();
-        logger.info("Initializing instance storage with type: {}", storageType);
-        
+        String graphType = config.getStorageGraphType();
+        logger.info("Initializing instance storage with type: {}, graph: {}", storageType, graphType);
+
         if ("hybrid".equalsIgnoreCase(storageType)) {
-            if (neo4jDriver == null) {
-                String uri = config.getNeo4jUri();
-                String user = config.getNeo4jUser();
-                String password = config.getNeo4jPassword();
-                
-                StringBuilder errorMsg = new StringBuilder("Hybrid storage requires Neo4j but driver is not available.\n");
-                errorMsg.append("Please configure Neo4j in one of the following ways:\n");
-                errorMsg.append("1. Set environment variables:\n");
-                errorMsg.append("   - NEO4J_URI=bolt://localhost:7687\n");
-                errorMsg.append("   - NEO4J_USER=neo4j\n");
-                errorMsg.append("   - NEO4J_PASSWORD=your_password\n");
-                errorMsg.append("2. Or add to .env file in project root:\n");
-                errorMsg.append("   NEO4J_URI=bolt://localhost:7687\n");
-                errorMsg.append("   NEO4J_USER=neo4j\n");
-                errorMsg.append("   NEO4J_PASSWORD=your_password\n");
-                errorMsg.append("3. Or set in application.properties:\n");
-                errorMsg.append("   neo4j.uri=bolt://localhost:7687\n");
-                errorMsg.append("   neo4j.user=neo4j\n");
-                errorMsg.append("   neo4j.password=your_password\n");
-                errorMsg.append("\nCurrent configuration:\n");
-                errorMsg.append("   neo4j.uri: ").append(uri != null && !uri.isEmpty() ? uri : "(not set)").append("\n");
-                errorMsg.append("   neo4j.user: ").append(user != null && !user.isEmpty() ? user : "(not set)").append("\n");
-                errorMsg.append("   neo4j.password: ").append(password != null && !password.isEmpty() ? "***" : "(not set)").append("\n");
-                
-                logger.error(errorMsg.toString());
-                throw new IllegalStateException(errorMsg.toString());
+            if (graphStorage == null) {
+                throw new IllegalStateException(buildGraphStorageError("Hybrid storage requires graph database (Neo4j or FalkorDB) but none is configured. " +
+                    "Set storage.graph.type=neo4j (default) or storage.graph.type=falkordb, and configure the corresponding connection."));
             }
-            logger.info("Using Hybrid instance storage (Relational DB + Neo4j)");
-            logger.info("[StorageFactory] DATA SOURCE ANALYSIS: Selected HybridInstanceStorage as primary storage - will query sync table first, then Neo4j if needed");
+            logger.info("Using Hybrid instance storage (Relational DB + " + graphType + ")");
             return hybridStorage;
         } else if ("neo4j".equalsIgnoreCase(storageType)) {
-            if (neo4jDriver == null) {
-                String uri = config.getNeo4jUri();
-                String user = config.getNeo4jUser();
-                String password = config.getNeo4jPassword();
-                
-                StringBuilder errorMsg = new StringBuilder("Neo4j storage is configured but Neo4j driver is not available.\n");
-                errorMsg.append("Please configure Neo4j in one of the following ways:\n");
-                errorMsg.append("1. Set environment variables:\n");
-                errorMsg.append("   - NEO4J_URI=bolt://localhost:7687\n");
-                errorMsg.append("   - NEO4J_USER=neo4j\n");
-                errorMsg.append("   - NEO4J_PASSWORD=your_password\n");
-                errorMsg.append("2. Or add to .env file in project root:\n");
-                errorMsg.append("   NEO4J_URI=bolt://localhost:7687\n");
-                errorMsg.append("   NEO4J_USER=neo4j\n");
-                errorMsg.append("   NEO4J_PASSWORD=your_password\n");
-                errorMsg.append("3. Or set in application.properties:\n");
-                errorMsg.append("   neo4j.uri=bolt://localhost:7687\n");
-                errorMsg.append("   neo4j.user=neo4j\n");
-                errorMsg.append("   neo4j.password=your_password\n");
-                errorMsg.append("\nCurrent configuration:\n");
-                errorMsg.append("   neo4j.uri: ").append(uri != null && !uri.isEmpty() ? uri : "(not set)").append("\n");
-                errorMsg.append("   neo4j.user: ").append(user != null && !user.isEmpty() ? user : "(not set)").append("\n");
-                errorMsg.append("   neo4j.password: ").append(password != null && !password.isEmpty() ? "***" : "(not set)").append("\n");
-                
-                logger.error(errorMsg.toString());
-                throw new IllegalStateException(errorMsg.toString());
+            if (graphStorage == null) {
+                throw new IllegalStateException(buildGraphStorageError("Neo4j storage is configured but graph driver is not available."));
             }
-            logger.info("Using Neo4j instance storage");
-            return neo4jStorage;
+            if ("falkordb".equalsIgnoreCase(graphType)) {
+                logger.info("Using FalkorDB instance storage (storage.type=neo4j means graph-only mode)");
+            } else {
+                logger.info("Using Neo4j instance storage");
+            }
+            return graphStorage;
         } else {
             logger.info("Using file instance storage");
             return fileStorage;
@@ -123,51 +114,27 @@ public class StorageFactory {
 
     @Bean
     @Primary
-    @DependsOn("neo4jDriver")
-    public ILinkStorage linkStorage(PathManager pathManager, LinkStorage fileStorage, Neo4jLinkStorage neo4jStorage) {
+    public ILinkStorage linkStorage(PathManager pathManager, LinkStorage fileStorage,
+                                   @org.springframework.beans.factory.annotation.Autowired(required = false)
+                                   @org.springframework.beans.factory.annotation.Qualifier("graphLinkStorage")
+                                   ILinkStorage graphLink) {
         String storageType = config.getStorageType();
         logger.info("Initializing link storage with type: {}", storageType);
-        
-        // hybrid模式和neo4j模式都使用Neo4j存储links
-        // hybrid模式：实例详细数据存储在关系型数据库，links和关键字段存储在Neo4j
+
         if ("neo4j".equalsIgnoreCase(storageType) || "hybrid".equalsIgnoreCase(storageType)) {
-            if (neo4jDriver == null) {
-                String uri = config.getNeo4jUri();
-                String user = config.getNeo4jUser();
-                String password = config.getNeo4jPassword();
-                
-                StringBuilder errorMsg = new StringBuilder("Storage type '").append(storageType).append("' requires Neo4j but driver is not available.\n");
-                errorMsg.append("Please configure Neo4j in one of the following ways:\n");
-                errorMsg.append("1. Set environment variables:\n");
-                errorMsg.append("   - NEO4J_URI=bolt://localhost:7687\n");
-                errorMsg.append("   - NEO4J_USER=neo4j\n");
-                errorMsg.append("   - NEO4J_PASSWORD=your_password\n");
-                errorMsg.append("2. Or add to .env file in project root:\n");
-                errorMsg.append("   NEO4J_URI=bolt://localhost:7687\n");
-                errorMsg.append("   NEO4J_USER=neo4j\n");
-                errorMsg.append("   NEO4J_PASSWORD=your_password\n");
-                errorMsg.append("3. Or set in application.properties:\n");
-                errorMsg.append("   neo4j.uri=bolt://localhost:7687\n");
-                errorMsg.append("   neo4j.user=neo4j\n");
-                errorMsg.append("   neo4j.password=your_password\n");
-                errorMsg.append("\nCurrent configuration:\n");
-                errorMsg.append("   neo4j.uri: ").append(uri != null && !uri.isEmpty() ? uri : "(not set)").append("\n");
-                errorMsg.append("   neo4j.user: ").append(user != null && !user.isEmpty() ? user : "(not set)").append("\n");
-                errorMsg.append("   neo4j.password: ").append(password != null && !password.isEmpty() ? "***" : "(not set)").append("\n");
-                
-                logger.error(errorMsg.toString());
-                throw new IllegalStateException(errorMsg.toString());
+            if (graphLink == null) {
+                throw new IllegalStateException(buildGraphStorageError("Storage type '" + storageType + "' requires graph database (Neo4j or FalkorDB) but none is configured."));
             }
-            
-            if ("hybrid".equalsIgnoreCase(storageType)) {
-                logger.info("Using Neo4j link storage (hybrid mode: links stored in Neo4j, NOT in file storage)");
-            } else {
-                logger.info("Using Neo4j link storage");
-            }
-            return neo4jStorage;
+            logger.info("Using " + config.getStorageGraphType() + " link storage");
+            return graphLink;
         } else {
             logger.info("Using file link storage");
             return fileStorage;
         }
+    }
+
+    private String buildGraphStorageError(String prefix) {
+        return prefix + "\nFor Neo4j: storage.graph.type=neo4j, set NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD.\n" +
+            "For FalkorDB: storage.graph.type=falkordb, set FALKORDB_HOST (default localhost), FALKORDB_PORT (default 6379).";
     }
 }
