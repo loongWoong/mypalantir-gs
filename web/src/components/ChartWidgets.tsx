@@ -8,14 +8,17 @@ interface ChartProps {
 
 function getColumnData(data: NaturalLanguageQueryResponse, fieldName: string): any[] {
   if (!data.rows || !data.columns) return [];
-  const idx = data.columns.indexOf(fieldName);
-  if (idx === -1) {
-    // 尝试模糊匹配
-    const fuzzyIdx = data.columns.findIndex(c => c.includes(fieldName) || fieldName.includes(c));
-    if (fuzzyIdx === -1) return data.rows.map((_, i) => i);
-    return data.rows.map(row => Object.values(row)[fuzzyIdx]);
+  // 精确匹配：直接用列名作为 key 访问行对象，避免 Object.values 顺序不稳定
+  if (data.columns.includes(fieldName)) {
+    return data.rows.map(row => (row as any)[fieldName]);
   }
-  return data.rows.map(row => Object.values(row)[idx]);
+  // 模糊匹配：找到匹配的列名后同样用 key 访问
+  const fuzzyCol = data.columns.find(c => c.includes(fieldName) || fieldName.includes(c));
+  if (fuzzyCol) {
+    return data.rows.map(row => (row as any)[fuzzyCol]);
+  }
+  // 兜底：返回行序号
+  return data.rows.map((_, i) => i);
 }
 
 function getRowValues(data: NaturalLanguageQueryResponse): { columns: string[]; rows: any[][] } {
@@ -27,23 +30,26 @@ function getRowValues(data: NaturalLanguageQueryResponse): { columns: string[]; 
 }
 
 export function LineChartWidget({ spec, data }: ChartProps) {
-  const xField = spec.options?.xField || data.columns?.[0] || '';
-  const yField = spec.options?.yField || data.columns?.[1] || '';
+  const resolveField = (hint: string | undefined, fallbackIdx: number) => {
+    if (!hint) return data.columns?.[fallbackIdx] || '';
+    if (data.columns?.includes(hint)) return hint;
+    const fuzzy = data.columns?.find(c => c.includes(hint) || hint.includes(c));
+    return fuzzy || data.columns?.[fallbackIdx] || hint;
+  };
+  const xField = resolveField(spec.options?.xField, 0);
+  const yField = resolveField(spec.options?.yField, 1);
   const seriesField = spec.options?.seriesField;
 
   if (seriesField && data.rows) {
     const groups = new Map<string, { x: any[]; y: any[] }>();
-    const xIdx = data.columns?.indexOf(xField) ?? 0;
-    const yIdx = data.columns?.indexOf(yField) ?? 1;
-    const sIdx = data.columns?.indexOf(seriesField) ?? 2;
     for (const row of data.rows) {
-      const vals = Object.values(row);
-      const key = String(vals[sIdx]);
+      const r = row as any;
+      const key = String(r[seriesField]);
       if (!groups.has(key)) groups.set(key, { x: [], y: [] });
-      groups.get(key)!.x.push(vals[xIdx]);
-      groups.get(key)!.y.push(vals[yIdx]);
+      groups.get(key)!.x.push(r[xField]);
+      groups.get(key)!.y.push(r[yField]);
     }
-    const xData = [...new Set(data.rows.map(r => Object.values(r)[xIdx]))];
+    const xData = [...new Set(data.rows.map(r => (r as any)[xField]))];
     const series = [...groups.entries()].map(([name, g]) => ({
       name,
       type: 'line' as const,
@@ -70,22 +76,26 @@ export function LineChartWidget({ spec, data }: ChartProps) {
 }
 
 export function BarChartWidget({ spec, data }: ChartProps) {
-  const xField = spec.options?.xField || data.columns?.[0] || '';
-  const yField = spec.options?.yField || data.columns?.[1] || '';
+  // 若 spec 中指定的字段名不在列中，回退到按位置取列（x→第0列，y→第1列）
+  const resolveField = (hint: string | undefined, fallbackIdx: number) => {
+    if (!hint) return data.columns?.[fallbackIdx] || '';
+    if (data.columns?.includes(hint)) return hint;
+    const fuzzy = data.columns?.find(c => c.includes(hint) || hint.includes(c));
+    return fuzzy || data.columns?.[fallbackIdx] || hint;
+  };
+  const xField = resolveField(spec.options?.xField, 0);
+  const yField = resolveField(spec.options?.yField, 1);
   const seriesField = spec.options?.seriesField;
 
   if (seriesField && data.rows) {
-    const xIdx = data.columns?.indexOf(xField) ?? 0;
-    const yIdx = data.columns?.indexOf(yField) ?? 1;
-    const sIdx = data.columns?.indexOf(seriesField) ?? 2;
     const groups = new Map<string, Map<string, number>>();
     for (const row of data.rows) {
-      const vals = Object.values(row);
-      const key = String(vals[sIdx]);
+      const r = row as any;
+      const key = String(r[seriesField]);
       if (!groups.has(key)) groups.set(key, new Map());
-      groups.get(key)!.set(String(vals[xIdx]), Number(vals[yIdx]));
+      groups.get(key)!.set(String(r[xField]), Number(r[yField]));
     }
-    const xData = [...new Set(data.rows.map(r => String(Object.values(r)[xIdx])))];
+    const xData = [...new Set(data.rows.map(r => String((r as any)[xField])))];
     const series = [...groups.entries()].map(([name, m]) => ({
       name,
       type: 'bar' as const,
@@ -109,8 +119,14 @@ export function BarChartWidget({ spec, data }: ChartProps) {
 }
 
 export function PieChartWidget({ spec, data }: ChartProps) {
-  const nameField = spec.options?.nameField || data.columns?.[0] || '';
-  const valueField = spec.options?.valueField || data.columns?.[1] || '';
+  const resolveField = (hint: string | undefined, fallbackIdx: number) => {
+    if (!hint) return data.columns?.[fallbackIdx] || '';
+    if (data.columns?.includes(hint)) return hint;
+    const fuzzy = data.columns?.find(c => c.includes(hint) || hint.includes(c));
+    return fuzzy || data.columns?.[fallbackIdx] || hint;
+  };
+  const nameField = resolveField(spec.options?.nameField, 0);
+  const valueField = resolveField(spec.options?.valueField, 1);
   const names = getColumnData(data, nameField);
   const values = getColumnData(data, valueField);
   const pieData = names.map((n, i) => ({ name: String(n), value: Number(values[i]) }));

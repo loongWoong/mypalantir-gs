@@ -3,10 +3,12 @@ package com.mypalantir.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mypalantir.meta.Loader;
 import com.mypalantir.meta.OntologySchema;
+import com.mypalantir.meta.Parser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import java.io.File;
 import java.util.stream.Collectors;
 
 /**
@@ -20,27 +22,31 @@ public class DashboardService {
     private final LLMService llmService;
     private final OntologySummaryService ontologySummaryService;
     private final Loader loader;
+    private final OntologyModelService ontologyModelService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public DashboardService(LLMService llmService, OntologySummaryService ontologySummaryService, Loader loader) {
+    public DashboardService(LLMService llmService, OntologySummaryService ontologySummaryService,
+                            Loader loader, OntologyModelService ontologyModelService) {
         this.llmService = llmService;
         this.ontologySummaryService = ontologySummaryService;
         this.loader = loader;
+        this.ontologyModelService = ontologyModelService;
     }
 
     public record DashboardEvent(String type, Object data) {}
 
     /**
      * 流式处理 Dashboard 对话
+     * @param modelId 当前生效的本体模型 ID（为 null 时使用全局 loader 的当前模型）
      */
-    public void chatStream(String userMessage, String currentWidgetsJson,
+    public void chatStream(String userMessage, String currentWidgetsJson, String modelId,
                            java.util.function.Consumer<DashboardEvent> onEvent) {
         try {
             // Step 1: 分析意图
             onEvent.accept(new DashboardEvent("thinking",
                     java.util.Map.of("step", "analyze", "content", "正在分析用户意图: " + userMessage)));
 
-            String ontologySummary = generateCompactSummary();
+            String ontologySummary = generateCompactSummary(modelId);
             String systemPrompt = buildSystemPrompt(ontologySummary, currentWidgetsJson);
             String userPrompt = "用户指令：" + userMessage;
 
@@ -84,9 +90,10 @@ public class DashboardService {
     /**
      * 生成精简版 ontology 摘要，只包含对象名称、描述和属性名列表
      * 大幅减少 token 数量，加速 LLM 响应
+     * @param modelId 指定模型 ID；为 null 时使用全局 loader 的当前模型
      */
-    private String generateCompactSummary() {
-        OntologySchema schema = loader.getSchema();
+    private String generateCompactSummary(String modelId) {
+        OntologySchema schema = loadSchema(modelId);
         StringBuilder sb = new StringBuilder();
 
         sb.append("对象类型:\n");
@@ -117,6 +124,30 @@ public class DashboardService {
         return sb.toString();
     }
 
+    /**
+     * 加载指定模型的 OntologySchema
+     * @param modelId 模型 ID；为 null 时使用全局 loader 当前模型
+     */
+    private OntologySchema loadSchema(String modelId) {
+        if (modelId == null || modelId.isBlank()) {
+            return loader.getSchema();
+        }
+        try {
+            String fileName = modelId.endsWith(".yaml") ? modelId : modelId + ".yaml";
+            File file = new File("./ontology", fileName);
+            if (!file.exists()) {
+                logger.warn("Model file not found for modelId '{}', falling back to current loader schema", modelId);
+                return loader.getSchema();
+            }
+            Parser parser = new Parser(file.getAbsolutePath());
+            return parser.parse();
+        } catch (Exception e) {
+            logger.warn("Failed to load schema for modelId '{}': {}, falling back to current loader schema",
+                    modelId, e.getMessage());
+            return loader.getSchema();
+        }
+    }
+
     private String buildSystemPrompt(String ontologySummary, String currentWidgetsJson) {
         return String.format("""
             你是一个数据仪表盘助手。用户描述他们想在仪表盘上看到什么，你输出 widget 操作指令。
@@ -124,7 +155,7 @@ public class DashboardService {
             ## 当前仪表盘状态
             %s
 
-            ## Ontology Schema 摘要
+            ## Ontology Schema 摘要（当前生效模型）
             %s
 
             ## 输出格式
@@ -179,21 +210,13 @@ public class DashboardService {
 
             ## 重要规则
             1. query 字段必须是可以被自然语言查询服务理解的中文查询语句
-            2. 用户说"换成饼图"等修改请求时，使用 update 操作
-            3. 用户说"删掉/移除"时，使用 remove 操作
-            4. 用户说"加一个/添加"时，使用 add 操作
-            5. 一次可以输出多个操作
-            6. options 中的字段名应与 query 返回结果的列名一致
-            7. Link 是有方向的（source -> target），查询时 object 必须是 link 的 source_type。
-               例如查"各收费站的通行数量"，entry_at_station 的 source 是 EntryTransaction，
-               所以 query 应该是"按收费站统计入口交易数量"而不是"统计收费站的入口交易"
-
-            ## 查询示例（供你生成 query 字段参考）
-            - 按收费站统计入口交易数量 → object=EntryTransaction, link=entry_at_station, group_by=station_name, count(id)
-            - 统计各收费站的车道数量 → object=TollStation, link=station_has_lanes, group_by=station_name, count(lane_id)
-            - 各出口站的收费总额 → object=ExitTransaction, link=exit_at_station, group_by=station_name, sum(fee)
-            - 各门架的交易数量 → object=GantryTransaction, link=gantry_at_gantry, group_by=gantry_hex, count(trade_id)
-            - 最近10条出口交易 → object=ExitTransaction, select=[trans_time, fee, pay_fee], limit=10, orderBy=trans_time DESC
+            2. query 中涉及的对象类型名称、关联类型名称、属性名称必须严格使用上方 Ontology Schema 摘要中的英文名称，不得使用任何未在摘要中出现的名称
+            3. 用户说"换成饼图"等修改请求时，使用 update 操作
+            4. 用户说"删掉/移除"时，使用 remove 操作
+            5. 用户说"加一个/添加"时，使用 add 操作
+            6. 一次可以输出多个操作
+            7. options 中的字段名应与 query 返回结果的列名一致
+            8. Link 是有方向的（source -> target），query 中 object 必须是 link 的 source_type
             """, currentWidgetsJson != null ? currentWidgetsJson : "空（尚无 widget）", ontologySummary);
     }
 

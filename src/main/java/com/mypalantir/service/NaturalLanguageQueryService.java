@@ -3,11 +3,14 @@ package com.mypalantir.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mypalantir.meta.Loader;
+import com.mypalantir.meta.OntologySchema;
+import com.mypalantir.meta.Parser;
 import com.mypalantir.query.OntologyQuery;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import java.io.File;
 import java.util.*;
 
 /**
@@ -34,20 +37,36 @@ public class NaturalLanguageQueryService {
     }
 
     /**
+     * 将自然语言查询转换为 OntologyQuery（使用全局当前模型）
+     */
+    public OntologyQuery convertToQuery(String naturalLanguageQuery) throws NaturalLanguageQueryException {
+        return convertToQuery(naturalLanguageQuery, null);
+    }
+
+    /**
      * 将自然语言查询转换为 OntologyQuery
      * @param naturalLanguageQuery 自然语言查询文本
+     * @param modelId 指定模型 ID；为 null 时使用全局 loader 当前模型
      * @return OntologyQuery 对象
      * @throws NaturalLanguageQueryException 转换失败时抛出
      */
-    public OntologyQuery convertToQuery(String naturalLanguageQuery) throws NaturalLanguageQueryException {
+    public OntologyQuery convertToQuery(String naturalLanguageQuery, String modelId) throws NaturalLanguageQueryException {
         if (naturalLanguageQuery == null || naturalLanguageQuery.trim().isEmpty()) {
             logger.error("Natural language query is empty");
             throw new NaturalLanguageQueryException("自然语言查询不能为空");
         }
 
         try {
-            // 1. 获取 Ontology 摘要
-            String ontologySummary = ontologySummaryService.generateOntologySummary();
+            // 1. 获取 Ontology 摘要（优先使用指定模型的 schema）
+            String ontologySummary;
+            OntologySchema schemaForValidation;
+            if (modelId != null && !modelId.isBlank()) {
+                schemaForValidation = loadSchemaByModelId(modelId);
+                ontologySummary = generateSummaryFromSchema(schemaForValidation);
+            } else {
+                ontologySummary = ontologySummaryService.generateOntologySummary();
+                schemaForValidation = null; // 使用全局 loader 验证
+            }
             // 2. 构建 Prompt
             String systemPrompt = buildSystemPrompt(ontologySummary);
             String userPrompt = "用户查询：" + naturalLanguageQuery;
@@ -81,8 +100,8 @@ public class NaturalLanguageQueryService {
                 throw new NaturalLanguageQueryException("解析 LLM 响应失败: " + e.getMessage() + "\n响应内容: " + jsonResponse, e);
             }
 
-            // 6. 验证查询
-            validateQuery(query);
+            // 6. 验证查询（使用指定模型的 schema 或全局 loader）
+            validateQuery(query, schemaForValidation);
 
             logger.info("Successfully converted natural language query to OntologyQuery: object={}", query.getObject());
             logger.info("=== Conversion completed successfully ===");
@@ -256,8 +275,10 @@ public class NaturalLanguageQueryService {
 
     /**
      * 验证查询的有效性
+     * @param query 要验证的查询
+     * @param schema 指定 schema（为 null 时使用全局 loader）
      */
-    private void validateQuery(OntologyQuery query) throws NaturalLanguageQueryException {
+    private void validateQuery(OntologyQuery query, OntologySchema schema) throws NaturalLanguageQueryException {
         // 验证 object
         String objectName = query.getObject();
         if (objectName == null || objectName.isEmpty()) {
@@ -266,11 +287,20 @@ public class NaturalLanguageQueryService {
         }
 
         // 验证对象类型是否存在
-        try {
-            loader.getObjectType(objectName);
-        } catch (Loader.NotFoundException e) {
-            logger.error("Query validation failed: object type '{}' not found", objectName);
-            throw new NaturalLanguageQueryException("对象类型 '" + objectName + "' 不存在");
+        if (schema != null) {
+            boolean found = schema.getObjectTypes() != null &&
+                    schema.getObjectTypes().stream().anyMatch(ot -> objectName.equals(ot.getName()));
+            if (!found) {
+                logger.error("Query validation failed: object type '{}' not found in specified model schema", objectName);
+                throw new NaturalLanguageQueryException("对象类型 '" + objectName + "' 不存在");
+            }
+        } else {
+            try {
+                loader.getObjectType(objectName);
+            } catch (Loader.NotFoundException e) {
+                logger.error("Query validation failed: object type '{}' not found", objectName);
+                throw new NaturalLanguageQueryException("对象类型 '" + objectName + "' 不存在");
+            }
         }
 
         // 验证 links
@@ -281,14 +311,88 @@ public class NaturalLanguageQueryService {
                     throw new NaturalLanguageQueryException("LinkQuery 必须指定 name 字段");
                 }
 
-                try {
-                    loader.getLinkType(linkQuery.getName());
-                } catch (Loader.NotFoundException e) {
-                    logger.error("Query validation failed: link type '{}' not found", linkQuery.getName());
-                    throw new NaturalLanguageQueryException("LinkType '" + linkQuery.getName() + "' 不存在");
+                if (schema != null) {
+                    boolean linkFound = schema.getLinkTypes() != null &&
+                            schema.getLinkTypes().stream().anyMatch(lt -> linkQuery.getName().equals(lt.getName()));
+                    if (!linkFound) {
+                        logger.error("Query validation failed: link type '{}' not found in specified model schema", linkQuery.getName());
+                        throw new NaturalLanguageQueryException("LinkType '" + linkQuery.getName() + "' 不存在");
+                    }
+                } else {
+                    try {
+                        loader.getLinkType(linkQuery.getName());
+                    } catch (Loader.NotFoundException e) {
+                        logger.error("Query validation failed: link type '{}' not found", linkQuery.getName());
+                        throw new NaturalLanguageQueryException("LinkType '" + linkQuery.getName() + "' 不存在");
+                    }
                 }
             }
         }
+    }
+
+    /**
+     * 根据 modelId 加载 OntologySchema
+     */
+    private OntologySchema loadSchemaByModelId(String modelId) {
+        try {
+            String fileName = modelId.endsWith(".yaml") ? modelId : modelId + ".yaml";
+            File file = new File("./ontology", fileName);
+            if (!file.exists()) {
+                logger.warn("Model file not found for modelId '{}', falling back to current loader schema", modelId);
+                return null;
+            }
+            Parser parser = new Parser(file.getAbsolutePath());
+            return parser.parse();
+        } catch (Exception e) {
+            logger.warn("Failed to load schema for modelId '{}': {}, falling back to current loader schema",
+                    modelId, e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * 从 OntologySchema 生成摘要字符串（JSON 格式）
+     */
+    private String generateSummaryFromSchema(OntologySchema schema) throws Exception {
+        if (schema == null) {
+            return ontologySummaryService.generateOntologySummary();
+        }
+        // 复用 OntologySummaryService 的逻辑，直接序列化
+        java.util.Map<String, Object> summary = new java.util.HashMap<>();
+        java.util.List<java.util.Map<String, Object>> objectTypesSummary = new java.util.ArrayList<>();
+        if (schema.getObjectTypes() != null) {
+            for (var ot : schema.getObjectTypes()) {
+                java.util.Map<String, Object> obj = new java.util.HashMap<>();
+                obj.put("name", ot.getName());
+                obj.put("description", ot.getDescription() != null ? ot.getDescription() : "");
+                java.util.List<java.util.Map<String, Object>> props = new java.util.ArrayList<>();
+                if (ot.getProperties() != null) {
+                    for (var p : ot.getProperties()) {
+                        java.util.Map<String, Object> prop = new java.util.HashMap<>();
+                        prop.put("name", p.getName());
+                        prop.put("data_type", p.getDataType() != null ? p.getDataType() : "string");
+                        prop.put("description", p.getDescription() != null ? p.getDescription() : "");
+                        props.add(prop);
+                    }
+                }
+                obj.put("properties", props);
+                objectTypesSummary.add(obj);
+            }
+        }
+        summary.put("object_types", objectTypesSummary);
+        java.util.List<java.util.Map<String, Object>> linkTypesSummary = new java.util.ArrayList<>();
+        if (schema.getLinkTypes() != null) {
+            for (var lt : schema.getLinkTypes()) {
+                java.util.Map<String, Object> link = new java.util.HashMap<>();
+                link.put("name", lt.getName());
+                link.put("description", lt.getDescription() != null ? lt.getDescription() : "");
+                link.put("source_type", lt.getSourceType());
+                link.put("target_type", lt.getTargetType());
+                linkTypesSummary.add(link);
+            }
+        }
+        summary.put("link_types", linkTypesSummary);
+        return objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(summary);
     }
 
     /**

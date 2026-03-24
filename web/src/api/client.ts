@@ -762,10 +762,10 @@ export interface NaturalLanguageQueryRequest {
 }
 
 export const naturalLanguageQueryApi = {
-  execute: async (queryOrRequest: string | NaturalLanguageQueryRequest): Promise<NaturalLanguageQueryResponse> => {
+  execute: async (queryOrRequest: string | NaturalLanguageQueryRequest, modelId?: string): Promise<NaturalLanguageQueryResponse> => {
     const body = typeof queryOrRequest === 'string'
-      ? { query: queryOrRequest }
-      : { query: queryOrRequest.query, dataSourceType: queryOrRequest.dataSourceType };
+      ? { query: queryOrRequest, modelId }
+      : { query: queryOrRequest.query, dataSourceType: queryOrRequest.dataSourceType, modelId };
     const response = await apiClient.post<ApiResponse<NaturalLanguageQueryResponse>>(
       '/query/natural-language',
       body
@@ -773,10 +773,10 @@ export const naturalLanguageQueryApi = {
     return response.data.data;
   },
 
-  convert: async (queryOrRequest: string | NaturalLanguageQueryRequest): Promise<NaturalLanguageQueryResponse> => {
+  convert: async (queryOrRequest: string | NaturalLanguageQueryRequest, modelId?: string): Promise<NaturalLanguageQueryResponse> => {
     const body = typeof queryOrRequest === 'string'
-      ? { query: queryOrRequest }
-      : { query: queryOrRequest.query, dataSourceType: queryOrRequest.dataSourceType };
+      ? { query: queryOrRequest, modelId }
+      : { query: queryOrRequest.query, dataSourceType: queryOrRequest.dataSourceType, modelId };
     const response = await apiClient.post<ApiResponse<NaturalLanguageQueryResponse>>(
       '/query/natural-language/convert',
       body
@@ -1143,10 +1143,12 @@ export const dashboardApi = {
     message: string,
     currentWidgets: { id: string; spec: WidgetSpec }[],
     onEvent: (event: DashboardSSEEvent) => void,
-    onDone: () => void
+    onDone: () => void,
+    modelId?: string
   ) => {
     const widgetsParam = encodeURIComponent(JSON.stringify(currentWidgets));
-    const url = `${API_BASE_URL}/dashboard/chat/stream?message=${encodeURIComponent(message)}&widgets=${widgetsParam}`;
+    const modelParam = modelId ? `&modelId=${encodeURIComponent(modelId)}` : '';
+    const url = `${API_BASE_URL}/dashboard/chat/stream?message=${encodeURIComponent(message)}&widgets=${widgetsParam}${modelParam}`;
     const eventSource = new EventSource(url);
 
     eventSource.addEventListener('widget_ops', (e) => {

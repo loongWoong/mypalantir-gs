@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { dashboardApi, naturalLanguageQueryApi, type WidgetSpec, type WidgetOperation } from '../api/client';
+import { dashboardApi, naturalLanguageQueryApi, modelApi, type WidgetSpec, type WidgetOperation } from '../api/client';
 import WidgetRenderer, { type WidgetState } from '../components/WidgetRenderer';
 
 interface ThinkingStep {
@@ -36,8 +36,16 @@ export default function DashboardPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [currentModelId, setCurrentModelId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const cancelRef = useRef<(() => void) | null>(null);
+
+  // 获取当前生效的本体模型 ID
+  useEffect(() => {
+    modelApi.getCurrentModel()
+      .then((m) => setCurrentModelId(m.modelId ?? null))
+      .catch(() => setCurrentModelId(null));
+  }, []);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -52,7 +60,7 @@ export default function DashboardPage() {
       w.id === widgetId ? { ...w, loading: true, error: null } : w
     ));
     try {
-      const result = await naturalLanguageQueryApi.execute(query);
+      const result = await naturalLanguageQueryApi.execute(query, currentModelId ?? undefined);
       setWidgets(prev => prev.map(w =>
         w.id === widgetId ? { ...w, data: result, loading: false } : w
       ));
@@ -62,7 +70,7 @@ export default function DashboardPage() {
         w.id === widgetId ? { ...w, error: msg, loading: false } : w
       ));
     }
-  }, []);
+  }, [currentModelId]);
 
   const applyOperations = useCallback((operations: WidgetOperation[]) => {
     setWidgets(prev => {
@@ -163,7 +171,8 @@ export default function DashboardPage() {
           updated[updated.length - 1] = last;
           return updated;
         });
-      }
+      },
+      currentModelId ?? undefined
     );
     cancelRef.current = cancel;
   };

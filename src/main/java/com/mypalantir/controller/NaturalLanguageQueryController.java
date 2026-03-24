@@ -45,9 +45,10 @@ public class NaturalLanguageQueryController {
                     .body(ApiResponse.error(400, "查询文本不能为空"));
             }
             String dataSourceType = request.get("dataSourceType") != null ? request.get("dataSourceType").toString() : null;
+            String modelId = request.get("modelId") != null ? request.get("modelId").toString() : null;
             
-            // 转换为 OntologyQuery
-            OntologyQuery ontologyQuery = naturalLanguageQueryService.convertToQuery(query);
+            // 转换为 OntologyQuery（使用指定模型的 schema）
+            OntologyQuery ontologyQuery = naturalLanguageQueryService.convertToQuery(query, modelId);
             if (dataSourceType != null && !dataSourceType.isEmpty()) {
                 ontologyQuery.setDataSourceType(dataSourceType);
             }
@@ -105,9 +106,10 @@ public class NaturalLanguageQueryController {
                     .body(ApiResponse.error(400, "查询文本不能为空"));
             }
             String dataSourceType = request.get("dataSourceType") != null ? request.get("dataSourceType").toString() : null;
+            String modelId = request.get("modelId") != null ? request.get("modelId").toString() : null;
             
-            // 转换为 OntologyQuery
-            OntologyQuery ontologyQuery = naturalLanguageQueryService.convertToQuery(query);
+            // 转换为 OntologyQuery（使用指定模型的 schema）
+            OntologyQuery ontologyQuery = naturalLanguageQueryService.convertToQuery(query, modelId);
             if (dataSourceType != null && !dataSourceType.isEmpty()) {
                 ontologyQuery.setDataSourceType(dataSourceType);
             }

@@ -26,12 +26,13 @@ public class DashboardController {
 
     @GetMapping(value = "/chat/stream", produces = "text/event-stream")
     public SseEmitter chatStream(@RequestParam String message,
-                                  @RequestParam(required = false) String widgets) {
+                                  @RequestParam(required = false) String widgets,
+                                  @RequestParam(required = false) String modelId) {
         SseEmitter emitter = new SseEmitter(300_000L);
 
         executor.execute(() -> {
             try {
-                dashboardService.chatStream(message, widgets, event -> {
+                dashboardService.chatStream(message, widgets, modelId, event -> {
                     try {
                         String json = objectMapper.writeValueAsString(event.data());
                         emitter.send(SseEmitter.event()

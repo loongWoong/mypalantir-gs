@@ -992,7 +992,7 @@ functions:
 rules:
   # R1: 个数不匹配
   - name: R1_count_mismatch
-    display_name: 拆分路径与门架路径收费单元个数不一致
+    display_name: R1拆分路径与门架路径收费单元个数不一致
     description: 拆分路径的收费单元个数与ETC门架交易流水路径的收费单元个数不相等
     language: swrl
     expr: |
@@ -1001,7 +1001,7 @@ rules:
 
   # R2: 序列不匹配
   - name: R2_sequence_mismatch
-    display_name: 拆分路径与门架路径收费单元序列不一致
+    display_name: R2拆分路径与门架路径收费单元序列不一致
     description: 个数相等但序列不匹配
     language: swrl
     expr: |
@@ -1011,7 +1011,7 @@ rules:
 
   # R3: 收费单元重复（路径不一致时）
   - name: R3_duplicate_toll_unit_a
-    display_name: ETC门架交易流水收费单元重复(个数不等)
+    display_name: R3ETC门架交易流水收费单元重复(个数不等)
     description: 个数不等且存在相邻门架重复收费单元
     language: swrl
     expr: |
@@ -1020,7 +1020,7 @@ rules:
         → has_abnormal_reason(?p, "ETC门架交易流水收费单元重复")
 
   - name: R3_duplicate_toll_unit_b
-    display_name: ETC门架交易流水收费单元重复(序列不等)
+    display_name: R3ETC门架交易流水收费单元重复(序列不等)
     description: 个数相等序列不等且存在相邻门架重复收费单元
     language: swrl
     expr: |
@@ -1031,7 +1031,7 @@ rules:
 
   # R4: 参与拆分的门架交易不连续
   - name: R4_participating_gantry_discontinuous_a
-    display_name: 参与拆分的ETC门架交易流水路径不完整(个数不等)
+    display_name: R4参与拆分的ETC门架交易流水路径不完整(个数不等)
     description: 个数不等且参与拆分的门架交易序列不连续
     language: swrl
     expr: |
@@ -1040,7 +1040,7 @@ rules:
         → has_abnormal_reason(?p, "参与拆分的ETC门架交易流水路径不完整")
 
   - name: R4_participating_gantry_discontinuous_b
-    display_name: 参与拆分的ETC门架交易流水路径不完整(序列不等)
+    display_name: R4参与拆分的ETC门架交易流水路径不完整(序列不等)
     description: 个数相等序列不等且参与拆分的门架交易序列不连续
     language: swrl
     expr: |
@@ -1051,7 +1051,7 @@ rules:
 
   # R5: 所有门架交易不连续
   - name: R5_all_gantry_discontinuous
-    display_name: 存在ETC门架交易流水未上传
+    display_name: R5存在ETC门架交易流水未上传
     description: 参与拆分不连续且所有门架交易也不连续
     language: swrl
     expr: |
@@ -1061,7 +1061,7 @@ rules:
 
   # R6: 接收时间晚于拆分时间
   - name: R6_delayed_receive
-    display_name: 存在ETC门架交易流水晚于拆分时间
+    display_name: R6存在ETC门架交易流水晚于拆分时间
     description: 参与拆分不连续且存在门架交易接收时间晚于拆分时间
     language: swrl
     expr: |
@@ -1071,7 +1071,7 @@ rules:
 
   # R7: 上传延迟超过3天
   - name: R7_upload_delay
-    display_name: 存在ETC门架交易流水延迟上传
+    display_name: R7存在ETC门架交易流水延迟上传
     description: 参与拆分不连续且晚于拆分时间且上传延迟超过3天
     language: swrl
     expr: |
@@ -1082,7 +1082,7 @@ rules:
 
   # R11: 门架交易时间间隔过短（仅在计费方式4=省中心在线 或 6=全网最小费额 时触发）
   - name: R11_time_jump_forward
-    display_name: ETC门架交易物理路径连续但时间间隔过短
+    display_name: R11ETC门架交易物理路径连续但时间间隔过短
     description: 计费方式为4或6时，物理路径连续的门架之间时间间隔过短（跳时）
     language: swrl
     expr: |
@@ -1090,7 +1090,7 @@ rules:
         → has_abnormal_reason(?p, "ETC门架交易物理路径连续但时间间隔过短")
 
   - name: R11_time_jump_forward_fee6
-    display_name: ETC门架交易物理路径连续但时间间隔过短(计费方式6)
+    display_name: R11ETC门架交易物理路径连续但时间间隔过短(计费方式6)
     description: 计费方式为6时，物理路径连续的门架之间时间间隔过短（跳时）
     language: swrl
     expr: |
@@ -1099,7 +1099,7 @@ rules:
 
   # R12: 门架交易时间倒流（仅在计费方式4=省中心在线 或 6=全网最小费额 时触发）
   - name: R12_time_jump_backward
-    display_name: ETC门架交易物理路径连续但时间倒流
+    display_name: R12ETC门架交易物理路径连续但时间倒流
     description: 计费方式为4或6时，物理路径连续的门架之间时间倒流
     language: swrl
     expr: |
@@ -1107,7 +1107,7 @@ rules:
         → has_abnormal_reason(?p, "ETC门架交易物理路径连续但时间倒流")
 
   - name: R12_time_jump_backward_fee6
-    display_name: ETC门架交易物理路径连续但时间倒流(计费方式6)
+    display_name: R12ETC门架交易物理路径连续但时间倒流(计费方式6)
     description: 计费方式为6时，物理路径连续的门架之间时间倒流
     language: swrl
     expr: |
@@ -1116,7 +1116,7 @@ rules:
 
   # R13: 门架交易接收时间晚于出口时间（仅在计费方式4=省中心在线 时触发）
   - name: R13_receive_after_exit
-    display_name: 门架交易接收时间晚于出口时间
+    display_name: R13门架交易接收时间晚于出口时间
     description: 计费方式为4(省中心在线)时，存在门架交易接收时间晚于出口时间
     language: swrl
     expr: |
@@ -1125,7 +1125,7 @@ rules:
 
   # R14: 按最小费额路径计费（计费方式4=省中心在线）
   - name: R14_min_fee_path
-    display_name: 按最小费额路径计费
+    display_name: R14按最小费额路径计费
     description: 计费方式为4(省中心在线)且按最小费额路径计费
     language: swrl
     expr: |
@@ -1134,7 +1134,7 @@ rules:
 
   # R15: 按最小费额拆分（计费方式6=全网最小费额）
   - name: R15_min_fee_split
-    display_name: 按最小费额拆分
+    display_name: R15按最小费额拆分
     description: 计费方式为6(全网最小费额)且按最小费额拆分
     language: swrl
     expr: |
@@ -1144,7 +1144,7 @@ rules:
   # R16: 存在无效的门架交易流水
   # 计费方式1/3分支：依赖 participating_gantry_continuous=false（路径不完整时才检查）
   - name: R16_invalid_gantry_fee13_a
-    display_name: 存在无效的门架交易流水(计费方式1/3，个数不等)
+    display_name: R16存在无效的门架交易流水(计费方式1/3，个数不等)
     description: 计费方式为1或3时，个数不等且参与拆分不连续，存在无效门架交易流水
     language: swrl
     expr: |
@@ -1155,7 +1155,7 @@ rules:
         → has_abnormal_reason(?p, "存在无效的门架交易流水")
 
   - name: R16_invalid_gantry_fee13_b
-    display_name: 存在无效的门架交易流水(计费方式1/3，序列不等)
+    display_name: R16存在无效的门架交易流水(计费方式1/3，序列不等)
     description: 计费方式为1或3时，序列不等且参与拆分不连续，存在无效门架交易流水
     language: swrl
     expr: |
@@ -1166,7 +1166,7 @@ rules:
         → has_abnormal_reason(?p, "存在无效的门架交易流水")
 
   - name: R16_invalid_gantry_fee3_a
-    display_name: 存在无效的门架交易流水(计费方式3，个数不等)
+    display_name: R16存在无效的门架交易流水(计费方式3，个数不等)
     description: 计费方式为3时，个数不等且参与拆分不连续，存在无效门架交易流水
     language: swrl
     expr: |
@@ -1177,7 +1177,7 @@ rules:
         → has_abnormal_reason(?p, "存在无效的门架交易流水")
 
   - name: R16_invalid_gantry_fee3_b
-    display_name: 存在无效的门架交易流水(计费方式3，序列不等)
+    display_name: R16存在无效的门架交易流水(计费方式3，序列不等)
     description: 计费方式为3时，序列不等且参与拆分不连续，存在无效门架交易流水
     language: swrl
     expr: |
@@ -1189,7 +1189,7 @@ rules:
 
   # 计费方式4/6分支：独立触发，无需路径不完整前置条件
   - name: R16_invalid_gantry_fee4
-    display_name: 存在无效的门架交易流水(计费方式4)
+    display_name: R16存在无效的门架交易流水(计费方式4)
     description: 计费方式为4(省中心在线)时，存在无效门架交易流水
     language: swrl
     expr: |
@@ -1197,7 +1197,7 @@ rules:
         → has_abnormal_reason(?p, "存在无效的门架交易流水")
 
   - name: R16_invalid_gantry_fee6
-    display_name: 存在无效的门架交易流水(计费方式6)
+    display_name: R16存在无效的门架交易流水(计费方式6)
     description: 计费方式为6(全网最小费额)时，存在无效门架交易流水
     language: swrl
     expr: |
@@ -1206,7 +1206,7 @@ rules:
 
   # R8: 通行异常判定
   - name: R8_abnormal_passage
-    display_name: 通行异常判定
+    display_name: R8通行异常判定
     description: 存在任何异常原因，则判定该通行记录整体异常
     language: swrl
     expr: |
@@ -1215,7 +1215,7 @@ rules:
 
   # R9: 异常传播至车辆
   - name: R9_abnormal_vehicle
-    display_name: 异常传播至车辆
+    display_name: R9异常传播至车辆
     description: 通行异常时，将异常状态传播至关联的车辆
     language: swrl
     expr: |
@@ -1225,7 +1225,7 @@ rules:
 
   # 正常判定（R10）：无任何异常原因时判定为正常（对齐文档7.3节）
   - name: R10_normal_passage
-    display_name: 通行正常判定
+    display_name: R10通行正常判定
     description: 若无任何异常原因，则判定该通行记录为正常
     language: swrl
     expr: |
