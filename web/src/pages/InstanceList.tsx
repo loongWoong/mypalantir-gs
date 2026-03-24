@@ -5,7 +5,7 @@ import { jsPDF } from 'jspdf';
 import type { Instance, ObjectType, FilterExpression, OrderBy } from '../api/client';
 import { instanceApi, schemaApi, databaseApi, mappingApi, modelApi } from '../api/client';
 import { useWorkspace } from '../WorkspaceContext';
-import { PlusIcon, PencilIcon, TrashIcon, CloudArrowDownIcon, XMarkIcon, LinkIcon, ArrowDownTrayIcon, ArrowUpTrayIcon, FunnelIcon, MagnifyingGlassIcon, CircleStackIcon, ServerIcon, ChartBarIcon, TableCellsIcon, Cog6ToothIcon, ArrowTopRightOnSquareIcon, DocumentArrowDownIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, PencilIcon, TrashIcon, CloudArrowDownIcon, XMarkIcon, LinkIcon, ArrowDownTrayIcon, ArrowUpTrayIcon, FunnelIcon, MagnifyingGlassIcon, CircleStackIcon, ServerIcon, ChartBarIcon, TableCellsIcon, Cog6ToothIcon, ArrowTopRightOnSquareIcon, DocumentArrowDownIcon, ArrowRightCircleIcon } from '@heroicons/react/24/outline';
 import InstanceForm from '../components/InstanceForm';
 import ButtonGroup from '../components/ButtonGroup';
 import DataMappingDialog from '../components/DataMappingDialog';
@@ -75,6 +75,10 @@ export default function InstanceList() {
 
   const limit = 20;
   const { toasts, showToast, removeToast } = useToast();
+
+  // ID 快捷查询
+  const [idSearchValue, setIdSearchValue] = useState('');
+  const [idSearchLoading, setIdSearchLoading] = useState(false);
 
   // 将 FilterExpression 转换为简单的键值对格式（后端只支持等值查询）
   const convertFilterExpressionsToParams = (expressions: FilterExpression[]): Record<string, any> => {
@@ -497,6 +501,22 @@ export default function InstanceList() {
 
   const handleClearFilters = () => {
     setFilters([]);
+  };
+
+  // ID 快捷查询：直接跳转到详情页，若输入为空则忽略
+  const handleIdSearch = async () => {
+    const id = idSearchValue.trim();
+    if (!id || !objectType) return;
+    setIdSearchLoading(true);
+    try {
+      // 先验证实例是否存在
+      await instanceApi.get(objectType, id);
+      navigate(`/instances/${objectType}/${encodeURIComponent(id)}`);
+    } catch {
+      showToast(`未找到 ID 为 "${id}" 的实例`, 'error');
+    } finally {
+      setIdSearchLoading(false);
+    }
   };
 
   const handleSyncClick = async () => {
@@ -1438,6 +1458,37 @@ export default function InstanceList() {
             </div>
           </div>
         )}
+      </div>
+
+      {/* ID 快捷查询栏 */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3 mb-4 flex items-center gap-3">
+        <MagnifyingGlassIcon className="w-4 h-4 text-gray-400 flex-shrink-0" />
+        <span className="text-sm font-medium text-gray-600 flex-shrink-0">ID 查询</span>
+        <input
+          type="text"
+          value={idSearchValue}
+          onChange={(e) => setIdSearchValue(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') handleIdSearch(); }}
+          placeholder="输入实例 ID 直接跳转..."
+          className="flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono"
+        />
+        {idSearchValue && (
+          <button
+            onClick={() => setIdSearchValue('')}
+            className="text-gray-400 hover:text-gray-600 flex-shrink-0"
+            title="清空"
+          >
+            <XMarkIcon className="w-4 h-4" />
+          </button>
+        )}
+        <button
+          onClick={handleIdSearch}
+          disabled={!idSearchValue.trim() || idSearchLoading}
+          className="flex items-center px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex-shrink-0"
+        >
+          <ArrowRightCircleIcon className="w-4 h-4 mr-1" />
+          {idSearchLoading ? '查询中...' : '跳转'}
+        </button>
       </div>
 
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">

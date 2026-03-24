@@ -1,5 +1,5 @@
 -- Agent 对话与消息表（Doris 语法，启动时在默认数据库自动创建）
--- Apache Doris 不支持 InnoDB、FOREIGN KEY，使用 DUPLICATE KEY
+-- 使用 UNIQUE KEY 以支持 UPDATE 操作
 
 CREATE TABLE IF NOT EXISTS `agent_conversation` (
   `id` varchar(64) NOT NULL,
@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS `agent_conversation` (
   `last_preview` varchar(512) DEFAULT NULL,
   `status` varchar(32) NOT NULL DEFAULT 'active'
 )
-DUPLICATE KEY(`id`)
+UNIQUE KEY(`id`)
 DISTRIBUTED BY HASH(`id`) BUCKETS 1
 PROPERTIES("replication_num" = "1");
 

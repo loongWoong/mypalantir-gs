@@ -1,13 +1,13 @@
 package com.mypalantir.service;
 
 import com.mypalantir.repository.IInstanceStorage;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Service;
-
 import org.apache.calcite.adapter.jdbc.JdbcSchema;
 import org.apache.calcite.jdbc.CalciteConnection;
 import org.apache.calcite.schema.SchemaPlus;
-import org.apache.calcite.tools.Frameworks;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
 
 import javax.sql.DataSource;
 import java.io.IOException;
@@ -17,6 +17,8 @@ import java.util.*;
 @Service
 public class DataComparisonService {
 
+    private static final Logger logger = LoggerFactory.getLogger(DataComparisonService.class);
+
     @Autowired
     private IInstanceStorage instanceStorage;
 
@@ -24,7 +26,7 @@ public class DataComparisonService {
     private DatabaseMetadataService databaseMetadataService;
 
     public ComparisonResult runComparison(ComparisonRequest request) throws IOException, SQLException {
-        // 1. 获取源表和目标表信息
+        // 1. 获取源表和目标表信息（通过 Primary instanceStorage，hybrid 模式下会路由到图数据库）
         Map<String, Object> sourceTable = instanceStorage.getInstance("table", request.getSourceTableId());
         Map<String, Object> targetTable = instanceStorage.getInstance("table", request.getTargetTableId());
 
@@ -37,67 +39,68 @@ public class DataComparisonService {
         String sourceTableName = (String) sourceTable.get("name");
         String targetTableName = (String) targetTable.get("name");
 
-        // 2. 使用 Calcite 执行跨库查询 (按主键排序)
+        // 2. 使用 Calcite 联邦查询执行跨库查询（按主键排序）
         String sourceKey = request.getSourceKey();
         String targetKey = request.getTargetKey();
-        
+
         List<Map<String, Object>> sourceRows = executeWithCalcite(sourceDbId, sourceTableName, sourceKey);
         List<Map<String, Object>> targetRows = executeWithCalcite(targetDbId, targetTableName, targetKey);
 
-        // 3. 执行对比 (双指针算法)
+        // 3. 执行对比（双指针算法）
         return compareRows(sourceRows, targetRows, request);
     }
 
     /**
-     * 使用 Calcite 执行查询
-     * 自动处理不同数据库的方言和引号问题
+     * 使用 Calcite 联邦查询执行单库查询，按主键排序。
+     *
+     * <p>关键设计：
+     * <ul>
+     *   <li>复用 databaseMetadataService 的 HikariCP 连接池作为底层 DataSource，
+     *       Calcite JdbcSchema 只做 SQL 翻译和执行，不维护独立连接池。</li>
+     *   <li>JdbcSchema.create 第4参数传入实际 catalog（MySQL 中即数据库名），
+     *       第5参数传 null（使用默认 schema），避免全库扫描。</li>
+     *   <li>Calcite 默认将列名转大写，查询结果用大小写不敏感的 Map 存储，
+     *       保证后续用原始列名取值时不会因大小写不一致而失败。</li>
+     * </ul>
      */
-    private List<Map<String, Object>> executeWithCalcite(String databaseId, String tableName, String sortKey) throws SQLException, IOException {
+    private List<Map<String, Object>> executeWithCalcite(
+            String databaseId, String tableName, String sortKey) throws SQLException, IOException {
+
+        // 从 databaseMetadataService 获取该库的实际数据库名（用作 Calcite catalog）
+        String catalogName = databaseMetadataService.getDatabaseNameById(databaseId);
+        DataSource dataSource = databaseMetadataService.getDataSourceForDatabase(databaseId);
+
         Connection calciteConnection = null;
         try {
-            // 1. 创建 Calcite 根 Schema
             calciteConnection = DriverManager.getConnection("jdbc:calcite:");
             CalciteConnection calciteConn = calciteConnection.unwrap(CalciteConnection.class);
             SchemaPlus rootSchema = calciteConn.getRootSchema();
 
-            // 2. 获取目标数据库的 DataSource
-            DataSource dataSource = databaseMetadataService.getDataSourceForDatabase(databaseId);
+            // 挂载目标数据库为 Calcite 子 Schema
+            // catalog = 实际数据库名（MySQL 中 catalog == schema），schema = null（使用默认）
+            // 这样 JdbcSchema 只扫描该数据库下的表，不会全库扫描
+            rootSchema.add("DB", JdbcSchema.create(rootSchema, "DB", dataSource, catalogName, null));
 
-            // 3. 将目标数据库挂载为 Calcite 的子 Schema (命名为 "DB")
-            // null, null 表示加载 catalog/schema 下的所有表 (或者默认 schema)
-            // JdbcSchema 会自动扫描表并处理方言
-            SchemaPlus dbSchema = rootSchema.add("DB", JdbcSchema.create(rootSchema, "DB", dataSource, null, null));
+            // Calcite 对标识符大小写敏感，表名和列名用双引号包裹保留原始大小写
+            String sql = String.format(
+                "SELECT * FROM \"DB\".\"%s\" ORDER BY \"%s\"", tableName, sortKey);
 
-            // 4. 构建 Calcite SQL
-            // 注意：Calcite 中引用表名需要用双引号，且大小写敏感（取决于 JdbcSchema 的配置）
-            // 这里假设 JdbcSchema 能正确识别表名
-            // 如果 tableName 在 MySQL 中是小写，Calcite 可能也需要小写引用
-            // 我们尝试使用 quoteIdentifier
-            
-            // 为了确保表名正确，我们可以先检查 schema 中的表名
-            // Set<String> tableNames = dbSchema.getTableNames();
-            // ... 但为了简单，先假设名称匹配
-            
-            String sql = String.format("SELECT * FROM \"DB\".\"%s\" ORDER BY \"%s\"", tableName, sortKey);
-            
-            System.out.println("[DataComparison] Executing Calcite SQL: " + sql);
+            logger.debug("[DataComparison] Executing Calcite SQL: {}", sql);
 
-            // 5. 执行查询
             List<Map<String, Object>> results = new ArrayList<>();
             try (Statement stmt = calciteConn.createStatement();
                  ResultSet rs = stmt.executeQuery(sql)) {
-                
+
                 ResultSetMetaData metaData = rs.getMetaData();
                 int columnCount = metaData.getColumnCount();
-                
+
+                // 构建列名映射：Calcite 可能将列名转大写，记录原始列名 -> Calcite列名 的对应关系
+                // 使用大小写不敏感的 TreeMap 存储每行数据，保证后续用任意大小写取值都能命中
                 while (rs.next()) {
-                    Map<String, Object> row = new HashMap<>();
+                    Map<String, Object> row = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
                     for (int i = 1; i <= columnCount; i++) {
-                        // Calcite 返回的列名可能大写或保持原样
-                        // 我们使用 getColumnLabel 获取别名或列名
                         String colName = metaData.getColumnLabel(i);
-                        Object value = rs.getObject(i);
-                        row.put(colName, value);
+                        row.put(colName, rs.getObject(i));
                     }
                     results.add(row);
                 }
@@ -106,7 +109,7 @@ public class DataComparisonService {
 
         } finally {
             if (calciteConnection != null) {
-                calciteConnection.close();
+                try { calciteConnection.close(); } catch (SQLException ignored) {}
             }
         }
     }

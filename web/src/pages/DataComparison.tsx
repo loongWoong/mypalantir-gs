@@ -103,7 +103,8 @@ export default function DataComparison() {
       setSourceTableId('');
       if (wsId) {
           try {
-              const types = await modelApi.getObjectTypes(wsId);
+              // 使用带 mapping 信息的端点，后端已注入 data_source
+              const types = await modelApi.getObjectTypesWithMapping(wsId);
               setSourceObjectTypes(types);
           } catch (e) {
               console.error(e);
@@ -121,7 +122,8 @@ export default function DataComparison() {
       setTargetTableId('');
       if (wsId) {
           try {
-              const types = await modelApi.getObjectTypes(wsId);
+              // 使用带 mapping 信息的端点，后端已注入 data_source
+              const types = await modelApi.getObjectTypesWithMapping(wsId);
               setTargetObjectTypes(types);
           } catch (e) {
               console.error(e);
@@ -184,7 +186,7 @@ export default function DataComparison() {
 
   // --- Model Logic ---
 
-  // Helper to resolve data source from mapping API if not present in model
+  // 兜底：若后端 object-types-with-mapping 未能注入 data_source，则从 mappingApi 查询补充
   const resolveModelDataSource = async (model: ObjectType): Promise<ObjectType> => {
       if (model.data_source && model.data_source.connection_id) {
           return model;
@@ -194,33 +196,42 @@ export default function DataComparison() {
           const mappings = await mappingApi.getByObjectType(model.name);
           if (mappings && mappings.length > 0) {
               const mapping = mappings[0];
-              const table = tables.find(t => t.id === mapping.table_id);
-              
-              if (table) {
-                  // Invert mapping: Column -> Property  ==>  Property -> Column
-                  const field_mapping: Record<string, string> = {};
-                  if (mapping.column_property_mappings) {
-                      Object.entries(mapping.column_property_mappings).forEach(([col, prop]) => {
-                           if (typeof prop === 'string') {
-                               field_mapping[prop] = col;
-                           }
-                      });
+
+              // 优先用 mapping 中的 connection_id（后端若已填充），否则从 tables 列表查 database_id
+              let connectionId: string = mapping.connection_id;
+              let resolvedTableName: string = mapping.table_name;
+
+              if (!connectionId) {
+                  // 通过 table_id 在已加载的 tables 列表中找到对应表
+                  const table = tables.find(t => t.id === mapping.table_id);
+                  if (table) {
+                      connectionId = table.database_id;
+                      resolvedTableName = resolvedTableName || table.originalName || table.name;
                   }
-                  
-                  // 支持新格式（数组）和旧格式（单个字符串）
-                  const primaryKeyColumn = Array.isArray(mapping.primary_key_columns) && mapping.primary_key_columns.length > 0
-                      ? mapping.primary_key_columns[0]
-                      : mapping.primary_key_column;
-                  
-                  const newDataSource: DataSourceMapping = {
-                      connection_id: table.database_id,
-                      table: table.originalName,
-                      id_column: primaryKeyColumn,
-                      field_mapping: field_mapping
-                  };
-                  
-                  return { ...model, data_source: newDataSource };
               }
+
+              if (!connectionId || !resolvedTableName) return model;
+
+              // 字段映射（column -> property）反转为（property -> column）
+              const field_mapping: Record<string, string> = {};
+              if (mapping.column_property_mappings) {
+                  Object.entries(mapping.column_property_mappings).forEach(([col, prop]) => {
+                      if (typeof prop === 'string') field_mapping[prop] = col;
+                  });
+              }
+
+              const primaryKeyColumn = Array.isArray(mapping.primary_key_columns) && mapping.primary_key_columns.length > 0
+                  ? mapping.primary_key_columns[0]
+                  : mapping.primary_key_column;
+
+              const newDataSource: DataSourceMapping = {
+                  connection_id: connectionId,
+                  table: resolvedTableName,
+                  id_column: primaryKeyColumn,
+                  field_mapping: field_mapping
+              };
+
+              return { ...model, data_source: newDataSource };
           }
       } catch (e) {
           console.error("Failed to resolve mapping", e);
@@ -253,18 +264,30 @@ export default function DataComparison() {
           return;
       }
       
-      const table = tables.find(t => 
-          t.database_id === model!.data_source!.connection_id && 
-          t.originalName === model!.data_source!.table
+      const dsTable = model!.data_source!.table;
+      const dsConnId = model!.data_source!.connection_id;
+      const table = tables.find(t =>
+          t.database_id === dsConnId &&
+          ((t.originalName && t.originalName === dsTable) || t.name === dsTable)
       );
-      
+
       if (table) {
           await handleSourceTableChange(table.id);
           if (model.data_source.id_column) {
               setSourceKey(model.data_source.id_column);
           }
       } else {
-          showToast(`未找到映射的数据表: ${model.data_source.table}`, 'error');
+          // tables 列表可能未包含该表（未同步），直接用 connection_id + table 名构造虚拟 tableId
+          // 尝试从 tables 中仅按表名匹配（跨库时 connection_id 可能不同）
+          const tableByName = tables.find(t =>
+              (t.originalName && t.originalName === dsTable) || t.name === dsTable
+          );
+          if (tableByName) {
+              await handleSourceTableChange(tableByName.id);
+              if (model.data_source.id_column) setSourceKey(model.data_source.id_column);
+          } else {
+              showToast(`未找到映射的数据表: ${dsTable}，请先同步数据库表`, 'error');
+          }
       }
   };
 
@@ -293,18 +316,28 @@ export default function DataComparison() {
           return;
       }
       
-      const table = tables.find(t => 
-          t.database_id === model!.data_source!.connection_id && 
-          t.originalName === model!.data_source!.table
+      const dsTable = model!.data_source!.table;
+      const dsConnId = model!.data_source!.connection_id;
+      const table = tables.find(t =>
+          t.database_id === dsConnId &&
+          ((t.originalName && t.originalName === dsTable) || t.name === dsTable)
       );
-      
+
       if (table) {
           await handleTargetTableChange(table.id);
           if (model.data_source.id_column) {
               setTargetKey(model.data_source.id_column);
           }
       } else {
-          showToast(`未找到映射的数据表: ${model.data_source.table}`, 'error');
+          const tableByName = tables.find(t =>
+              (t.originalName && t.originalName === dsTable) || t.name === dsTable
+          );
+          if (tableByName) {
+              await handleTargetTableChange(tableByName.id);
+              if (model.data_source.id_column) setTargetKey(model.data_source.id_column);
+          } else {
+              showToast(`未找到映射的数据表: ${dsTable}，请先同步数据库表`, 'error');
+          }
       }
   };
 

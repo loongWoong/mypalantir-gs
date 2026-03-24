@@ -19,14 +19,14 @@ public class AgentMessageRepository {
 
     public void saveMessage(String conversationId, String role, String content) {
         jdbcTemplate.update(
-            "INSERT INTO agent_message(conversation_id, role, content, created_at) VALUES (?,?,?,?)",
+            "INSERT INTO agent_message(conversation_id, `role`, content, created_at) VALUES (?,?,?,?)",
             conversationId, role, content, LocalDateTime.now()
         );
     }
 
     public List<ChatMessageDto> listMessages(String conversationId, int limit) {
         return jdbcTemplate.query(
-            "SELECT id, role, content, created_at FROM agent_message " +
+            "SELECT id, `role`, content, created_at FROM agent_message " +
                 "WHERE conversation_id = ? ORDER BY id ASC LIMIT ?",
             (rs, rowNum) -> mapMessage(rs),
             conversationId, limit

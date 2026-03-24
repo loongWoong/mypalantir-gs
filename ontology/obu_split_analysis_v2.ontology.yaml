@@ -1080,31 +1080,47 @@ rules:
         ∧ has_upload_delay(?p, true)
         → has_abnormal_reason(?p, "存在ETC门架交易流水延迟上传")
 
-  # R11: 门架交易时间间隔过短
+  # R11: 门架交易时间间隔过短（仅在计费方式4=省中心在线 或 6=全网最小费额 时触发）
   - name: R11_time_jump_forward
     display_name: ETC门架交易物理路径连续但时间间隔过短
-    description: 物理路径连续的门架之间时间间隔过短（跳时）
+    description: 计费方式为4或6时，物理路径连续的门架之间时间间隔过短（跳时）
     language: swrl
     expr: |
-      Passage(?p) ∧ has_time_jump_forward(?p, true)
+      Passage(?p) ∧ exit_fee_type(?p, 4) ∧ has_time_jump_forward(?p, true)
         → has_abnormal_reason(?p, "ETC门架交易物理路径连续但时间间隔过短")
 
-  # R12: 门架交易时间倒流
+  - name: R11_time_jump_forward_fee6
+    display_name: ETC门架交易物理路径连续但时间间隔过短(计费方式6)
+    description: 计费方式为6时，物理路径连续的门架之间时间间隔过短（跳时）
+    language: swrl
+    expr: |
+      Passage(?p) ∧ exit_fee_type(?p, 6) ∧ has_time_jump_forward(?p, true)
+        → has_abnormal_reason(?p, "ETC门架交易物理路径连续但时间间隔过短")
+
+  # R12: 门架交易时间倒流（仅在计费方式4=省中心在线 或 6=全网最小费额 时触发）
   - name: R12_time_jump_backward
     display_name: ETC门架交易物理路径连续但时间倒流
-    description: 物理路径连续的门架之间时间倒流
+    description: 计费方式为4或6时，物理路径连续的门架之间时间倒流
     language: swrl
     expr: |
-      Passage(?p) ∧ has_time_jump_backward(?p, true)
+      Passage(?p) ∧ exit_fee_type(?p, 4) ∧ has_time_jump_backward(?p, true)
         → has_abnormal_reason(?p, "ETC门架交易物理路径连续但时间倒流")
 
-  # R13: 门架交易接收时间晚于出口时间
-  - name: R13_receive_after_exit
-    display_name: 门架交易接收时间晚于出口时间
-    description: 存在门架交易接收时间晚于出口时间（用于在线计费等）
+  - name: R12_time_jump_backward_fee6
+    display_name: ETC门架交易物理路径连续但时间倒流(计费方式6)
+    description: 计费方式为6时，物理路径连续的门架之间时间倒流
     language: swrl
     expr: |
-      Passage(?p) ∧ has_receive_after_exit(?p, true)
+      Passage(?p) ∧ exit_fee_type(?p, 6) ∧ has_time_jump_backward(?p, true)
+        → has_abnormal_reason(?p, "ETC门架交易物理路径连续但时间倒流")
+
+  # R13: 门架交易接收时间晚于出口时间（仅在计费方式4=省中心在线 时触发）
+  - name: R13_receive_after_exit
+    display_name: 门架交易接收时间晚于出口时间
+    description: 计费方式为4(省中心在线)时，存在门架交易接收时间晚于出口时间
+    language: swrl
+    expr: |
+      Passage(?p) ∧ exit_fee_type(?p, 4) ∧ has_receive_after_exit(?p, true)
         → has_abnormal_reason(?p, "门架交易接收时间晚于出口时间")
 
   # R14: 按最小费额路径计费（计费方式4=省中心在线）
@@ -1126,12 +1142,66 @@ rules:
         → has_abnormal_reason(?p, "按最小费额拆分")
 
   # R16: 存在无效的门架交易流水
-  - name: R16_invalid_gantry
-    display_name: 存在无效的门架交易流水
-    description: 通行中存在无效的门架交易流水
+  # 计费方式1/3分支：依赖 participating_gantry_continuous=false（路径不完整时才检查）
+  - name: R16_invalid_gantry_fee13_a
+    display_name: 存在无效的门架交易流水(计费方式1/3，个数不等)
+    description: 计费方式为1或3时，个数不等且参与拆分不连续，存在无效门架交易流水
     language: swrl
     expr: |
-      Passage(?p) ∧ has_invalid_gantry(?p, true)
+      Passage(?p) ∧ exit_fee_type(?p, 1)
+        ∧ count_equal(?p, false)
+        ∧ participating_gantry_continuous(?p, false)
+        ∧ has_invalid_gantry(?p, true)
+        → has_abnormal_reason(?p, "存在无效的门架交易流水")
+
+  - name: R16_invalid_gantry_fee13_b
+    display_name: 存在无效的门架交易流水(计费方式1/3，序列不等)
+    description: 计费方式为1或3时，序列不等且参与拆分不连续，存在无效门架交易流水
+    language: swrl
+    expr: |
+      Passage(?p) ∧ exit_fee_type(?p, 1)
+        ∧ count_equal(?p, true) ∧ sequence_equal(?p, false)
+        ∧ participating_gantry_continuous(?p, false)
+        ∧ has_invalid_gantry(?p, true)
+        → has_abnormal_reason(?p, "存在无效的门架交易流水")
+
+  - name: R16_invalid_gantry_fee3_a
+    display_name: 存在无效的门架交易流水(计费方式3，个数不等)
+    description: 计费方式为3时，个数不等且参与拆分不连续，存在无效门架交易流水
+    language: swrl
+    expr: |
+      Passage(?p) ∧ exit_fee_type(?p, 3)
+        ∧ count_equal(?p, false)
+        ∧ participating_gantry_continuous(?p, false)
+        ∧ has_invalid_gantry(?p, true)
+        → has_abnormal_reason(?p, "存在无效的门架交易流水")
+
+  - name: R16_invalid_gantry_fee3_b
+    display_name: 存在无效的门架交易流水(计费方式3，序列不等)
+    description: 计费方式为3时，序列不等且参与拆分不连续，存在无效门架交易流水
+    language: swrl
+    expr: |
+      Passage(?p) ∧ exit_fee_type(?p, 3)
+        ∧ count_equal(?p, true) ∧ sequence_equal(?p, false)
+        ∧ participating_gantry_continuous(?p, false)
+        ∧ has_invalid_gantry(?p, true)
+        → has_abnormal_reason(?p, "存在无效的门架交易流水")
+
+  # 计费方式4/6分支：独立触发，无需路径不完整前置条件
+  - name: R16_invalid_gantry_fee4
+    display_name: 存在无效的门架交易流水(计费方式4)
+    description: 计费方式为4(省中心在线)时，存在无效门架交易流水
+    language: swrl
+    expr: |
+      Passage(?p) ∧ exit_fee_type(?p, 4) ∧ has_invalid_gantry(?p, true)
+        → has_abnormal_reason(?p, "存在无效的门架交易流水")
+
+  - name: R16_invalid_gantry_fee6
+    display_name: 存在无效的门架交易流水(计费方式6)
+    description: 计费方式为6(全网最小费额)时，存在无效门架交易流水
+    language: swrl
+    expr: |
+      Passage(?p) ∧ exit_fee_type(?p, 6) ∧ has_invalid_gantry(?p, true)
         → has_abnormal_reason(?p, "存在无效的门架交易流水")
 
   # R8: 通行异常判定
@@ -1153,22 +1223,11 @@ rules:
         ∧ involves_vehicle(?p, ?v)
         → has_abnormal_passage(?v, true)
 
-  # R10: 异常传播至收费站
-  - name: R10_abnormal_station
-    display_name: 异常传播至收费站
-    description: 通行异常时，将异常状态传播至入口收费站
-    language: swrl
-    expr: |
-      Passage(?p) ∧ is_abnormal_passage(?p, true)
-        ∧ entry_at(?p, ?s)
-        → has_abnormal_passage(?s, true)
-
-  # 正常判定
-  - name: R17_normal_passage
+  # 正常判定（R10）：无任何异常原因时判定为正常（对齐文档7.3节）
+  - name: R10_normal_passage
     display_name: 通行正常判定
     description: 若无任何异常原因，则判定该通行记录为正常
     language: swrl
     expr: |
-      Passage(?p) ∧ count_equal(?p, true)
-        ∧ sequence_equal(?p, true)
+      Passage(?p) ∧ not has_abnormal_reason(?p, ?reason)
         → is_abnormal_passage(?p, false)

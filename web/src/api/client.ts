@@ -220,6 +220,11 @@ export const modelApi = {
     return response.data.data;
   },
 
+  getObjectTypesWithMapping: async (modelId: string): Promise<ObjectType[]> => {
+    const response = await apiClient.get<ApiResponse<ObjectType[]>>(`/models/${modelId}/object-types-with-mapping`);
+    return response.data.data;
+  },
+
   getCurrentModel: async (): Promise<CurrentModel> => {
     const response = await apiClient.get<ApiResponse<CurrentModel>>('/models/current');
     return response.data.data;

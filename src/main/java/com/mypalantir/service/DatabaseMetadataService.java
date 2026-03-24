@@ -395,11 +395,14 @@ public class DatabaseMetadataService {
         String url;
         String username;
         String password;
+        String dbType = "mysql";
 
         if (DEFAULT_DB_KEY.equals(cacheKey)) {
             url = connectionManager.getJdbcUrl();
             username = connectionManager.getConfig().getDbUser();
             password = connectionManager.getConfig().getDbPassword();
+            String configuredType = connectionManager.getConfig().getDbType();
+            if (configuredType != null) dbType = configuredType.toLowerCase();
         } else {
             if (isGettingDatabaseInstance.get()) {
                 throw new IOException("Recursive call detected while getting database instance: " + cacheKey);
@@ -417,7 +420,7 @@ public class DatabaseMetadataService {
                     ? ((Number) database.get("port")).intValue()
                     : 3306;
             String dbName = (String) database.get("database_name");
-            String dbType = database.get("type") != null ? database.get("type").toString().toLowerCase() : "mysql";
+            dbType = database.get("type") != null ? database.get("type").toString().toLowerCase() : "mysql";
             username = (String) database.get("username");
             password = connectionManager.getConfig().getDbPassword();
             if (database.containsKey("password") && database.get("password") != null) {
@@ -439,6 +442,10 @@ public class DatabaseMetadataService {
         config.setConnectionTimeout(poolConnectionTimeoutMs);
         if (leakDetectionThresholdMs > 0) {
             config.setLeakDetectionThreshold(leakDetectionThresholdMs);
+        }
+        // 对 MySQL/Doris 连接统一设置 collation，避免跨表 JOIN 时排序规则冲突
+        if ("mysql".equals(dbType) || "doris".equals(dbType)) {
+            config.setConnectionInitSql("SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci");
         }
         config.setPoolName("mypalantir-ds-" + cacheKey);
         return new HikariDataSource(config);
@@ -498,6 +505,14 @@ public class DatabaseMetadataService {
      */
     public int getQueryTimeoutSeconds() {
         return queryTimeoutSeconds > 0 ? queryTimeoutSeconds : 30;
+    }
+
+    /**
+     * 根据 databaseId 获取实际数据库名（catalog），供 Calcite JdbcSchema 使用。
+     * databaseId 为 null 或空时返回默认数据库名。
+     */
+    public String getDatabaseNameById(String databaseId) throws IOException {
+        return getDatabaseName(databaseId);
     }
 
     private String getDatabaseName(String databaseId) throws IOException {

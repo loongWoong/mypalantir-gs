@@ -20,6 +20,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * 查询执行器
@@ -166,6 +168,10 @@ public class QueryExecutor {
 
         // 兼容部分方言生成的字符串字面量前缀（如 _UTF-8'xxx'），在 MySQL 会报语法错
         sql = sql.replace("_UTF-8'", "'").replace("_UTF8'", "'");
+
+        // 修复跨表 JOIN 时列排序规则不一致问题（utf8mb4_0900_ai_ci vs utf8mb4_unicode_ci）
+        // 对 ON 子句中的列比较两侧加 COLLATE utf8mb4_unicode_ci，强制统一排序规则
+        sql = fixJoinCollation(sql);
 
         logger.debug("Generated SQL: {}", sql);
         
@@ -555,6 +561,48 @@ public class QueryExecutor {
         public void setSql(String sql) {
             this.sql = sql;
         }
+    }
+
+    /**
+     * 对 JOIN ... ON 子句中的 table.col = table.col 列比较两侧加 COLLATE utf8mb4_unicode_ci，
+     * 解决不同表字符集排序规则不一致（utf8mb4_0900_ai_ci vs utf8mb4_unicode_ci）导致的 JOIN 失败。
+     * 只处理 JOIN 行（包含 ON 关键字的行），不影响 WHERE/GROUP BY 等子句。
+     */
+    private static final Pattern COL_EQ_COL_PATTERN = Pattern.compile(
+        "([\\w`]+\\.[\\w`]+)\\s*=\\s*([\\w`]+\\.[\\w`]+)"
+    );
+
+    private String fixJoinCollation(String sql) {
+        String[] lines = sql.split("\n");
+        StringBuilder sb = new StringBuilder();
+        for (String line : lines) {
+            String upper = line.toUpperCase();
+            // 只处理包含 JOIN ... ON 的行（LEFT JOIN / RIGHT JOIN / INNER JOIN / JOIN）
+            if (upper.contains(" ON ") && (upper.contains("JOIN ") || upper.contains("JOIN\t"))) {
+                int onIdx = upper.indexOf(" ON ");
+                String beforeOn = line.substring(0, onIdx + 4); // 保留 " ON "
+                String afterOn = line.substring(onIdx + 4);
+                Matcher m = COL_EQ_COL_PATTERN.matcher(afterOn);
+                StringBuffer fixed = new StringBuffer();
+                while (m.find()) {
+                    String left = m.group(1);
+                    String right = m.group(2);
+                    m.appendReplacement(fixed, Matcher.quoteReplacement(
+                        left + " COLLATE utf8mb4_unicode_ci = " + right + " COLLATE utf8mb4_unicode_ci"
+                    ));
+                }
+                m.appendTail(fixed);
+                sb.append(beforeOn).append(fixed).append("\n");
+            } else {
+                sb.append(line).append("\n");
+            }
+        }
+        // 去掉末尾多余的换行
+        String result = sb.toString();
+        if (result.endsWith("\n") && !sql.endsWith("\n")) {
+            result = result.substring(0, result.length() - 1);
+        }
+        return result;
     }
 }
 

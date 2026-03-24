@@ -79,6 +79,13 @@ public class MappingService {
         return result;
     }
 
+    /**
+     * 通过 tableId 获取 table 实例（包含 database_id、name 等字段）
+     */
+    public Map<String, Object> getTableInstance(String tableId) throws IOException {
+        return instanceStorage.getInstance("table", tableId);
+    }
+
     public void updateMapping(String mappingId, Map<String, String> columnPropertyMappings, List<String> primaryKeyColumns) throws IOException {
         Map<String, Object> updateData = new HashMap<>();
         updateData.put("column_property_mappings", columnPropertyMappings);
