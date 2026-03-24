@@ -13,11 +13,9 @@ import jakarta.annotation.PreDestroy;
 import javax.sql.DataSource;
 import java.io.IOException;
 import java.sql.*;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 @Service
 public class DatabaseMetadataService {
@@ -61,14 +59,42 @@ public class DatabaseMetadataService {
     private static final ThreadLocal<Boolean> isGettingDatabaseInstance = ThreadLocal.withInitial(() -> false);
 
     public List<Map<String, Object>> getTables(String databaseId) throws SQLException, IOException {
+        try (Connection conn = getConnectionForDatabase(databaseId)) {
+            return getTables(conn, databaseId);
+        }
+    }
+
+    /**
+     * 使用已有连接获取表列表（供批量同步时复用连接）。
+     * Oracle 使用 ALL_TABLES/ALL_VIEWS 直接 SQL，比 DatabaseMetaData 快得多。
+     */
+    public List<Map<String, Object>> getTables(Connection conn, String databaseId) throws SQLException, IOException {
         List<Map<String, Object>> tables = new ArrayList<>();
-        
-        // 根据databaseId获取数据库连接信息
-        Connection conn = getConnectionForDatabase(databaseId);
-        try {
+        String product = conn.getMetaData().getDatabaseProductName();
+        boolean isOracle = product != null && product.toUpperCase().contains("ORACLE");
+
+        if (isOracle) {
+            // Oracle 快速路径：直接查询 ALL_TABLES + ALL_VIEWS，避免 DatabaseMetaData 慢速扫描
+            int timeout = Math.max(getQueryTimeoutSeconds(), 120);
+            String sql = "SELECT OWNER, TABLE_NAME, 'TABLE' AS TABLE_TYPE FROM ALL_TABLES " +
+                    "UNION ALL SELECT OWNER, VIEW_NAME AS TABLE_NAME, 'VIEW' AS TABLE_TYPE FROM ALL_VIEWS";
+            try (Statement stmt = conn.createStatement()) {
+                stmt.setQueryTimeout(timeout);
+                try (ResultSet rs = stmt.executeQuery(sql)) {
+                    while (rs.next()) {
+                        Map<String, Object> table = new HashMap<>();
+                        table.put("name", rs.getString("TABLE_NAME"));
+                        table.put("type", rs.getString("TABLE_TYPE"));
+                        table.put("schema", rs.getString("OWNER"));
+                        table.put("catalog", null);
+                        table.put("database_id", databaseId);
+                        tables.add(table);
+                    }
+                }
+            }
+        } else {
             DatabaseMetaData metaData = conn.getMetaData();
             String catalog = getDatabaseName(databaseId);
-            
             try (ResultSet rs = metaData.getTables(catalog, null, "%", new String[]{"TABLE", "VIEW"})) {
                 while (rs.next()) {
                     Map<String, Object> table = new HashMap<>();
@@ -80,58 +106,161 @@ public class DatabaseMetadataService {
                     tables.add(table);
                 }
             }
-        } finally {
-            if (conn != null && !conn.isClosed()) {
-                conn.close();
-            }
         }
-        
         return tables;
     }
 
     public List<Map<String, Object>> getColumns(String databaseId, String tableName) throws SQLException, IOException {
+        try (Connection conn = getConnectionForDatabase(databaseId)) {
+            return getColumns(conn, databaseId, tableName);
+        }
+    }
+
+    /**
+     * 使用已有连接获取单表列信息（供批量同步时复用连接）。
+     */
+    public List<Map<String, Object>> getColumns(Connection conn, String databaseId, String tableName) throws SQLException, IOException {
         List<Map<String, Object>> columns = new ArrayList<>();
-        
-        // 根据databaseId获取数据库连接信息
-        Connection conn = getConnectionForDatabase(databaseId);
-        try {
-            DatabaseMetaData metaData = conn.getMetaData();
-            String catalog = getDatabaseName(databaseId);
-            
-            try (ResultSet rs = metaData.getColumns(catalog, null, tableName, "%")) {
-                while (rs.next()) {
-                    Map<String, Object> column = new HashMap<>();
-                    column.put("name", rs.getString("COLUMN_NAME"));
-                    column.put("data_type", rs.getString("TYPE_NAME"));
-                    column.put("data_type_code", rs.getInt("DATA_TYPE"));
-                    column.put("nullable", rs.getInt("NULLABLE") == DatabaseMetaData.columnNullable);
-                    column.put("column_size", rs.getInt("COLUMN_SIZE"));
-                    column.put("decimal_digits", rs.getInt("DECIMAL_DIGITS"));
-                    column.put("remarks", rs.getString("REMARKS"));
-                    column.put("table_name", tableName);
-                    column.put("database_id", databaseId);
-                    columns.add(column);
-                }
-            }
-            
-            // 获取主键信息
-            try (ResultSet pkRs = metaData.getPrimaryKeys(catalog, null, tableName)) {
-                List<String> primaryKeys = new ArrayList<>();
-                while (pkRs.next()) {
-                    primaryKeys.add(pkRs.getString("COLUMN_NAME"));
-                }
-                // 标记主键列
-                for (Map<String, Object> column : columns) {
-                    column.put("is_primary_key", primaryKeys.contains(column.get("name")));
-                }
-            }
-        } finally {
-            if (conn != null && !conn.isClosed()) {
-                conn.close();
+        DatabaseMetaData metaData = conn.getMetaData();
+        String catalog = getDatabaseName(databaseId);
+        if (metaData.getDatabaseProductName() != null && metaData.getDatabaseProductName().toUpperCase().contains("ORACLE")) {
+            catalog = null;
+        }
+        try (ResultSet rs = metaData.getColumns(catalog, null, tableName, "%")) {
+            while (rs.next()) {
+                Map<String, Object> column = new HashMap<>();
+                column.put("name", rs.getString("COLUMN_NAME"));
+                column.put("data_type", rs.getString("TYPE_NAME"));
+                column.put("data_type_code", rs.getInt("DATA_TYPE"));
+                column.put("nullable", rs.getInt("NULLABLE") == DatabaseMetaData.columnNullable);
+                column.put("column_size", rs.getInt("COLUMN_SIZE"));
+                column.put("decimal_digits", rs.getInt("DECIMAL_DIGITS"));
+                column.put("remarks", rs.getString("REMARKS"));
+                column.put("table_name", tableName);
+                column.put("database_id", databaseId);
+                columns.add(column);
             }
         }
-        
+        try (ResultSet pkRs = metaData.getPrimaryKeys(catalog, null, tableName)) {
+            List<String> primaryKeys = new ArrayList<>();
+            while (pkRs.next()) {
+                primaryKeys.add(pkRs.getString("COLUMN_NAME"));
+            }
+            for (Map<String, Object> column : columns) {
+                column.put("is_primary_key", primaryKeys.contains(column.get("name")));
+            }
+        }
         return columns;
+    }
+
+    /**
+     * 批量获取多表列信息（Oracle 使用单次 SQL，大幅减少往返）。
+     * @param tables 表列表，每项含 "name" 和 "schema"（Oracle 需要 schema 区分不同用户下的同表名）
+     * @return Map: 表的查找键 -> List<column map>。键为 schema!=null 时 "schema.name"，否则 "name"
+     */
+    public Map<String, List<Map<String, Object>>> getAllColumnsBatch(Connection conn, String databaseId, List<Map<String, Object>> tables) throws SQLException, IOException {
+        if (tables == null || tables.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        List<String> tableNames = new ArrayList<>();
+        for (Map<String, Object> t : tables) {
+            tableNames.add((String) t.get("name"));
+        }
+        String product = conn.getMetaData().getDatabaseProductName();
+        boolean isOracle = product != null && product.toUpperCase().contains("ORACLE");
+
+        if (isOracle) {
+            return getAllColumnsBatchOracle(conn, databaseId, tables);
+        }
+        Map<String, List<Map<String, Object>>> result = new HashMap<>();
+        for (Map<String, Object> t : tables) {
+            String tableName = (String) t.get("name");
+            String schema = (String) t.get("schema");
+            String key = (schema != null && !schema.isEmpty()) ? schema + "." + tableName : tableName;
+            result.put(key, getColumns(conn, databaseId, tableName));
+        }
+        return result;
+    }
+
+    private static final int ORACLE_IN_CLAUSE_BATCH = 500;
+
+    /** Oracle：分批查询 ALL_TAB_COLUMNS + ALL_CONS_COLUMNS（IN 子句限制约 1000 项） */
+    private Map<String, List<Map<String, Object>>> getAllColumnsBatchOracle(Connection conn, String databaseId, List<Map<String, Object>> tables) throws SQLException {
+        Map<String, List<Map<String, Object>>> result = new HashMap<>();
+        if (tables.isEmpty()) return result;
+
+        for (int start = 0; start < tables.size(); start += ORACLE_IN_CLAUSE_BATCH) {
+            int end = Math.min(start + ORACLE_IN_CLAUSE_BATCH, tables.size());
+            List<Map<String, Object>> batch = tables.subList(start, end);
+            Map<String, List<Map<String, Object>>> batchResult = getAllColumnsBatchOracleChunk(conn, databaseId, batch);
+            batchResult.forEach((k, v) -> result.merge(k, v, (a, b) -> { a.addAll(b); return a; }));
+        }
+        return result;
+    }
+
+    private Map<String, List<Map<String, Object>>> getAllColumnsBatchOracleChunk(Connection conn, String databaseId, List<Map<String, Object>> tables) throws SQLException {
+        Map<String, List<Map<String, Object>>> result = new HashMap<>();
+        int timeout = Math.max(getQueryTimeoutSeconds(), 180);
+
+        List<String> names = new ArrayList<>();
+        for (Map<String, Object> t : tables) {
+            names.add(((String) t.get("name")).toUpperCase());
+        }
+        String placeholders = names.stream().map(n -> "?").collect(Collectors.joining(","));
+
+        Map<String, Set<String>> pkMap = new HashMap<>();
+        String pkSql = "SELECT c.OWNER, c.TABLE_NAME, c.COLUMN_NAME FROM ALL_CONS_COLUMNS c " +
+                "JOIN ALL_CONSTRAINTS k ON c.OWNER=k.OWNER AND c.CONSTRAINT_NAME=k.CONSTRAINT_NAME AND c.TABLE_NAME=k.TABLE_NAME " +
+                "WHERE k.CONSTRAINT_TYPE='P' AND (c.OWNER, c.TABLE_NAME) IN (SELECT OWNER, TABLE_NAME FROM ALL_TABLES WHERE TABLE_NAME IN (" + placeholders + ") " +
+                "UNION SELECT OWNER, VIEW_NAME FROM ALL_VIEWS WHERE VIEW_NAME IN (" + placeholders + "))";
+
+        try (PreparedStatement pkStmt = conn.prepareStatement(pkSql)) {
+            pkStmt.setQueryTimeout(timeout);
+            int idx = 1;
+            for (String n : names) { pkStmt.setString(idx++, n); }
+            for (String n : names) { pkStmt.setString(idx++, n); }
+            try (ResultSet rs = pkStmt.executeQuery()) {
+                while (rs.next()) {
+                    String key = rs.getString("OWNER") + "." + rs.getString("TABLE_NAME");
+                    pkMap.computeIfAbsent(key, k -> new HashSet<>()).add(rs.getString("COLUMN_NAME"));
+                }
+            }
+        }
+
+        String colSql = "SELECT OWNER, TABLE_NAME, COLUMN_NAME, DATA_TYPE, DATA_LENGTH, DATA_PRECISION, DATA_SCALE, NULLABLE, COLUMN_ID " +
+                "FROM ALL_TAB_COLUMNS WHERE (OWNER, TABLE_NAME) IN (" +
+                "SELECT OWNER, TABLE_NAME FROM ALL_TABLES WHERE TABLE_NAME IN (" + placeholders + ") " +
+                "UNION SELECT OWNER, VIEW_NAME FROM ALL_VIEWS WHERE VIEW_NAME IN (" + placeholders + ")) " +
+                "ORDER BY TABLE_NAME, COLUMN_ID";
+
+        try (PreparedStatement colStmt = conn.prepareStatement(colSql)) {
+            colStmt.setQueryTimeout(timeout);
+            int idx = 1;
+            for (String n : names) { colStmt.setString(idx++, n); }
+            for (String n : names) { colStmt.setString(idx++, n); }
+            try (ResultSet rs = colStmt.executeQuery()) {
+                while (rs.next()) {
+                    String owner = rs.getString("OWNER");
+                    String tableName = rs.getString("TABLE_NAME");
+                    String key = owner + "." + tableName;
+                    Map<String, Object> column = new HashMap<>();
+                    column.put("name", rs.getString("COLUMN_NAME"));
+                    column.put("data_type", rs.getString("DATA_TYPE"));
+                    column.put("data_type_code", -1);
+                    column.put("nullable", "Y".equalsIgnoreCase(rs.getString("NULLABLE")));
+                    int prec = rs.getInt("DATA_PRECISION");
+                    int scale = rs.getInt("DATA_SCALE");
+                    column.put("column_size", prec > 0 ? prec : rs.getInt("DATA_LENGTH"));
+                    column.put("decimal_digits", scale);
+                    column.put("remarks", null);
+                    column.put("table_name", tableName);
+                    column.put("database_id", databaseId);
+                    column.put("is_primary_key", pkMap.getOrDefault(key, Collections.emptySet()).contains(rs.getString("COLUMN_NAME")));
+                    result.computeIfAbsent(key, k -> new ArrayList<>()).add(column);
+                }
+            }
+        }
+        return result;
     }
 
     /**
@@ -142,11 +271,12 @@ public class DatabaseMetadataService {
      */
     public List<String> getPrimaryKeyColumns(String databaseId, String tableName) {
         List<String> ordered = new ArrayList<>();
-        Connection conn = null;
-        try {
-            conn = getConnectionForDatabase(databaseId);
+        try (Connection conn = getConnectionForDatabase(databaseId)) {
             DatabaseMetaData metaData = conn.getMetaData();
             String catalog = getDatabaseName(databaseId);
+            if (metaData.getDatabaseProductName() != null && metaData.getDatabaseProductName().toUpperCase().contains("ORACLE")) {
+                catalog = null;
+            }
             try (ResultSet pkRs = metaData.getPrimaryKeys(catalog, null, tableName)) {
                 List<Object[]> rows = new ArrayList<>();
                 while (pkRs.next()) {
@@ -161,12 +291,6 @@ public class DatabaseMetadataService {
             }
         } catch (SQLException | IOException e) {
             // 返回空列表，调用方会回退到默认 id 列
-        } finally {
-            if (conn != null) {
-                try {
-                    if (!conn.isClosed()) conn.close();
-                } catch (SQLException ignored) {}
-            }
         }
         return ordered;
     }
@@ -190,8 +314,8 @@ public class DatabaseMetadataService {
     public List<Map<String, Object>> executeQuery(String sql, String databaseId) throws SQLException, IOException {
         List<Map<String, Object>> results = new ArrayList<>();
         
-        Connection conn = getConnectionForDatabase(databaseId);
-        try (Statement stmt = conn.createStatement()) {
+        try (Connection conn = getConnectionForDatabase(databaseId);
+             Statement stmt = conn.createStatement()) {
             stmt.setQueryTimeout(getQueryTimeoutSeconds());
             try (ResultSet rs = stmt.executeQuery(sql)) {
                 ResultSetMetaData metaData = rs.getMetaData();
@@ -207,13 +331,35 @@ public class DatabaseMetadataService {
                     results.add(row);
                 }
             }
-        } finally {
-            if (conn != null && !conn.isClosed()) {
-                conn.close();
-            }
         }
         
         return results;
+    }
+
+    /**
+     * 获取数据库类型（mysql、doris、oracle、postgresql 等），用于生成兼容的 DDL。
+     * 默认数据库使用 Config.db.type，动态数据源从实例的 type 字段读取。
+     */
+    public String getDatabaseType(String databaseId) {
+        if (databaseId == null || databaseId.isEmpty() || DEFAULT_DB_KEY.equals(databaseId)) {
+            return connectionManager.getConfig().getDbType() != null
+                    ? connectionManager.getConfig().getDbType().toLowerCase() : "mysql";
+        }
+        try {
+            if (isGettingDatabaseInstance.get()) {
+                return "mysql";
+            }
+            isGettingDatabaseInstance.set(true);
+            try {
+                Map<String, Object> database = (graphInstanceStorage != null ? graphInstanceStorage : instanceStorage).getInstance("database", databaseId);
+                Object type = database.get("type");
+                return type != null ? type.toString().toLowerCase() : "mysql";
+            } finally {
+                isGettingDatabaseInstance.set(false);
+            }
+        } catch (Exception e) {
+            return "mysql";
+        }
     }
 
     /**
@@ -378,14 +524,10 @@ public class DatabaseMetadataService {
      * 执行更新SQL（INSERT, UPDATE, DELETE, CREATE TABLE等）
      */
     public int executeUpdate(String sql, String databaseId) throws SQLException, IOException {
-        Connection conn = getConnectionForDatabase(databaseId);
-        try (Statement stmt = conn.createStatement()) {
+        try (Connection conn = getConnectionForDatabase(databaseId);
+             Statement stmt = conn.createStatement()) {
             stmt.setQueryTimeout(getQueryTimeoutSeconds());
             return stmt.executeUpdate(sql);
-        } finally {
-            if (conn != null && !conn.isClosed()) {
-                conn.close();
-            }
         }
     }
 
@@ -395,8 +537,7 @@ public class DatabaseMetadataService {
      * Oracle: 使用 ALL_TABLES（根据连接用户可见的表）
      */
     public boolean tableExists(String databaseId, String tableName) throws SQLException, IOException {
-        Connection conn = getConnectionForDatabase(databaseId);
-        try {
+        try (Connection conn = getConnectionForDatabase(databaseId)) {
             DatabaseMetaData metaData = conn.getMetaData();
             String product = metaData.getDatabaseProductName();
             if (product != null && product.toUpperCase().contains("ORACLE")) {
@@ -436,7 +577,7 @@ public class DatabaseMetadataService {
             return false;
         } catch (SQLException e) {
             // 回退到 DatabaseMetaData 方法
-            try {
+            try (Connection conn = getConnectionForDatabase(databaseId)) {
                 DatabaseMetaData metaData = conn.getMetaData();
                 try (ResultSet rs = metaData.getTables(null, null, tableName, new String[]{"TABLE"})) {
                     if (rs.next()) return true;
@@ -451,10 +592,6 @@ public class DatabaseMetadataService {
                 throw new SQLException("Failed to check table existence: " + e.getMessage(), e);
             }
             return false;
-        } finally {
-            if (conn != null && !conn.isClosed()) {
-                conn.close();
-            }
         }
     }
 

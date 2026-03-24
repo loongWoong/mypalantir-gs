@@ -289,8 +289,8 @@ public class MappedDataService {
             targetDatabaseId = null; // null表示使用默认数据库（application.properties中的db.*配置）
         }
         
-        // 8. 构建目标表结构
-        String createTableSql = buildSyncTableSql(targetTableName, objectTypeDef, columnPropertyMappings, sourceColumnMap);
+        // 8. 构建目标表结构（根据目标数据库类型生成兼容 DDL，如 Doris 使用 DUPLICATE KEY 而非 PRIMARY KEY）
+        String createTableSql = buildSyncTableSql(targetTableName, objectTypeDef, columnPropertyMappings, sourceColumnMap, targetDatabaseId);
         
         // 9. 创建目标表（如果不存在）
         boolean tableCreated = false;
@@ -347,8 +347,8 @@ public class MappedDataService {
             rowsInserted = extractDataCrossDatabase(sourceTableName, targetTableName, 
                 sourceDatabaseId, targetDatabaseId, columnPropertyMappings, primaryKeyColumns, primaryKeyColumn);
         } else {
-            // 同数据库抽取：使用INSERT INTO ... SELECT ... FROM
-            String extractSql = buildExtractSql(sourceTableName, targetTableName, columnPropertyMappings, primaryKeyColumns, primaryKeyColumn);
+            // 同数据库抽取：使用INSERT INTO ... SELECT ... FROM（Doris 不支持 ON DUPLICATE KEY UPDATE）
+            String extractSql = buildExtractSql(sourceTableName, targetTableName, columnPropertyMappings, primaryKeyColumns, primaryKeyColumn, targetDatabaseId);
             rowsInserted = databaseMetadataService.executeUpdate(extractSql, targetDatabaseId);
         }
         
@@ -382,10 +382,15 @@ public class MappedDataService {
 
     /**
      * 构建同步表的CREATE TABLE SQL
+     * 根据目标数据库类型生成兼容 DDL：Doris 使用 DUPLICATE KEY + DISTRIBUTED BY，MySQL 使用 PRIMARY KEY
      */
     private String buildSyncTableSql(String tableName, ObjectType objectType, 
                                      Map<String, String> columnPropertyMappings,
-                                     Map<String, Map<String, Object>> sourceColumnMap) {
+                                     Map<String, Map<String, Object>> sourceColumnMap,
+                                     String targetDatabaseId) {
+        String dbType = databaseMetadataService.getDatabaseType(targetDatabaseId);
+        boolean isDoris = "doris".equals(dbType);
+        
         StringBuilder sql = new StringBuilder("CREATE TABLE IF NOT EXISTS `").append(tableName).append("` (\n");
         
         List<String> columnDefinitions = new ArrayList<>();
@@ -394,7 +399,7 @@ public class MappedDataService {
         String primaryKeyColumn = null;
         boolean hasIdColumn = false;
         
-        // 遍历映射关系，构建列定义
+        // 遍历映射关系，构建列定义（Oracle 等可能返回大写列名，尝试大小写不敏感匹配）
         for (Map.Entry<String, String> entry : columnPropertyMappings.entrySet()) {
             String sourceColumnName = entry.getKey();
             String propertyName = entry.getValue();
@@ -405,8 +410,11 @@ public class MappedDataService {
                 primaryKeyColumn = "id";
             }
             
-            // 获取源列信息
+            // 获取源列信息（支持大小写不敏感：Oracle 返回大写）
             Map<String, Object> sourceColumn = sourceColumnMap.get(sourceColumnName);
+            if (sourceColumn == null) {
+                sourceColumn = findColumnCaseInsensitive(sourceColumnMap, sourceColumnName);
+            }
             if (sourceColumn == null) {
                 logger.warn("Source column {} not found, skipping", sourceColumnName);
                 continue;
@@ -415,8 +423,8 @@ public class MappedDataService {
             // 获取属性定义
             com.mypalantir.meta.Property property = findProperty(objectType, propertyName);
             
-            // 构建列定义
-            String columnDef = buildColumnDefinition(propertyName, sourceColumn, property);
+            // 构建列定义（Doris 不支持 ON UPDATE CURRENT_TIMESTAMP）
+            String columnDef = buildColumnDefinition(propertyName, sourceColumn, property, isDoris);
             columnDefinitions.add(columnDef);
         }
         
@@ -426,27 +434,54 @@ public class MappedDataService {
             primaryKeyColumn = "id";
         }
         
-        // 添加时间戳字段
+        // 添加时间戳字段（Doris 不支持 ON UPDATE CURRENT_TIMESTAMP）
         columnDefinitions.add("`created_at` DATETIME DEFAULT CURRENT_TIMESTAMP");
-        columnDefinitions.add("`updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
+        if (isDoris) {
+            columnDefinitions.add("`updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP");
+        } else {
+            columnDefinitions.add("`updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
+        }
         
         sql.append("  ").append(String.join(",\n  ", columnDefinitions));
         
-        // 添加主键
-        if (primaryKeyColumn != null) {
-            sql.append(",\n  PRIMARY KEY (`").append(primaryKeyColumn).append("`)");
+        if (isDoris) {
+            // Doris：使用 DUPLICATE KEY 替代 PRIMARY KEY，并添加 DISTRIBUTED BY
+            // Doris 不支持列定义后的 PRIMARY KEY 约束，需在表尾指定 KEY 类型
+            // Doris PROPERTIES 不支持 comment，仅保留 replication_num
+            sql.append("\n)\nDUPLICATE KEY(`").append(primaryKeyColumn != null ? primaryKeyColumn : "id").append("`)\n");
+            sql.append("DISTRIBUTED BY HASH(`").append(primaryKeyColumn != null ? primaryKeyColumn : "id").append("`) BUCKETS 10\n");
+            sql.append("PROPERTIES (\n  \"replication_num\" = \"1\"\n)");
+        } else {
+            // MySQL / PostgreSQL：标准 PRIMARY KEY + ENGINE
+            if (primaryKeyColumn != null) {
+                sql.append(",\n  PRIMARY KEY (`").append(primaryKeyColumn).append("`)");
+            }
+            String displayName = (objectType.getDisplayName() != null ? objectType.getDisplayName() : tableName).replace("'", "''");
+            sql.append("\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='").append(displayName).append("同步表';");
         }
         
-        sql.append("\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='").append(objectType.getDisplayName()).append("同步表';");
-        
         return sql.toString();
+    }
+    
+    /** 大小写不敏感查找列（兼容 Oracle 等返回大写列名的数据库） */
+    private Map<String, Object> findColumnCaseInsensitive(Map<String, Map<String, Object>> sourceColumnMap, String columnName) {
+        String lower = columnName.toLowerCase();
+        String upper = columnName.toUpperCase();
+        for (Map.Entry<String, Map<String, Object>> e : sourceColumnMap.entrySet()) {
+            String k = e.getKey();
+            if (k.equalsIgnoreCase(columnName) || k.toLowerCase().equals(lower) || k.toUpperCase().equals(upper)) {
+                return e.getValue();
+            }
+        }
+        return null;
     }
 
     /**
      * 构建列定义
+     * @param isDoris 目标为 Doris 时，部分 MySQL 特有语法需省略
      */
     private String buildColumnDefinition(String propertyName, Map<String, Object> sourceColumn, 
-                                        com.mypalantir.meta.Property property) {
+                                        com.mypalantir.meta.Property property, boolean isDoris) {
         StringBuilder def = new StringBuilder("`").append(propertyName).append("` ");
         
         // 获取源列类型和长度
@@ -588,15 +623,16 @@ public class MappedDataService {
             }
         }
         
-        // 3. 批量插入到目标数据库（JDBC batch + ON DUPLICATE KEY UPDATE，每 1000 条提交一次）
+        // 3. 批量插入到目标数据库（Doris 不支持 ON DUPLICATE KEY UPDATE，使用普通 INSERT）
         int rowsInserted = 0;
-        String upsertSql = buildInsertOrUpdateSql(targetTableName, targetColumns);
+        boolean isDoris = "doris".equals(databaseMetadataService.getDatabaseType(targetDatabaseId));
+        String insertSql = isDoris ? buildInsertSql(targetTableName, targetColumns) : buildInsertOrUpdateSql(targetTableName, targetColumns);
         final int BATCH_SIZE = 1000;
         
         Connection targetConn = databaseMetadataService.getConnectionForDatabase(targetDatabaseId);
         try {
             targetConn.setAutoCommit(false);
-            try (PreparedStatement pstmt = targetConn.prepareStatement(upsertSql)) {
+            try (PreparedStatement pstmt = targetConn.prepareStatement(insertSql)) {
                 int batchCount = 0;
                 for (Map<String, Object> row : sourceRows) {
                     setInsertParameters(pstmt, row, columnPropertyMappings, primaryKeyColumns, primaryKeyColumn, targetColumns);
@@ -767,10 +803,12 @@ public class MappedDataService {
      * 构建数据抽取SQL（同数据库）
      * 使用INSERT INTO ... SELECT ... FROM，支持数据去重
      * 支持组合主键：如果配置了多个主键列，使用CONCAT连接它们的值作为ID
+     * Doris 不支持 ON DUPLICATE KEY UPDATE，目标为 Doris 时使用普通 INSERT
      */
     private String buildExtractSql(String sourceTableName, String targetTableName, 
                                    Map<String, String> columnPropertyMappings,
-                                   List<String> primaryKeyColumns, String primaryKeyColumn) {
+                                   List<String> primaryKeyColumns, String primaryKeyColumn,
+                                   String targetDatabaseId) {
         StringBuilder sql = new StringBuilder("INSERT INTO `").append(targetTableName).append("` (");
         
         // 添加目标列（去重：多个源列映射到同一目标属性时只保留一次）
@@ -863,8 +901,11 @@ public class MappedDataService {
         sql.append(String.join(", ", selectColumns));
         sql.append(" FROM `").append(sourceTableName).append("`");
         
-        // 添加ON DUPLICATE KEY UPDATE来处理重复数据（如果主键冲突）
-        sql.append(" ON DUPLICATE KEY UPDATE `updated_at` = CURRENT_TIMESTAMP");
+        // Doris 不支持 ON DUPLICATE KEY UPDATE，仅 MySQL 等使用
+        boolean isDoris = "doris".equals(databaseMetadataService.getDatabaseType(targetDatabaseId));
+        if (!isDoris) {
+            sql.append(" ON DUPLICATE KEY UPDATE `updated_at` = CURRENT_TIMESTAMP");
+        }
         
         logger.info("[MappedDataService] Built extract SQL with primary key columns: {}, id expression: {}", 
             primaryKeyColumns, idSourceExpression);

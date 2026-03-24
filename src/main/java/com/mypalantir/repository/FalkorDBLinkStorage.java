@@ -166,7 +166,7 @@ public class FalkorDBLinkStorage implements ILinkStorage {
 
         String sourceLabel = getSourceLabel(linkType, sourceID);
         String relType = normalizeRelType(linkType);
-        String cypher = "MATCH (source:" + sourceLabel + " {id: $sourceId})-[r:" + relType + "]->(target) RETURN r, target.id AS target_id";
+        String cypher = "MATCH (source:" + sourceLabel + " {id: $sourceId})-[r:" + relType + "]->(target) RETURN r, source.id AS source_id, target.id AS target_id";
         return queryLinks(cypher, Collections.singletonMap("sourceId", sourceID), sourceID, null);
     }
 
@@ -176,7 +176,7 @@ public class FalkorDBLinkStorage implements ILinkStorage {
 
         String targetLabel = getTargetLabel(linkType, targetID);
         String relType = normalizeRelType(linkType);
-        String cypher = "MATCH (source)-[r:" + relType + "]->(target:" + targetLabel + " {id: $targetId}) RETURN r, source.id AS source_id";
+        String cypher = "MATCH (source)-[r:" + relType + "]->(target:" + targetLabel + " {id: $targetId}) RETURN r, source.id AS source_id, target.id AS target_id";
         return queryLinks(cypher, Collections.singletonMap("targetId", targetID), null, targetID);
     }
 

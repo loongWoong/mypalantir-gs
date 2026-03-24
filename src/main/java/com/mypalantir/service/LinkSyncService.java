@@ -68,21 +68,30 @@ public class LinkSyncService {
         // ── 3. 一次性加载所有已存在关系，构建 "sourceId:targetId" Set ────────
         Set<String> existingLinkKeys = loadExistingLinkKeys(linkTypeName);
 
-        log.info("[LinkSync] {} sources={}, targets={}, existingLinks={}, threads={}",
-                linkTypeName, allSources.size(), allTargets.size(), existingLinkKeys.size(), THREAD_POOL_SIZE);
+        log.info("[LinkSync] {} sources={}, targets={}, existingLinks={}, targetIndexSize={}, threads={}",
+                linkTypeName, allSources.size(), allTargets.size(), existingLinkKeys.size(), targetIndex.size(), THREAD_POOL_SIZE);
+
+        // 调试：采样源实例的查找键与目标索引键，便于定位匹配失败原因
+        logLinkSyncDebugSample(linkTypeName, allSources, allTargets, targetIndex, propertyMappings);
 
         // ── 4. 计算待创建关系列表（单线程，纯内存操作）─────────────────────
         // 先在内存中确定所有需要创建的 (sourceId, targetId) 对，
         // 避免多线程并发写 Neo4j 时产生重复检查和连接风暴
         List<String[]> toCreate = new ArrayList<>();
+        int nullLookupKeyCount = 0;
+        int zeroMatchCount = 0;
         for (Map<String, Object> source : allSources) {
             String sourceId = (String) source.get("id");
             if (sourceId == null) continue;
 
             String lookupKey = buildSourceLookupKey(source, propertyMappings);
-            if (lookupKey == null) continue;
+            if (lookupKey == null) {
+                nullLookupKeyCount++;
+                continue;
+            }
 
             List<Map<String, Object>> matchedTargets = targetIndex.getOrDefault(lookupKey, Collections.emptyList());
+            if (matchedTargets.isEmpty()) zeroMatchCount++;
             for (Map<String, Object> target : matchedTargets) {
                 String targetId = (String) target.get("id");
                 if (targetId == null) continue;
@@ -94,6 +103,10 @@ public class LinkSyncService {
             }
         }
 
+        if (nullLookupKeyCount > 0 || zeroMatchCount > 0) {
+            log.warn("[LinkSync] {} match diagnostic: nullLookupKey={}, zeroMatch={} (sources with lookupKey=null or key not in targetIndex)",
+                    linkTypeName, nullLookupKeyCount, zeroMatchCount);
+        }
         log.info("[LinkSync] {} toCreate={}", linkTypeName, toCreate.size());
 
         // ── 5. 分批并发写入 Neo4j ────────────────────────────────────────────
@@ -203,16 +216,19 @@ public class LinkSyncService {
     /**
      * 将目标实例列表按「目标属性值组合键」建立索引
      * key 格式：targetProp1Value|targetProp2Value|...（按 propertyMappings 的 value 顺序）
+     * 当目标属性为 null 时，若 id 为复合主键格式（如 transaction_id_itemPosition），则从 id 中提取外键部分
      */
     private Map<String, List<Map<String, Object>>> buildTargetIndex(
             List<Map<String, Object>> targets,
             Map<String, String> propertyMappings) {
-        // 固定顺序的目标属性名列表
         List<String> targetProps = new ArrayList<>(propertyMappings.values());
 
         Map<String, List<Map<String, Object>>> index = new HashMap<>();
         for (Map<String, Object> target : targets) {
             String key = buildCompositeKey(target, targetProps);
+            if (key == null && targetProps.size() == 1) {
+                key = extractForeignKeyFromCompositeId(target, targetProps.get(0));
+            }
             if (key != null) {
                 index.computeIfAbsent(key, k -> new ArrayList<>()).add(target);
             }
@@ -223,24 +239,130 @@ public class LinkSyncService {
     /**
      * 用源实例的属性值构造与目标索引相同格式的查找键
      * key 格式：sourceValue1|sourceValue2|...（按 propertyMappings 的 key 顺序，与目标 value 顺序一致）
+     * 当源属性为 null 时，若映射为单属性且源 id 即外键（如 GantryTransaction.id = transaction_id），则回退使用 id
      */
     private String buildSourceLookupKey(Map<String, Object> source, Map<String, String> propertyMappings) {
         List<String> sourceProps = new ArrayList<>(propertyMappings.keySet());
-        return buildCompositeKey(source, sourceProps);
+        String key = buildCompositeKey(source, sourceProps);
+        if (key == null && sourceProps.size() == 1) {
+            Object idVal = getPropertyValueCaseInsensitive(source, "id");
+            if (idVal != null && !String.valueOf(idVal).trim().isEmpty()) {
+                return String.valueOf(idVal);
+            }
+        }
+        return key;
     }
 
     /**
      * 从实例中按指定属性列表构造复合键，任意属性为 null 则返回 null（不参与匹配）
+     * 支持大小写不敏感属性查找（Doris/部分 JDBC 可能返回不同大小写的列名）
      */
     private String buildCompositeKey(Map<String, Object> instance, List<String> props) {
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < props.size(); i++) {
-            Object val = instance.get(props.get(i));
+            Object val = getPropertyValueCaseInsensitive(instance, props.get(i));
             if (val == null) return null;
             if (i > 0) sb.append('|');
             sb.append(val);
         }
         return sb.toString();
+    }
+
+    /** 大小写不敏感获取属性值（兼容不同 JDBC 驱动返回的列名大小写） */
+    private Object getPropertyValueCaseInsensitive(Map<String, Object> instance, String prop) {
+        Object val = instance.get(prop);
+        if (val != null) return val;
+        String lower = prop.toLowerCase();
+        String upper = prop.toUpperCase();
+        for (Map.Entry<String, Object> e : instance.entrySet()) {
+            if (e.getKey().equalsIgnoreCase(prop) || e.getKey().toLowerCase().equals(lower) || e.getKey().toUpperCase().equals(upper)) {
+                return e.getValue();
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 当目标属性（如 transaction_id）为 null 时，从复合主键格式的 id 中提取外键部分
+     * 例如 id="G0002370050002100202025040118100328_1" -> 提取 "G0002370050002100202025040118100328"
+     */
+    private String extractForeignKeyFromCompositeId(Map<String, Object> instance, String foreignKeyProp) {
+        Object idVal = instance.get("id");
+        if (idVal == null || !(idVal instanceof String)) return null;
+        String id = ((String) idVal).trim();
+        if (id.isEmpty()) return null;
+        int lastUnderscore = id.lastIndexOf('_');
+        if (lastUnderscore <= 0) return null;
+        String suffix = id.substring(lastUnderscore + 1);
+        if (!suffix.matches("\\d+")) return null;
+        return id.substring(0, lastUnderscore);
+    }
+
+    /**
+     * 调试用：采样若干源实例的查找键、目标索引键，以及源实例的 property_mappings 相关属性值
+     * 用于定位 has_gantry_toll_item 等关系无法建立时，源键与目标键是否一致
+     */
+    private void logLinkSyncDebugSample(String linkTypeName,
+                                        List<Map<String, Object>> sources,
+                                        List<Map<String, Object>> targets,
+                                        Map<String, List<Map<String, Object>>> targetIndex,
+                                        Map<String, String> propertyMappings) {
+        if (log.isDebugEnabled() && !sources.isEmpty()) {
+            List<String> sourcePropNames = new ArrayList<>(propertyMappings.keySet());
+            List<String> targetPropNames = new ArrayList<>(propertyMappings.values());
+            int sampleSize = Math.min(5, sources.size());
+            log.debug("[LinkSync] {} DEBUG sample sources (first {}):", linkTypeName, sampleSize);
+            for (int i = 0; i < sampleSize; i++) {
+                Map<String, Object> s = sources.get(i);
+                String lookupKey = buildSourceLookupKey(s, propertyMappings);
+                StringBuilder sb = new StringBuilder();
+                sb.append("  source[").append(i).append("] id=").append(s.get("id"));
+                for (String p : sourcePropNames) {
+                    Object v = getPropertyValueCaseInsensitive(s, p);
+                    sb.append(", ").append(p).append("=").append(v);
+                }
+                sb.append(" => lookupKey=").append(lookupKey);
+                log.debug("[LinkSync] {}", sb);
+            }
+        }
+        // 始终在 INFO 级别输出少量采样，便于快速定位（仅当 toCreate 可能为 0 时有用）
+        int sampleSize = Math.min(5, sources.size());
+        log.info("[LinkSync] {} DEBUG sample (first {} sources): sourceKeys + targetIndexKeys sample", linkTypeName, sampleSize);
+        // 首条源实例的 map 键名（用于排查属性名/大小写）
+        if (!sources.isEmpty()) {
+            Map<String, Object> firstSource = sources.get(0);
+            String sourceKeyNames = String.join(",", firstSource.keySet());
+            log.info("[LinkSync] {} first source instance key names: [{}]", linkTypeName, sourceKeyNames);
+            for (String srcProp : propertyMappings.keySet()) {
+                Object val = getPropertyValueCaseInsensitive(firstSource, srcProp);
+                log.info("[LinkSync] {} first source property: {}={}", linkTypeName, srcProp, val);
+            }
+        }
+        for (int i = 0; i < sampleSize; i++) {
+            Map<String, Object> s = sources.get(i);
+            String lookupKey = buildSourceLookupKey(s, propertyMappings);
+            boolean inIndex = lookupKey != null && targetIndex.containsKey(lookupKey);
+            log.info("[LinkSync] {} source[{}] id={} lookupKey={} inTargetIndex={}",
+                    linkTypeName, i, getPropertyValueCaseInsensitive(s, "id"), lookupKey, inIndex);
+        }
+        if (!targetIndex.isEmpty()) {
+            int keySample = 0;
+            for (String k : targetIndex.keySet()) {
+                if (keySample >= 5) break;
+                log.info("[LinkSync] {} targetIndex sample key[{}]={}", linkTypeName, keySample, k);
+                keySample++;
+            }
+        }
+        // 首条目标实例的 map 键名及 property_mappings 相关属性值
+        if (!targets.isEmpty()) {
+            Map<String, Object> firstTarget = targets.get(0);
+            String targetKeyNames = String.join(",", firstTarget.keySet());
+            log.info("[LinkSync] {} first target instance key names: [{}]", linkTypeName, targetKeyNames);
+            for (String tgtProp : propertyMappings.values()) {
+                Object val = getPropertyValueCaseInsensitive(firstTarget, tgtProp);
+                log.info("[LinkSync] {} first target property: {}={}", linkTypeName, tgtProp, val);
+            }
+        }
     }
 
     /**

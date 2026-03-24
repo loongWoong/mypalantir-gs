@@ -6,11 +6,15 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
 
 import java.io.File;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
@@ -30,6 +34,12 @@ public class DatabaseInitializer implements CommandLineRunner {
     @Autowired
     private Loader loader;
 
+    @Autowired(required = false)
+    private DatabaseConfig.DatabaseConnectionManager connectionManager;
+
+    @Autowired(required = false)
+    private DataSource dataSource;
+
     @Override
     public void run(String... args) throws Exception {
         // 创建 data 文件夹
@@ -37,6 +47,9 @@ public class DatabaseInitializer implements CommandLineRunner {
 
         // 初始化 H2 数据库
         initializeH2Databases();
+
+        // 在默认数据库创建 Agent 相关表（agent_conversation, agent_message）
+        initializeDefaultDatabaseTables();
     }
 
     /**
@@ -161,6 +174,90 @@ public class DatabaseInitializer implements CommandLineRunner {
             }
         } catch (Exception e) {
             logger.error("Error initializing H2 database {}: {}", ds.getId(), e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 在默认数据库（与 JdbcTemplate/AgentConversationRepository 相同数据源）创建 Agent 相关表
+     * 优先使用 Spring DataSource（与 JdbcTemplate 一致），否则回退到 connectionManager
+     * Doris 使用 Agent_ddl_doris.sql，MySQL 使用 Agent_ddl.sql
+     */
+    private void initializeDefaultDatabaseTables() {
+        Connection conn = null;
+        try {
+            if (dataSource != null) {
+                conn = dataSource.getConnection();
+            } else if (connectionManager != null) {
+                conn = connectionManager.getConnection();
+            }
+        } catch (SQLException e) {
+            logger.info("Cannot get database connection for Agent tables, skipping: {}", e.getMessage());
+            return;
+        }
+        if (conn == null) {
+            logger.info("No DataSource or connection manager, skipping Agent table initialization");
+            return;
+        }
+        String dbName = config.getDbName();
+        if (dbName == null || dbName.trim().isEmpty()) {
+            try { dbName = conn.getCatalog(); } catch (SQLException ignored) {}
+            if (dbName == null || dbName.trim().isEmpty()) dbName = "default";
+        }
+        boolean isDoris = "doris".equalsIgnoreCase(config.getDbType());
+        String ddlFile = isDoris ? "Agent_ddl_doris.sql" : "Agent_ddl.sql";
+        String sql = null;
+        String source = null;
+        try {
+            for (String p : new String[]{"scripts/" + ddlFile, "./scripts/" + ddlFile}) {
+                File f = new File(p);
+                if (f.exists() && f.isFile()) {
+                    sql = readSqlFile(f.getAbsolutePath());
+                    source = f.getPath();
+                    break;
+                }
+            }
+            if (sql == null) {
+                try (InputStream is = new ClassPathResource("scripts/" + ddlFile).getInputStream()) {
+                    sql = new String(is.readAllBytes(), StandardCharsets.UTF_8);
+                    source = "classpath:scripts/" + ddlFile;
+                } catch (Exception e) {
+                    logger.info("Agent DDL file {} not found, skipping", ddlFile);
+                    return;
+                }
+            }
+        } catch (Exception e) {
+            logger.info("Failed to read Agent DDL: {}", e.getMessage());
+            return;
+        }
+        try {
+            try (Statement stmt = conn.createStatement()) {
+                logger.info("Initializing Agent tables in database '{}' (db.type={}) with {}", dbName, config.getDbType(), source);
+                String[] statements = sql.split(";");
+                int executed = 0;
+                for (String statement : statements) {
+                    statement = statement.trim();
+                    if (statement.isEmpty() || statement.startsWith("--")) continue;
+                    try {
+                        stmt.execute(statement);
+                        executed++;
+                        logger.debug("Executed SQL for Agent tables");
+                    } catch (SQLException e) {
+                        String msg = e.getMessage() != null ? e.getMessage().toLowerCase() : "";
+                        if (msg.contains("already exists") || msg.contains("duplicate") || msg.contains("exist")) {
+                            logger.debug("Table already exists, skipping: {}", e.getMessage());
+                        } else {
+                            logger.warn("Error executing Agent DDL: {}", e.getMessage());
+                        }
+                    }
+                }
+                logger.info("Agent tables initialization done for database '{}' (executed {} statements)", dbName, executed);
+            }
+        } catch (SQLException e) {
+            logger.warn("Error initializing Agent tables: {}", e.getMessage());
+        } finally {
+            try {
+                if (conn != null && !conn.isClosed()) conn.close();
+            } catch (SQLException ignored) {}
         }
     }
 
