@@ -129,3 +129,4 @@ test-reports/
 *database.yaml
 *mapping.yaml
 *workspace.yaml
+*ontology.yaml
