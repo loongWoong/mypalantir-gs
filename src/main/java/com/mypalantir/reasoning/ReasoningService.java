@@ -290,7 +290,15 @@ public class ReasoningService {
         }
         log.flush();
 
-        ForwardChainEngine engine = new ForwardChainEngine(functionRegistry, rulesForInfer, getFunctionDisplayNames());
+        // 构建规则元数据 Map，供层级后处理使用（复用已加载的 schema）
+        Map<String, com.mypalantir.meta.Rule> ruleMetaMap = new LinkedHashMap<>();
+        if (schema != null && schema.getRules() != null) {
+            for (com.mypalantir.meta.Rule r : schema.getRules()) {
+                if (r.getName() != null) ruleMetaMap.put(r.getName(), r);
+            }
+        }
+
+        ForwardChainEngine engine = new ForwardChainEngine(functionRegistry, rulesForInfer, getFunctionDisplayNames(), ruleMetaMap);
         InferenceResult result = engine.infer(instance, linkedData, derivedValues);
 
         Map<String, Map<String, Object>> linkedDataSummary = new LinkedHashMap<>();

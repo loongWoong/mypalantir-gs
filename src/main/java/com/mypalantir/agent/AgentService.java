@@ -477,7 +477,7 @@ public class AgentService {
                - 只有在 `query_data` 明显无法满足该请求时，才可以再考虑使用 `query_instance` / `query_links` 等其他工具补充。
                - 例："查询某通行ID的路径明细"、"查询某通行ID的门架交易明细"、"查看所有通行记录"、"显示门架交易数据"、"统计每个入口站的通行数量"
                - 特别强调：当用户说“查询 某通行ID 的门架交易明细”时，**首先用 `query_data` 查询该通行ID相关的门架交易数据**；如果 `query_data` 返回为空或模型判断语义不匹配，再酌情调用 `query_links` 等工具。
-               - **通行ID 字段纠正**：用户常提供 G 开头格式的 ID（如 S760237001003020200802026030100323732），此为 passage_id。若 `query_data` 查询拆分明细返回空，很可能因为内部用了 pass_id；此时应改用 `query_links`（type=Passage, id=该ID, link=has_split_item）获取拆分明细。同理，门架交易用 has_gantry_transaction。
+               - **通行ID 字段纠正**：用户常提供 G 开头格式的 ID（如 G151137001001020100702026030106322711），此为 passage_id。若 `query_data` 查询拆分明细返回空，很可能因为内部用了 pass_id；此时应改用 `query_links`（type=Passage, id=该ID, link=has_split_item）获取拆分明细。同理，门架交易用 has_gantry_transaction。
             3. **诊断排查**（"为什么"、"诊断"、"排查"、"分析异常原因"）→ 进入诊断模式，按诊断步骤逐步调用工具。
                - 例："帮我查一下某通行ID为什么拆分异常"、"排查某通行ID的异常原因"
 

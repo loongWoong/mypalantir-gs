@@ -1,5 +1,6 @@
 package com.mypalantir.reasoning.engine;
 
+import com.mypalantir.meta.Rule;
 import com.mypalantir.reasoning.function.FunctionRegistry;
 import com.mypalantir.reasoning.swrl.Atom;
 import com.mypalantir.reasoning.swrl.FunctionArg;
@@ -18,16 +19,25 @@ public class ForwardChainEngine {
     private final FunctionRegistry functionRegistry;
     private final List<SWRLRule> rules;
     private final Map<String, String> functionDisplayNames;
+    /** 规则元数据（来自 YAML），用于层级后处理；key = ruleName */
+    private final Map<String, Rule> ruleMeta;
 
     public ForwardChainEngine(FunctionRegistry functionRegistry, List<SWRLRule> rules) {
-        this(functionRegistry, rules, Map.of());
+        this(functionRegistry, rules, Map.of(), Map.of());
     }
 
     public ForwardChainEngine(FunctionRegistry functionRegistry, List<SWRLRule> rules,
                                Map<String, String> functionDisplayNames) {
+        this(functionRegistry, rules, functionDisplayNames, Map.of());
+    }
+
+    public ForwardChainEngine(FunctionRegistry functionRegistry, List<SWRLRule> rules,
+                               Map<String, String> functionDisplayNames,
+                               Map<String, Rule> ruleMeta) {
         this.functionRegistry = functionRegistry;
         this.rules = rules;
         this.functionDisplayNames = functionDisplayNames;
+        this.ruleMeta = ruleMeta != null ? ruleMeta : Map.of();
     }
 
     /**
@@ -131,7 +141,86 @@ public class ForwardChainEngine {
 
         System.out.println("\n[ForwardChain] Forward chaining complete. Total cycles: " + cycle);
         result.setCycleCount(cycle);
+
+        // 层级后处理：将被子规则抑制的父规则输出降级为 has_abnormal_context
+        applyHierarchicalSuppression(result, memory, mainVar);
+
         return result;
+    }
+
+    /**
+     * 层级后处理：基于规则的 suppresses 列表，将被子规则抑制的父规则输出降级为 has_abnormal_context。
+     *
+     * 处理逻辑：
+     * 1. 收集所有已触发规则名（来自 trace）
+     * 2. 对每条已触发规则，检查其 suppresses 列表
+     * 3. 若被抑制规则也已触发，则将其 has_abnormal_reason 事实降级为 has_abnormal_context
+     * 4. 未被抑制的 has_abnormal_reason 事实复制到 has_abnormal_root_cause
+     *
+     * 注意：此方法在前向链完成后执行，不影响推理过程本身（has_abnormal_reason 仍保留，
+     * 供 R8 汇总规则使用），仅新增 has_abnormal_context 和 has_abnormal_root_cause 两个分类事实。
+     */
+    private void applyHierarchicalSuppression(InferenceResult result, WorkingMemory memory, String mainVar) {
+        if (ruleMeta.isEmpty()) {
+            System.out.println("[HierarchyPost] No rule metadata, skipping hierarchical suppression");
+            return;
+        }
+
+        // 收集已触发规则名
+        Set<String> firedRuleNames = new LinkedHashSet<>();
+        for (InferenceResult.TraceEntry entry : result.getTrace()) {
+            firedRuleNames.add(entry.ruleName());
+        }
+        System.out.println("[HierarchyPost] Fired rules: " + firedRuleNames);
+
+        // 计算被抑制的规则集合
+        Set<String> suppressedRules = new LinkedHashSet<>();
+        for (String firedRule : firedRuleNames) {
+            Rule meta = ruleMeta.get(firedRule);
+            if (meta == null || meta.getSuppresses() == null) continue;
+            for (String suppressed : meta.getSuppresses()) {
+                if (firedRuleNames.contains(suppressed)) {
+                    suppressedRules.add(suppressed);
+                    System.out.println("[HierarchyPost] Rule " + firedRule + " suppresses " + suppressed);
+                }
+            }
+        }
+
+        // 收集每条已触发规则产生的 has_abnormal_reason 值（规则名 → 原因文本）
+        Map<String, String> ruleToReason = new LinkedHashMap<>();
+        for (InferenceResult.TraceEntry entry : result.getTrace()) {
+            Fact f = entry.fact();
+            if ("has_abnormal_reason".equals(f.getPredicate())) {
+                ruleToReason.put(entry.ruleName(), String.valueOf(f.getValue()));
+            }
+        }
+
+        // 对被抑制的规则：新增 has_abnormal_context 事实
+        for (String suppressed : suppressedRules) {
+            String reason = ruleToReason.get(suppressed);
+            if (reason != null) {
+                Fact contextFact = new Fact("has_abnormal_context", mainVar, reason);
+                if (!memory.containsFact(contextFact)) {
+                    memory.addFact(contextFact);
+                    result.addContextFact(suppressed, contextFact);
+                    System.out.println("[HierarchyPost] Demoted to context: " + suppressed + " -> " + reason);
+                }
+            }
+        }
+
+        // 对未被抑制的 has_abnormal_reason：新增 has_abnormal_root_cause 事实
+        for (Map.Entry<String, String> entry : ruleToReason.entrySet()) {
+            String ruleName = entry.getKey();
+            String reason = entry.getValue();
+            if (!suppressedRules.contains(ruleName)) {
+                Fact rootCauseFact = new Fact("has_abnormal_root_cause", mainVar, reason);
+                if (!memory.containsFact(rootCauseFact)) {
+                    memory.addFact(rootCauseFact);
+                    result.addRootCauseFact(ruleName, rootCauseFact);
+                    System.out.println("[HierarchyPost] Root cause: " + ruleName + " -> " + reason);
+                }
+            }
+        }
     }
 
     /**

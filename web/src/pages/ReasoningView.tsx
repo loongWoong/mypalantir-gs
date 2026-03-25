@@ -158,8 +158,8 @@ export default function ReasoningView() {
               <span className="font-medium">{status.registeredFunctions?.length || 0}</span> functions registered
             </div>
             <span className="text-sm text-gray-600">测试：</span>
-            <span className="text-sm text-gray-600">S760237001003020200802026030100323732</span>
-            <span className="text-sm text-gray-600">S010137001002020102202026030107000021</span>
+            <span className="text-sm text-gray-600">G151137001001020100702026030106322711</span>
+            <span className="text-sm text-gray-600">G001537001004020109102026030107180163</span>
           </div>
         </div>
       )}

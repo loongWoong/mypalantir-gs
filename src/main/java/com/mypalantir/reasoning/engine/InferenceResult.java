@@ -4,6 +4,10 @@ import java.util.*;
 
 /**
  * 推理结果：包含所有产生的事实和推理轨迹。
+ *
+ * V2.1 新增层级后处理结果：
+ * - rootCauseFacts: 未被子规则抑制的根本原因事实（has_abnormal_root_cause）
+ * - contextFacts:   被子规则抑制的父节点上下文事实（has_abnormal_context）
  */
 public class InferenceResult {
 
@@ -11,6 +15,11 @@ public class InferenceResult {
     private final List<CycleDetail> cycleDetails = new ArrayList<>();
     private final Set<Fact> producedFacts = new LinkedHashSet<>();
     private int cycleCount;
+
+    /** 层级后处理：根本原因事实（叶节点，未被抑制），key = ruleName */
+    private final Map<String, Fact> rootCauseFacts = new LinkedHashMap<>();
+    /** 层级后处理：上下文事实（父节点，被子规则抑制降级），key = ruleName */
+    private final Map<String, Fact> contextFacts = new LinkedHashMap<>();
 
     public void addTraceEntry(int cycle, String ruleName, Fact producedFact) {
         trace.add(new TraceEntry(cycle, ruleName, producedFact));
@@ -25,10 +34,22 @@ public class InferenceResult {
         this.cycleCount = cycleCount;
     }
 
+    public void addRootCauseFact(String ruleName, Fact fact) {
+        rootCauseFacts.put(ruleName, fact);
+        producedFacts.add(fact);
+    }
+
+    public void addContextFact(String ruleName, Fact fact) {
+        contextFacts.put(ruleName, fact);
+        producedFacts.add(fact);
+    }
+
     public List<TraceEntry> getTrace() { return trace; }
     public List<CycleDetail> getCycleDetails() { return cycleDetails; }
     public Set<Fact> getProducedFacts() { return producedFacts; }
     public int getCycleCount() { return cycleCount; }
+    public Map<String, Fact> getRootCauseFacts() { return rootCauseFacts; }
+    public Map<String, Fact> getContextFacts() { return contextFacts; }
 
     /**
      * 获取指定谓词的事实值
@@ -72,6 +93,22 @@ public class InferenceResult {
             facts.put(f.getPredicate(), f.getValue());
         }
         result.put("facts", facts);
+
+        // 层级后处理结果
+        if (!rootCauseFacts.isEmpty()) {
+            List<String> rootCauses = new ArrayList<>();
+            for (Fact f : rootCauseFacts.values()) {
+                rootCauses.add(String.valueOf(f.getValue()));
+            }
+            result.put("has_abnormal_root_cause", rootCauses);
+        }
+        if (!contextFacts.isEmpty()) {
+            List<String> contexts = new ArrayList<>();
+            for (Fact f : contextFacts.values()) {
+                contexts.add(String.valueOf(f.getValue()));
+            }
+            result.put("has_abnormal_context", contexts);
+        }
 
         return result;
     }

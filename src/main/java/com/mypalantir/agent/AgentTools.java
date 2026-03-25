@@ -353,9 +353,37 @@ public class AgentTools {
 
         sb.append("三、推理结论\n");
         if (!abnormalReasons.isEmpty()) {
-            sb.append("  - 诊断为异常通行。异常原因列表：\n");
-            for (String reason : abnormalReasons) {
-                sb.append("    * ").append(reason).append("\n");
+            sb.append("  - 诊断为异常通行。\n");
+
+            // 优先展示层级后处理结果（root_cause / context）
+            List<String> rootCauses = new ArrayList<>();
+            List<String> contextReasons = new ArrayList<>();
+            for (com.mypalantir.reasoning.engine.Fact f : result.getProducedFacts()) {
+                if ("has_abnormal_root_cause".equals(f.getPredicate())) {
+                    rootCauses.add(String.valueOf(f.getValue()));
+                } else if ("has_abnormal_context".equals(f.getPredicate())) {
+                    contextReasons.add(String.valueOf(f.getValue()));
+                }
+            }
+
+            if (!rootCauses.isEmpty()) {
+                sb.append("  根本原因（has_abnormal_root_cause，叶节点，最终定位）：\n");
+                for (String reason : rootCauses) {
+                    sb.append("    * ").append(reason).append("\n");
+                }
+            }
+            if (!contextReasons.isEmpty()) {
+                sb.append("  上下文信息（has_abnormal_context，父节点，已被子规则抑制）：\n");
+                for (String reason : contextReasons) {
+                    sb.append("    - ").append(reason).append("\n");
+                }
+            }
+            // 若无层级元数据（旧本体），回退到扁平列表
+            if (rootCauses.isEmpty() && contextReasons.isEmpty()) {
+                sb.append("  异常原因列表（has_abnormal_reason，扁平模式）：\n");
+                for (String reason : abnormalReasons) {
+                    sb.append("    * ").append(reason).append("\n");
+                }
             }
         } else if (Boolean.FALSE.equals(abnormalFlag)) {
             sb.append("  - 诊断为正常通行（未产生任何异常原因）。\n");
