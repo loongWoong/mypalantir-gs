@@ -64,19 +64,19 @@ public class OntologyRelToSqlConverter extends RelToSqlConverter {
                 DataSourceMapping mapping = null;
                 if (ontologyTable instanceof JdbcOntologyTable) {
                     mapping = ((JdbcOntologyTable) ontologyTable).getMapping();
-                    System.out.println("[OntologyRelToSqlConverter] Got mapping from JdbcOntologyTable for: " + objectTypeName);
+                    // System.out.println("[OntologyRelToSqlConverter] Got mapping from JdbcOntologyTable for: " + objectTypeName);
                 }
                 
                 // 如果 JdbcOntologyTable 没有 mapping，尝试从映射关系获取
                 if (mapping == null || !mapping.isConfigured()) {
                     mapping = getDataSourceMappingFromMapping(objectType);
-                    System.out.println("[OntologyRelToSqlConverter] Got mapping from mappingService for: " + objectTypeName);
+                    // System.out.println("[OntologyRelToSqlConverter] Got mapping from mappingService for: " + objectTypeName);
                 }
                 
                 // 如果还是没有，使用 schema 中定义的 data_source（向后兼容）
                 if (mapping == null || !mapping.isConfigured()) {
                     mapping = objectType.getDataSource();
-                    System.out.println("[OntologyRelToSqlConverter] Using schema data_source for: " + objectTypeName);
+                    // System.out.println("[OntologyRelToSqlConverter] Using schema data_source for: " + objectTypeName);
                 }
                 
                 if (mapping != null && mapping.isConfigured()) {
@@ -88,7 +88,7 @@ public class OntologyRelToSqlConverter extends RelToSqlConverter {
                                      ", fieldMapping size: " + 
                                      (mapping.getFieldMapping() != null ? mapping.getFieldMapping().size() : 0));
                 } else {
-                    System.err.println("[OntologyRelToSqlConverter] No valid mapping found for: " + objectTypeName);
+                    // System.err.println("[OntologyRelToSqlConverter] No valid mapping found for: " + objectTypeName);
                 }
             }
         }
@@ -120,8 +120,8 @@ public class OntologyRelToSqlConverter extends RelToSqlConverter {
         SqlNode sqlNode = result.asStatement();
         String sql = sqlNode.toSqlString(dialect).getSql();
         
-        System.out.println("[OntologyRelToSqlConverter] Original SQL (using Ontology names): " + sql);
-        System.out.println("[OntologyRelToSqlConverter] Cache size: " + objectTypeMappingCache.size());
+        // System.out.println("[OntologyRelToSqlConverter] Original SQL (using Ontology names): " + sql);
+        // System.out.println("[OntologyRelToSqlConverter] Cache size: " + objectTypeMappingCache.size());
         
         // 第一步：替换所有缓存的表名和列名（主表）
         // 根据 mapping 的映射关系，将对象类型名称替换为映射表名，将属性名替换为映射列名
@@ -339,7 +339,7 @@ public class OntologyRelToSqlConverter extends RelToSqlConverter {
         // 使用传入的 dbTableName（应该是映射表名），如果没有则使用 mapping.getTable()
         String actualDbTableName = (dbTableName != null && !dbTableName.isEmpty()) ? dbTableName : mapping.getTable();
         
-        System.out.println("[replaceColumnNames] Replacing " + objectTypeName + " -> " + actualDbTableName);
+        // System.out.println("[replaceColumnNames] Replacing " + objectTypeName + " -> " + actualDbTableName);
         
         // 获取数据库类型，决定是否使用引号
         SqlDialectAdapter.DatabaseType dbType = SqlDialectAdapter.DatabaseType.MYSQL; // 默认 MySQL
@@ -384,7 +384,7 @@ public class OntologyRelToSqlConverter extends RelToSqlConverter {
             }
         }
         
-        System.out.println("[replaceColumnNames] Database type: " + dbType + ", quoteChar: '" + quoteChar + "'");
+        // System.out.println("[replaceColumnNames] Database type: " + dbType + ", quoteChar: '" + quoteChar + "'");
         
         // 替换表名：将对象类型名称替换为映射表名（同步表在 schema 中为 ObjectType_sync，SQL 中应使用物理表名，不带 _sync 后缀）
         String dbTableNameQuoted = quoteChar.isEmpty() ? actualDbTableName : (quoteChar + actualDbTableName + quoteChar);
@@ -406,11 +406,11 @@ public class OntologyRelToSqlConverter extends RelToSqlConverter {
         // 替换列名：将属性名替换为数据库列名
         // 注意：先替换带表名前缀的，再替换不带表名前缀的，避免误替换
         if (objectType.getProperties() != null) {
-            System.out.println("[replaceColumnNames] Processing " + objectType.getProperties().size() + " properties");
+            // System.out.println("[replaceColumnNames] Processing " + objectType.getProperties().size() + " properties");
             for (com.mypalantir.meta.Property prop : objectType.getProperties()) {
                 String propertyName = prop.getName();
                 String columnName = mapping.getColumnName(propertyName);
-                System.out.println("[replaceColumnNames] Property: " + propertyName + " -> Column: " + columnName);
+                // System.out.println("[replaceColumnNames] Property: " + propertyName + " -> Column: " + columnName);
                 if (columnName != null && !columnName.equals(propertyName)) {
                     // 根据数据库类型决定是否使用引号
                     String dbColumnNameQuoted = quoteChar.isEmpty() ? columnName : (quoteChar + columnName + quoteChar);
@@ -506,7 +506,7 @@ public class OntologyRelToSqlConverter extends RelToSqlConverter {
                 return null;
             }
             
-            System.out.println("[getDataSourceMappingFromMapping] Found " + mappings.size() + " mapping(s)");
+            // System.out.println("[getDataSourceMappingFromMapping] Found " + mappings.size() + " mapping(s)");
             
             // 使用第一个映射关系
             Map<String, Object> mappingData = mappings.get(0);
@@ -516,7 +516,7 @@ public class OntologyRelToSqlConverter extends RelToSqlConverter {
                 return null;
             }
             
-            System.out.println("[getDataSourceMappingFromMapping] table_id: " + tableId);
+            // System.out.println("[getDataSourceMappingFromMapping] table_id: " + tableId);
             
             // 获取表信息
             Map<String, Object> table = instanceStorage.getInstance("table", tableId);
@@ -533,7 +533,7 @@ public class OntologyRelToSqlConverter extends RelToSqlConverter {
                 primaryKeyColumn = primaryKeyColumns.get(0);
             }
             
-            System.out.println("[getDataSourceMappingFromMapping] table_name: " + tableName + ", database_id: " + databaseId + ", primary_key_column: " + primaryKeyColumn + ", primary_key_columns: " + primaryKeyColumns);
+            // System.out.println("[getDataSourceMappingFromMapping] table_name: " + tableName + ", database_id: " + databaseId + ", primary_key_column: " + primaryKeyColumn + ", primary_key_columns: " + primaryKeyColumns);
             
             // 获取数据库类型（用于 SQL 方言适配）
             String databaseType = null;
@@ -565,15 +565,15 @@ public class OntologyRelToSqlConverter extends RelToSqlConverter {
             // column_property_mappings 的结构是 {列名: 属性名}，需要反转为 {属性名: 列名}
             Map<String, String> fieldMapping = new HashMap<>();
             if (columnPropertyMappings != null) {
-                System.out.println("[getDataSourceMappingFromMapping] column_property_mappings size: " + columnPropertyMappings.size());
+                // System.out.println("[getDataSourceMappingFromMapping] column_property_mappings size: " + columnPropertyMappings.size());
                 for (Map.Entry<String, String> entry : columnPropertyMappings.entrySet()) {
                     String columnName = entry.getKey();
                     String propertyName = entry.getValue();
                     fieldMapping.put(propertyName, columnName);
-                    System.out.println("[getDataSourceMappingFromMapping] Mapping: " + propertyName + " -> " + columnName);
+                    // System.out.println("[getDataSourceMappingFromMapping] Mapping: " + propertyName + " -> " + columnName);
                 }
             } else {
-                System.err.println("[getDataSourceMappingFromMapping] column_property_mappings is null");
+                // System.err.println("[getDataSourceMappingFromMapping] column_property_mappings is null");
             }
             
             DataSourceMapping dataSourceMapping = new DataSourceMapping();
@@ -588,7 +588,7 @@ public class OntologyRelToSqlConverter extends RelToSqlConverter {
             // 或者我们可以创建一个扩展的 DataSourceMapping 来存储额外信息
             // 暂时先存储到 connectionId 的注释中，或者创建一个新的字段
             
-            System.out.println("[getDataSourceMappingFromMapping] Created DataSourceMapping: table=" + tableName + ", idColumn=" + dataSourceMapping.getIdColumn() + ", connectionId=" + dataSourceMapping.getConnectionId() + ", databaseType=" + databaseType + ", fieldMapping size=" + fieldMapping.size());
+            // System.out.println("[getDataSourceMappingFromMapping] Created DataSourceMapping: table=" + tableName + ", idColumn=" + dataSourceMapping.getIdColumn() + ", connectionId=" + dataSourceMapping.getConnectionId() + ", databaseType=" + databaseType + ", fieldMapping size=" + fieldMapping.size());
             
             // 将数据库类型存储到对象中（通过扩展 DataSourceMapping 或使用临时存储）
             // 暂时使用一个 Map 来存储额外的元数据

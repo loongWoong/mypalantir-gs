@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { reasoningApi, instanceApi } from '../api/client';
+import { reasoningApi, instanceApi, rulesApi } from '../api/client';
 import type { InferenceResult, ReasoningStatus, Instance, CycleDetail, BatchInstanceResult } from '../api/client';
 
 // 根据触发规则列表生成分组签名（排序后 join，保证顺序无关）
@@ -23,6 +23,8 @@ export default function ReasoningView() {
   const [inferenceResult, setInferenceResult] = useState<InferenceResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [inferError, setInferError] = useState('');
+  // 规则元信息（用于渲染层级关系：level/parent/suppresses/output_type）
+  const [ruleMetaMap, setRuleMetaMap] = useState<Record<string, any>>({});
 
   // 批量推理状态（暂不使用，setter 仅在 handleBatchAll 中调用）
   // const [batchLoading, setBatchLoading] = useState(false);
@@ -93,6 +95,19 @@ export default function ReasoningView() {
     try {
       const result = await reasoningApi.infer(objectType, id);
       setInferenceResult(result);
+
+      // 拉取规则元信息（level/parent/suppresses/output_type），用于 Inference Trace 的层级渲染
+      try {
+        const rules = await rulesApi.getRules();
+        const map: Record<string, any> = {};
+        for (const r of rules as any[]) {
+          if (r?.name) map[r.name] = r;
+        }
+        setRuleMetaMap(map);
+      } catch (e) {
+        // 不影响推理结果展示：仅层级渲染降级为平铺展示
+        setRuleMetaMap({});
+      }
     } catch (err: any) {
       setInferError(err.response?.data?.message || err.message || 'Inference failed');
     } finally {
@@ -109,6 +124,94 @@ export default function ReasoningView() {
     if (ruleName.includes('integrity') || ruleName.includes('count') || ruleName.includes('interval') || ruleName.includes('fee_mismatch')) return 'bg-indigo-500';
     if (ruleName.toLowerCase().includes('normal')) return 'bg-green-500';
     return 'bg-purple-500';
+  };
+
+  const entryRuleName = (entry: any): string => entry?.rule ?? (entry as any)?.rule ?? '';
+
+  // 将当前 cycle 的“匹配规则”按 {parent|suppresses} 关系展开为树形扁平列表（用于渲染缩进）
+  const buildHierarchyRenderList = (entries: any[]) => {
+    const getMeta = (name: string) => ruleMetaMap?.[name] ?? {};
+    const getLevel = (name: string) => Number(getMeta(name)?.level ?? 0);
+
+    const matchedSet = new Set(entries.map((e) => entryRuleName(e)).filter(Boolean));
+    const entryByName = new Map<string, any>();
+    for (const e of entries) {
+      const rn = entryRuleName(e);
+      if (rn && !entryByName.has(rn)) entryByName.set(rn, e);
+    }
+
+    const parentOf = new Map<string, string | null>();
+    for (const rn of matchedSet) {
+      const meta = getMeta(rn);
+      const candidates: string[] = [];
+
+      const explicitParent = meta?.parent ?? null;
+      if (explicitParent) candidates.push(explicitParent);
+
+      const suppresses = meta?.suppresses;
+      if (Array.isArray(suppresses)) {
+        for (const p of suppresses) {
+          if (typeof p === 'string') candidates.push(p);
+        }
+      }
+
+      let effectiveParent: string | null = null;
+      for (const cand of candidates) {
+        if (cand && matchedSet.has(cand)) {
+          effectiveParent = cand;
+          break;
+        }
+      }
+      parentOf.set(rn, effectiveParent);
+    }
+
+    const childrenMap = new Map<string, string[]>();
+    for (const rn of matchedSet) {
+      const p = parentOf.get(rn) ?? null;
+      if (!p) continue;
+      if (!childrenMap.has(p)) childrenMap.set(p, []);
+      childrenMap.get(p)!.push(rn);
+    }
+
+    const roots = Array.from(matchedSet).filter((rn) => !(parentOf.get(rn) ?? null));
+    roots.sort((a, b) => {
+      const la = getLevel(a);
+      const lb = getLevel(b);
+      if (la !== lb) return la - lb;
+      return a.localeCompare(b);
+    });
+
+    const renderList: Array<{ ruleName: string; entry: any; depth: number }> = [];
+    const visited = new Set<string>();
+
+    const dfs = (rn: string, depth: number) => {
+      if (visited.has(rn)) return;
+      visited.add(rn);
+      const e = entryByName.get(rn);
+      if (e) renderList.push({ ruleName: rn, entry: e, depth });
+
+      const children = childrenMap.get(rn) ?? [];
+      children.sort((a, b) => {
+        const la = getLevel(a);
+        const lb = getLevel(b);
+        if (la !== lb) return la - lb;
+        return a.localeCompare(b);
+      });
+      for (const c of children) dfs(c, depth + 1);
+    };
+
+    for (const r of roots) dfs(r, 0);
+
+    // 兜底：若有节点无法挂接到任何根节点，则以 depth=0 扁平追加
+    for (const rn of matchedSet) {
+      if (!visited.has(rn)) {
+        const e = entryByName.get(rn);
+        if (e) renderList.push({ ruleName: rn, entry: e, depth: 0 });
+        visited.add(rn);
+      }
+    }
+
+    return renderList;
   };
 
   // 批量推理结果按规则签名分组
@@ -159,7 +262,7 @@ export default function ReasoningView() {
             </div>
             <span className="text-sm text-gray-600">测试：</span>
             <span className="text-sm text-gray-600">G151137001001020100702026030106322711</span>
-            <span className="text-sm text-gray-600">G001537001004020109102026030107180163</span>
+            <span className="text-sm text-gray-600">G000237011004020202502026030103213158</span>
           </div>
         </div>
       )}
@@ -293,41 +396,110 @@ export default function ReasoningView() {
                     </div>
                     {/* 匹配的规则 */}
                     <div className="divide-y divide-gray-100">
-                      {matched.map((entry, idx) => {
-                        const ruleName = entry.rule ?? (entry as any).rule;
-                        const displayName = entry.displayName ?? (entry as any).display_name;
-                        const fact = entry.fact ?? (entry as any).fact;
-                        const matchDetails = entry.matchDetails ?? (entry as any).match_details ?? [];
-                        return (
-                        <div key={idx} className="px-3 py-2 bg-green-50/50">
-                          <div className="flex items-start gap-3">
-                            <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${getRuleColor(ruleName || '')}`} />
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2">
-                                <span className="text-sm font-medium text-gray-900">{displayName || ruleName || '—'}</span>
-                              </div>
-                              {fact && (
-                                <div className="text-xs text-green-700 font-mono mt-0.5">{fact}</div>
+                      {(() => {
+                        const renderList = buildHierarchyRenderList(matched);
+                        return renderList.map((item) => {
+                          const entry = item.entry;
+                          const ruleName = item.ruleName;
+                          const displayName = entry.displayName ?? entry.display_name ?? ruleName ?? '—';
+                          const fact = entry.fact ?? (entry as any).fact;
+                          const matchDetails = entry.matchDetails ?? (entry as any).match_details ?? [];
+
+                          const meta = ruleMetaMap?.[ruleName] ?? {};
+                          const outputType = meta.output_type ?? meta.outputType ?? '';
+                          const outputPill =
+                            outputType === 'root_cause'
+                              ? '根本原因'
+                              : outputType === 'context'
+                                ? '上下文'
+                                : '';
+
+                          // 树形辅助线：为当前节点以及所有祖先层级绘制竖线，并在当前层级绘制“肘形”横线
+                          // 让多层结构在子节点行也能看到父节点竖线，提高辨识度。
+                          const spineColor = 'rgba(229,231,235,1)';
+                          const elbowY = 18; // 估算与 bullet 的中心对齐（受 py-2 + mt-1.5 影响）
+                          const elbowWidth = 28; // 从 spine(当前层级) 延伸到 bullet 中心
+
+                          return (
+                            <div
+                              key={ruleName}
+                              className="px-3 py-2 bg-green-50/50 relative"
+                              style={{
+                                marginLeft: item.depth > 0 ? item.depth * 12 : 0,
+                                paddingLeft: item.depth > 0 ? 12 : undefined,
+                              }}
+                            >
+                              {item.depth > 0 && (
+                                <>
+                                  {Array.from({ length: item.depth }, (_, i) => {
+                                    const level = i + 1; // 祖先层级：1..depth
+                                    return (
+                                      <div
+                                        key={level}
+                                        style={{
+                                          position: 'absolute',
+                                          // 当前容器左边缘对应当前节点 spine；祖先 spine 在容器左侧
+                                          left: (level - item.depth) * 12,
+                                          top: 0,
+                                          bottom: 0,
+                                          width: 1,
+                                          backgroundColor: spineColor,
+                                          zIndex: 0,
+                                          pointerEvents: 'none',
+                                        }}
+                                      />
+                                    );
+                                  })}
+                                  <div
+                                    style={{
+                                      position: 'absolute',
+                                      left: 0,
+                                      top: elbowY,
+                                      width: elbowWidth,
+                                      height: 1,
+                                      backgroundColor: spineColor,
+                                      zIndex: 0,
+                                      pointerEvents: 'none',
+                                    }}
+                                  />
+                                </>
                               )}
-                              {/* 匹配原因 */}
-                              {matchDetails.length > 0 && (
-                                <div className="mt-1.5 ml-1 space-y-0.5">
-                                  {matchDetails.map((detail: any, didx: number) => (
-                                    <div key={didx} className="flex items-start gap-2 text-[11px]">
-                                      <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1 ${detail.matched ? 'bg-green-400' : 'bg-red-400'}`} />
-                                      <div className="min-w-0">
-                                        <span className="text-gray-700">{detail.description || detail.condition}</span>
-                                        <span className="font-mono text-gray-400 ml-1.5">({detail.condition}{detail.actualValue || detail.actual_value ? ` = ${detail.actualValue ?? detail.actual_value}` : ''})</span>
-                                      </div>
+                              <div className="flex items-start gap-3 relative z-10">
+                                <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${getRuleColor(ruleName || '')}`} />
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-sm font-medium text-gray-900">{displayName || '—'}</span>
+                                    {outputPill && (
+                                      <span className="text-[11px] px-2 py-0.5 rounded bg-amber-100 text-amber-800">
+                                        {outputPill}
+                                      </span>
+                                    )}
+                                  </div>
+                                  {fact && (
+                                    <div className="text-xs text-green-700 font-mono mt-0.5">{fact}</div>
+                                  )}
+                                  {/* 匹配原因 */}
+                                  {matchDetails.length > 0 && (
+                                    <div className="mt-1.5 ml-1 space-y-0.5">
+                                      {matchDetails.map((detail: any, didx: number) => (
+                                        <div key={didx} className="flex items-start gap-2 text-[11px]">
+                                          <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1 ${detail.matched ? 'bg-green-400' : 'bg-red-400'}`} />
+                                          <div className="min-w-0">
+                                            <span className="text-gray-700">{detail.description || detail.condition}</span>
+                                            <span className="font-mono text-gray-400 ml-1.5">
+                                              ({detail.condition}{detail.actualValue || detail.actual_value ? ` = ${detail.actualValue ?? detail.actual_value}` : ''})
+                                            </span>
+                                          </div>
+                                        </div>
+                                      ))}
                                     </div>
-                                  ))}
+                                  )}
                                 </div>
-                              )}
+                              </div>
                             </div>
-                          </div>
-                        </div>
-                        );
-                      })}
+                          );
+                        });
+                      })()}
                     </div>
                   </div>
                 );

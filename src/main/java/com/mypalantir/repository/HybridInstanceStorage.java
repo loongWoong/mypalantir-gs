@@ -198,27 +198,27 @@ public class HybridInstanceStorage implements IInstanceStorage {
 
     @Override
     public Map<String, Object> getInstance(String objectType, String id) throws IOException {
-        logger.info("[HybridInstanceStorage] ========== getInstance (hybrid模式) ==========");
-        logger.info("[HybridInstanceStorage] getInstance called for objectType: {}, id: {}", objectType, id);
-        logger.info("[HybridInstanceStorage] Storage mode: HYBRID (reading from relational DB and Neo4j, NOT from file storage)");
+        // logger.info("[HybridInstanceStorage] ========== getInstance (hybrid模式) ==========");
+        // logger.info("[HybridInstanceStorage] getInstance called for objectType: {}, id: {}", objectType, id);
+        // logger.info("[HybridInstanceStorage] Storage mode: HYBRID (reading from relational DB and Neo4j, NOT from file storage)");
         
         // 系统对象类型（table, database, mapping等）直接使用 Neo4j，避免递归调用
         if (isSystemObjectType(objectType)) {
-            logger.info("[HybridInstanceStorage] System object type {} detected, using Neo4j directly to avoid recursion", objectType);
-            logger.info("[HybridInstanceStorage] Data source: NEO4J only (NOT file storage)");
+            // logger.info("[HybridInstanceStorage] System object type {} detected, using Neo4j directly to avoid recursion", objectType);
+            // logger.info("[HybridInstanceStorage] Data source: NEO4J only (NOT file storage)");
             Map<String, Object> result = graphStorage.getInstance(objectType, id);
-            logger.info("[HybridInstanceStorage] ========== getInstance END ==========");
+            // logger.info("[HybridInstanceStorage] ========== getInstance END ==========");
             return result;
         }
         
         // 优先同步表获取完整字段（vlp/vlpc/vehicle_type 等），失败时回退 Neo4j
         // 注：RelationalInstanceStorage 根据 mapping.primary_key_columns 解析 ID，联合主键时拆解成多参数查库
         boolean hasMapping = hasRelationalMapping(objectType);
-        logger.info("[HybridInstanceStorage] hasRelationalMapping({}) = {}", objectType, hasMapping);
+        // logger.info("[HybridInstanceStorage] hasRelationalMapping({}) = {}", objectType, hasMapping);
         
         // 尝试从关系型数据库查询同步表（完整字段）
         try {
-            logger.info("[HybridInstanceStorage] Attempting to query from RelationalInstanceStorage (sync table only, NOT file storage)");
+            // logger.info("[HybridInstanceStorage] Attempting to query from RelationalInstanceStorage (sync table only, NOT file storage)");
             Map<String, Object> instance = relationalStorage.getInstance(objectType, id);
             
             // 合并Neo4j中的关键字段（用于图展示）
@@ -230,15 +230,15 @@ public class HybridInstanceStorage implements IInstanceStorage {
                         instance.put(entry.getKey(), entry.getValue());
                     }
                 }
-                logger.debug("[HybridInstanceStorage] Merged instance data from relational DB and Neo4j");
+                // logger.debug("[HybridInstanceStorage] Merged instance data from relational DB and Neo4j");
             } catch (IOException e) {
                 // Neo4j中没有，只使用关系型数据库的数据
-                logger.debug("[HybridInstanceStorage] Instance {} not found in Neo4j, using relational data only", id);
+                // logger.debug("[HybridInstanceStorage] Instance {} not found in Neo4j, using relational data only", id);
             }
             
-            logger.info("[HybridInstanceStorage] Successfully retrieved instance from RelationalInstanceStorage (relational DB, NOT file storage)");
-            logger.info("[HybridInstanceStorage] Data source: RELATIONAL DB (sync table) + NEO4J (key fields), NOT file storage");
-            logger.info("[HybridInstanceStorage] ========== getInstance END ==========");
+            // logger.info("[HybridInstanceStorage] Successfully retrieved instance from RelationalInstanceStorage (relational DB, NOT file storage)");
+            // logger.info("[HybridInstanceStorage] Data source: RELATIONAL DB (sync table) + NEO4J (key fields), NOT file storage");
+            // logger.info("[HybridInstanceStorage] ========== getInstance END ==========");
             return instance;
         } catch (IOException e) {
             // 实例存储查询失败（如联合主键在同步表未命中、或同步表不存在）
@@ -247,15 +247,15 @@ public class HybridInstanceStorage implements IInstanceStorage {
             if (isNotFound) {
                 try {
                     Map<String, Object> neo4jInstance = graphStorage.getInstance(objectType, id);
-                    logger.info("[HybridInstanceStorage] Instance {} of type {} not in sync table, returned from Neo4j", id, objectType);
-                    logger.info("[HybridInstanceStorage] ========== getInstance END ==========");
+                    // logger.info("[HybridInstanceStorage] Instance {} of type {} not in sync table, returned from Neo4j", id, objectType);
+                    // logger.info("[HybridInstanceStorage] ========== getInstance END ==========");
                     return neo4jInstance;
                 } catch (IOException neo4jEx) {
-                    logger.debug("[HybridInstanceStorage] Instance {} not found in Neo4j either: {}", id, neo4jEx.getMessage());
+                    // logger.debug("[HybridInstanceStorage] Instance {} not found in Neo4j either: {}", id, neo4jEx.getMessage());
                 }
             }
-            logger.info("[HybridInstanceStorage] Failed to query sync table for instance {} of type {}: {}", id, objectType, e.getMessage());
-            logger.info("[HybridInstanceStorage] ========== getInstance END ==========");
+            // logger.info("[HybridInstanceStorage] Failed to query sync table for instance {} of type {}: {}", id, objectType, e.getMessage());
+            // logger.info("[HybridInstanceStorage] ========== getInstance END ==========");
             throw e;
         }
     }

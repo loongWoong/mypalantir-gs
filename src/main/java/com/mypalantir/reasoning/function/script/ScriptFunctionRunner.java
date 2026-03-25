@@ -1,5 +1,7 @@
 package com.mypalantir.reasoning.function.script;
 
+import com.mypalantir.reasoning.ReasoningLogger;
+
 import javax.script.Invocable;
 import javax.script.ScriptEngine;
 import javax.script.ScriptEngineManager;
@@ -9,7 +11,10 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -41,6 +46,7 @@ public class ScriptFunctionRunner {
         if (content == null || content.isBlank()) {
             throw new IllegalArgumentException("Script not found or empty: " + scriptPath);
         }
+        logScriptCall(scriptPath, args);
         ScriptEngine engine = getOrCreateEngine(scriptPath);
         engine.eval(content);
         Invocable inv = (Invocable) engine;
@@ -50,7 +56,96 @@ public class ScriptFunctionRunner {
         } catch (NoSuchMethodException e1) {
             result = inv.invokeFunction("execute", args != null ? args : List.of());
         }
+        logScriptResult(scriptPath, result);
         return result;
+    }
+
+    /**
+     * 脚本调用前打印入参（控制台 + logs/Reasoning.log）
+     */
+    private void logScriptCall(String scriptPath, List<Object> args) {
+        String msg = "[ScriptFunction] call " + scriptPath + " | args=" + safeToString(args);
+        System.out.println(msg);
+        try (ReasoningLogger log = ReasoningLogger.open()) {
+            log.line(msg);
+            log.flush();
+        } catch (Exception ignored) {
+            // best-effort logging only
+        }
+    }
+
+    private String safeToString(Object obj) {
+        IdentityHashMap<Object, Boolean> visited = new IdentityHashMap<>();
+        return safeToString(obj, visited, 0);
+    }
+
+    private void logScriptResult(String scriptPath, Object result) {
+        String msg = "[ScriptFunction] result " + scriptPath + " => " + safeToString(result);
+        System.out.println(msg);
+        try (ReasoningLogger log = ReasoningLogger.open()) {
+            log.line(msg);
+            log.flush();
+        } catch (Exception ignored) {
+            // best-effort logging only
+        }
+    }
+
+    private String safeToString(Object obj, IdentityHashMap<Object, Boolean> visited, int depth) {
+        if (obj == null) return "null";
+        if (depth > 4) return "<max-depth:" + obj.getClass().getSimpleName() + ">";
+        if (visited.containsKey(obj)) return "<cycle:" + obj.getClass().getSimpleName() + ">";
+
+        if (obj instanceof String s) {
+            return "\"" + truncate(s, 300).replace("\n", "\\n").replace("\r", "\\r") + "\"";
+        }
+        if (obj instanceof Number || obj instanceof Boolean) return String.valueOf(obj);
+
+        // JavaScript engine types (e.g., ScriptObjectMirror) often have noisy toString; keep it short.
+        String simpleName = obj.getClass().getSimpleName();
+        if ("ScriptObjectMirror".equals(simpleName)) {
+            return "<ScriptObjectMirror:" + truncate(String.valueOf(obj), 300) + ">";
+        }
+
+        if (obj instanceof Map<?, ?> m) {
+            visited.put(obj, true);
+            StringBuilder sb = new StringBuilder();
+            sb.append("{");
+            int i = 0;
+            for (Map.Entry<?, ?> e : m.entrySet()) {
+                if (i++ >= 30) {
+                    sb.append("...(").append(m.size()).append(" entries)");
+                    break;
+                }
+                if (i > 1) sb.append(", ");
+                sb.append(safeToString(e.getKey(), visited, depth + 1))
+                  .append(": ")
+                  .append(safeToString(e.getValue(), visited, depth + 1));
+            }
+            sb.append("}");
+            visited.remove(obj);
+            return sb.toString();
+        }
+
+        if (obj instanceof List<?> list) {
+            visited.put(obj, true);
+            List<String> parts = new ArrayList<>();
+            int max = Math.min(list.size(), 50);
+            for (int i = 0; i < max; i++) {
+                parts.add(safeToString(list.get(i), visited, depth + 1));
+            }
+            if (list.size() > max) parts.add("...(" + list.size() + " items)");
+            visited.remove(obj);
+            return "[" + String.join(", ", parts) + "]";
+        }
+
+        String s = String.valueOf(obj);
+        return truncate(s, 500);
+    }
+
+    private String truncate(String s, int maxLen) {
+        if (s == null) return null;
+        if (s.length() <= maxLen) return s;
+        return s.substring(0, Math.max(0, maxLen - 3)) + "...";
     }
 
     /**
